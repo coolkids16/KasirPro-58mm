@@ -352,19 +352,6 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
             Hapus Semua Stok
           </button>
 
-          {/* Tombol Ekspor & Impor */}
-          {onOpenBackupModal && (
-            <button
-              onClick={onOpenBackupModal}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-cyan-300 border border-slate-750 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
-              title="Buka Pusat Ekspor & Impor Data (JSON / CSV)"
-            >
-              <Download className="w-3.5 h-3.5 text-cyan-400" />
-              <Upload className="w-3.5 h-3.5 text-emerald-400" />
-              Ekspor & Impor
-            </button>
-          )}
-
           {/* Tombol Tambah Produk */}
           <button
             onClick={handleOpenAddModal}

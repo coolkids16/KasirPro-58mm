@@ -514,18 +514,6 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {onOpenBackupModal && (
-            <button
-              onClick={onOpenBackupModal}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-cyan-300 border border-slate-750 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
-              title="Ekspor Laporan Penjualan (CSV / JSON)"
-            >
-              <Download className="w-3.5 h-3.5 text-cyan-400" />
-              <Upload className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden sm:inline">Ekspor & Impor</span>
-            </button>
-          )}
-
           {transactions.length > 0 && (
             <button
               onClick={() => setIsClearAllOpen(true)}

@@ -298,6 +298,85 @@ bunx cap open android
 
 ---
 
+## 6. Konfigurasi Kredensial Firebase Firestore & Cloud Database
+
+Aplikasi KasirPro menggunakan **Firebase Firestore & Firebase Authentication** untuk sinkronisasi katalog produk, sisa stok, riwayat struk penjualan, dan pengaturan toko secara *real-time* antar perangkat (Web, Desktop Linux, dan Android).
+
+### A. Berkas Kredensial API (`firebase-applet-config.json`)
+
+Kredensial API Firebase disimpan pada berkas `firebase-applet-config.json` di direktori utama (*root*) proyek:
+
+```json
+{
+  "projectId": "gen-lang-client-0584948514",
+  "appId": "1:1059881335154:web:2e6a0001313e9b6a0b45eb",
+  "apiKey": "AIzaSyB765hjOihywJXyCU-p0ZIVsCZdis3A43A",
+  "authDomain": "gen-lang-client-0584948514.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-kasirpro58mmcros-28515d52-416e-4b24-a9e0-855a8d9b8109",
+  "storageBucket": "gen-lang-client-0584948514.firebasestorage.app",
+  "messagingSenderId": "1059881335154",
+  "measurementId": "",
+  "oAuthClientId": "1059881335154-teb8lka6uc1m61luijm6ecicb37fin9r.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
+}
+```
+
+### B. Detail Kredensial & Parameter API:
+
+| Parameter | Nilai Konfigurasi | Deskripsi Fungsi |
+| :--- | :--- | :--- |
+| **Project ID** | `gen-lang-client-0584948514` | ID Cloud Project Google Firebase |
+| **API Key** | `AIzaSyB765hjOihywJXyCU-p0ZIVsCZdis3A43A` | Kunci otentikasi client SDK Firebase |
+| **Firestore Database ID** | `ai-studio-kasirpro58mmcros-28515d52-416e-4b24-a9e0-855a8d9b8109` | ID *Named Database* Firestore khusus aplikasi ini |
+| **App ID** | `1:1059881335154:web:2e6a0001313e9b6a0b45eb` | Pengenal aplikasi web client |
+| **Auth Domain** | `gen-lang-client-0584948514.firebaseapp.com` | Domain otentikasi Google Sign-In |
+| **OAuth Client ID** | `1059881335154-teb8lka6uc1m61luijm6ecicb37fin9r.apps.googleusercontent.com` | Client ID untuk otentikasi Google Account |
+| **Messaging Sender ID** | `1059881335154` | Pengenal pengiriman notifikasi/cloud messaging |
+| **Storage Bucket** | `gen-lang-client-0584948514.firebasestorage.app` | Bucket penyimpanan media/aset |
+
+> ⚠️ **Catatan Penting `firestoreDatabaseId`**:
+> Database Firestore pada proyek ini menggunakan *Dedicated Database Instance* (bukan `(default)`). Oleh karena itu, inisialisasi Firestore di kode program **wajib** menyertakan parameter `firestoreDatabaseId`:
+> ```typescript
+> import { initializeApp } from 'firebase/app';
+> import { getFirestore } from 'firebase/firestore';
+> import firebaseConfig from './firebase-applet-config.json';
+> 
+> const app = initializeApp(firebaseConfig);
+> export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+> ```
+
+### C. Skema Struktur Koleksi Firestore (`firebase-blueprint.json`):
+
+1. **/products (`collection`)**:
+   - `name` (*string*): Nama produk / menu.
+   - `sku` (*string*): Kode unik produk (misal: `PRD-101`).
+   - `category` (*string*): Kategori (misal: `Makanan`, `Minuman`, `Sembako`, dll).
+   - `price` (*number*): Harga jual satuan (Rp).
+   - `stock` (*number*): Sisa stok fisik produk.
+   - `barcode` (*string, opsional*): Kode batang EAN-13/UPC untuk pemindai barcode.
+   - `color` (*string*): Kode warna label hex untuk tampilan tombol kasir.
+
+2. **/transactions (`collection`)**:
+   - `invoiceNumber` (*string*): Nomor struk unik (misal: `INV-20261005-001`).
+   - `timestamp` (*number*): Waktu transaksi (epoch millisecond).
+   - `items` (*array*): Daftar item yang dibeli, kuantitas, harga, dan catatan pesanan.
+   - `subtotal` (*number*): Total sebelum diskon/pajak.
+   - `discount` (*number*): Potongan harga (Rp).
+   - `tax` (*number*): Pajak PPN (Rp).
+   - `total` (*number*): Total akhir yang harus dibayar.
+   - `paidAmount` (*number*): Jumlah uang tunai/digital yang diterima kasir.
+   - `changeAmount` (*number*): Jumlah uang kembalian.
+   - `paymentMethod` (*string*): `cash` (Tunai), `qris` (QRIS), atau `transfer` (Transfer Bank).
+   - `cashierName` (*string*): Nama kasir yang bertugas.
+
+3. **/settings (`collection`)**:
+   - `/settings/main`: Berisi nama toko, alamat, nomor telepon, teks footer struk, status aktif pajak/diskon, dan path printer USB `/dev/usb/lp0`.
+
+4. **/users (`collection`)**:
+   - `/users/{userId}`: Data profil kasir terdaftar (email, nama, role kasir/admin).
+
+---
+
 ## 7. Pusat Cadangan, Ekspor, dan Impor Data Menyeluruh
 
 Aplikasi menyediakan modul ekspor dan impor data menyeluruh di `src/utils/exportImport.ts` dan `src/components/DataBackupModal.tsx`:
