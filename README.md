@@ -104,8 +104,6 @@ bunx @tauri-apps/cli dev
 # (Alternatif ke-2 via npm: npm run tauri:dev atau npx @tauri-apps/cli dev)
 ```
 
-> 💡 **Catatan untuk Bunx:** Nama paket resmi CLI Tauri adalah `@tauri-apps/cli` (bukan `tauri`). Gunakan `bun run tauri:dev` atau `bunx @tauri-apps/cli dev`.
-
 #### 🌐 B. Mode Web Browser Lokal (PWA / Chrome):
 ```bash
 # Menggunakan Bun (Utama):
@@ -132,6 +130,31 @@ Hasil file biner rilis siap pakai akan dibuat di:
 - **Biner Executable**: `src-tauri/target/release/kasirpro-58mm-pos`
 
 Cukup beri izin eksekusi (`chmod +x *.AppImage`) dan jalankan aplikasi secara langsung!
+
+---
+
+## 🎨 Cara Mengganti Ikon Aplikasi Desktop Secara Kustom
+
+Anda dapat mengganti logo aplikasi KasirPro dengan logo toko Anda sendiri dengan 2 cara mudah:
+
+### Cara 1: Otomatis via Tauri Icon Generator (Paling Praktis)
+1. Siapkan 1 file logo toko Anda format **PNG** (disarankan berukuran minimal **512x512** atau **1024x1024 px** dengan background transparan), misalnya simpan sebagai `logo-toko.png`.
+2. Jalankan perintah generator:
+   ```bash
+   bunx @tauri-apps/cli icon logo-toko.png
+   # (atau jika pakai npm: npx @tauri-apps/cli icon logo-toko.png)
+   ```
+3. Tauri CLI akan otomatis menghasilkan seluruh ukuran ikon (`32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.ico`, `icon.icns`) dan menimpanya ke folder `src-tauri/icons/`.
+
+### Cara 2: Manual (Timpa Langsung ke Folder `src-tauri/icons/`)
+Jika Anda ingin mendesain ukuran tiap ikon secara terpisah, Anda cukup mengganti file gambar yang ada di dalam folder `src-tauri/icons/`:
+- `32x32.png` *(32 × 32 pixel)*
+- `128x128.png` *(128 × 128 pixel)*
+- `128x128@2x.png` *(256 × 256 pixel)*
+- `icon.png` *(512 × 512 pixel)*
+- `icon.ico` & `icon.icns` *(ikon sistem Windows & Mac)*
+
+Setelah mengganti ikon, cukup jalankan kembali `bun run tauri:build` untuk mengemas aplikasi dengan logo toko baru Anda.
 
 ---
 
