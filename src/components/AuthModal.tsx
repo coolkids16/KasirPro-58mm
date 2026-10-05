@@ -210,7 +210,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
               <div className="flex-1 min-w-0">
                 <div className="font-bold text-white text-sm truncate">
-                  {currentUser.displayName || 'Kasir Aktif'}
+                  {currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : 'Kasir Aktif')}
                 </div>
                 <div className="text-xs text-slate-400 truncate font-mono">
                   {currentUser.email}

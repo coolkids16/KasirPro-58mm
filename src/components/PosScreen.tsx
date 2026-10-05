@@ -10,12 +10,17 @@ import {
   ShoppingBag, 
   Percent,
   ReceiptText,
-  AlertCircle
+  AlertCircle,
+  Camera,
+  Barcode,
+  CheckCircle2
 } from 'lucide-react';
 import { Product, CartItem, PaymentMethod, Transaction, StoreSettings } from '../types';
 import { db } from '../db/db';
 import { saveTransactionToFirestore, saveProductToFirestore } from '../services/firebase';
 import { formatRupiah } from '../utils/escpos';
+import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
+import { CameraBarcodeScannerModal } from './CameraBarcodeScannerModal';
 
 interface PosScreenProps {
   products: Product[];
@@ -40,6 +45,15 @@ export const PosScreen: React.FC<PosScreenProps> = ({
   const [showDiscountInput, setShowDiscountInput] = useState<boolean>(false);
   const [itemNoteModal, setItemNoteModal] = useState<{ index: number; text: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState<boolean>(false);
+
+  // Connect Hardware USB Barcode Scanner Hook for Linux/Desktop PC
+  const { toastNotification } = useHardwareBarcodeScanner({
+    products,
+    onScanSuccess: (product) => {
+      addToCart(product);
+    }
+  });
 
   // Extract unique categories (including custom categories)
   const categories = useMemo(() => {
@@ -242,15 +256,29 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       {/* LEFT SECTION: Product Catalog Grid & Search */}
       <div className="flex-1 flex flex-col">
         {/* Top Controls: Search & Category Filter */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-5 shadow-sm space-y-3">
-          <div className="flex items-center gap-3">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-5 shadow-sm space-y-3 relative">
+          <div className="flex items-center gap-2.5">
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="Cari nama produk, SKU, barcode..."
+                placeholder="Cari produk / pindai barcode (Tekan Enter)..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && searchQuery.trim()) {
+                    const code = searchQuery.trim();
+                    const matched = products.find(p => 
+                      (p.barcode && p.barcode.trim() === code) ||
+                      (p.sku && p.sku.trim().toLowerCase() === code.toLowerCase()) ||
+                      String(p.id) === code
+                    );
+                    if (matched) {
+                      addToCart(matched);
+                      setSearchQuery('');
+                    }
+                  }
+                }}
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
               />
               {searchQuery && (
@@ -261,6 +289,25 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                   Clear
                 </button>
               )}
+            </div>
+
+            {/* Android / Mobile Camera Scan Button */}
+            <button
+              onClick={() => setIsCameraScannerOpen(true)}
+              title="Buka Pindai Kamera Barcode (Android / Kamera Web)"
+              className="px-3.5 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shrink-0 shadow-sm"
+            >
+              <Camera className="w-4 h-4" />
+              <span className="hidden sm:inline">Pindai Kamera</span>
+            </button>
+
+            {/* Hardware USB Scanner Indicator Badge */}
+            <div 
+              title="Scanner Barcode USB Hardware Linux/PC Aktif & Siap Digunakan"
+              className="hidden lg:flex items-center gap-1.5 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-[11px] font-mono text-slate-400 shrink-0"
+            >
+              <Barcode className="w-4 h-4 text-emerald-400 animate-pulse" />
+              <span>USB Scanner Ready</span>
             </div>
           </div>
 
@@ -611,6 +658,34 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Camera Barcode Scanner Modal for Android & Mobile */}
+      <CameraBarcodeScannerModal
+        isOpen={isCameraScannerOpen}
+        onClose={() => setIsCameraScannerOpen(false)}
+        products={products}
+        onScanSuccess={(product) => {
+          addToCart(product);
+        }}
+      />
+
+      {/* Hardware Scanner Floating Notification Toast */}
+      {toastNotification && (
+        <div 
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-2xl border text-sm font-bold flex items-center gap-2.5 animate-bounce transition-all ${
+            toastNotification.success 
+              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-emerald-500/40' 
+              : 'bg-rose-600 text-white border-rose-400 shadow-rose-600/40'
+          }`}
+        >
+          {toastNotification.success ? (
+            <CheckCircle2 className="w-5 h-5 shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 shrink-0" />
+          )}
+          <span>{toastNotification.msg}</span>
+        </div>
+      )}
     </div>
   );
 };

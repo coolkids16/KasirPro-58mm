@@ -280,7 +280,6 @@ export function generateReceiptText(
     }
   }
 
-  lines.push(padCenter('*** KASIRPRO 58MM ***', W));
   const feedCount = settings.feedLines !== undefined ? settings.feedLines : 1;
   for (let i = 0; i < feedCount; i++) {
     lines.push('');
@@ -536,7 +535,6 @@ export async function generateEscPosBinaryAsync(
       encoder.textLine(fLine);
     }
   }
-  encoder.textLine('*** KASIRPRO 58MM ***');
 
   // Akhir Struk: Auto Cut atau Feed
   if (settings.enableAutoCut) {
@@ -642,7 +640,6 @@ export function generateEscPosBinary(
       encoder.textLine(fLine);
     }
   }
-  encoder.textLine('*** KASIRPRO 58MM ***');
 
   if (settings.enableAutoCut) {
     encoder.cut(false, feedCount);

@@ -53,6 +53,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showSyncInfo, setShowSyncInfo] = useState<boolean>(false);
   const syncPopoverRef = useRef<HTMLDivElement>(null);
 
+  // Helper to extract display label & initial for signed in user
+  const getUserNameLabel = (user: FirebaseUser | null): string => {
+    if (!user) return 'Masuk';
+    if (user.displayName && user.displayName.trim().length > 0) {
+      return user.displayName.split(' ')[0];
+    }
+    if (user.email && user.email.includes('@')) {
+      const emailPrefix = user.email.split('@')[0];
+      return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+    }
+    return 'Kasir';
+  };
+
+  const getUserInitial = (user: FirebaseUser): string => {
+    const label = getUserNameLabel(user);
+    return label.charAt(0).toUpperCase();
+  };
+
   // Monitor network connectivity
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -88,7 +106,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo & Platform Info with Live Indicators */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             {settings?.logoUrl ? (
               <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-750 flex items-center justify-center p-1 shadow-md overflow-hidden shrink-0">
                 <img 
@@ -102,18 +120,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                 KP
               </div>
             )}
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-base sm:text-lg tracking-tight text-white truncate max-w-[140px] sm:max-w-[200px]">
-                  {settings?.storeName ? settings.storeName : 'KasirPro'}
-                </span>
-                <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  58mm POS
-                </span>
+            <div className="shrink-0">
+              <h1 className="font-extrabold text-base sm:text-lg tracking-tight text-white leading-tight whitespace-nowrap">
+                {settings?.storeName ? settings.storeName : 'KasirPro'}
+              </h1>
+              <div className="text-[10px] text-slate-400 font-mono hidden sm:flex flex-col leading-tight mt-0.5 whitespace-nowrap">
+                <span>Cross-Platform POS</span>
+                <span className="text-slate-500">• Linux & Android</span>
               </div>
-              <p className="text-[11px] text-slate-400 font-mono hidden sm:block">
-                ESC/POS (32 Kolom) • Linux & Android
-              </p>
             </div>
           </div>
 
@@ -344,25 +358,28 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* User Login Status Button */}
             <button
               onClick={onOpenAuthModal}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition ${
+              title={currentUser ? `Terhubung sebagai: ${currentUser.email || currentUser.displayName || 'Kasir'}` : 'Masuk ke Akun Kasir'}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition ${
                 currentUser
-                  ? 'bg-slate-800/90 border-slate-700 text-emerald-300 hover:bg-slate-800'
+                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 shadow-sm'
                   : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
               }`}
             >
               {currentUser?.photoURL ? (
                 <img
                   src={currentUser.photoURL}
-                  alt={currentUser.displayName || 'Kasir'}
-                  className="w-4 h-4 rounded-full object-cover"
+                  alt={getUserNameLabel(currentUser)}
+                  className="w-4 h-4 rounded-full object-cover border border-emerald-400/50"
                 />
               ) : currentUser ? (
-                <UserIcon className="w-3.5 h-3.5 text-emerald-400" />
+                <div className="w-4 h-4 rounded-full bg-emerald-500 text-slate-950 font-black text-[10px] flex items-center justify-center leading-none">
+                  {getUserInitial(currentUser)}
+                </div>
               ) : (
                 <LogIn className="w-3.5 h-3.5 text-emerald-400" />
               )}
-              <span className="max-w-[100px] truncate">
-                {currentUser?.displayName ? currentUser.displayName.split(' ')[0] : 'Masuk'}
+              <span className="max-w-[110px] truncate">
+                {getUserNameLabel(currentUser)}
               </span>
             </button>
 

@@ -236,7 +236,6 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
         encoder.textLine(l.substring(0, W));
       }
     }
-    encoder.textLine('*** KASIRPRO 58MM ***');
 
     if (formData.enableAutoCut) {
       encoder.cut(false, feedCount);
@@ -268,7 +267,6 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
       const fLines = formData.footerMessage.split('\n');
       for (const fl of fLines) plainLines.push(padCenter(fl, W));
     }
-    plainLines.push(padCenter('*** KASIRPRO 58MM ***', W));
     for (let i = 0; i < feedCount; i++) plainLines.push('');
 
     await executePrintData(encoder, plainLines.join('\n'), 'Uji Cetak Sampel Toko');
