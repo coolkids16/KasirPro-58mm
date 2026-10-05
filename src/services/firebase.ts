@@ -183,6 +183,11 @@ export function subscribeProducts(
   onProductsUpdate: (products: Product[]) => void,
   onError?: (err: any) => void
 ) {
+  if (!auth.currentUser) {
+    if (onError) onError(new Error('User not authenticated'));
+    return () => {};
+  }
+
   const productsCol = collection(db, 'products');
   return onSnapshot(
     productsCol,
@@ -208,7 +213,9 @@ export function subscribeProducts(
     (error) => {
       console.warn('Firestore Products sync error:', error);
       if (onError) onError(error);
-      handleFirestoreError(error, OperationType.GET, 'products');
+      if (auth.currentUser) {
+        handleFirestoreError(error, OperationType.GET, 'products');
+      }
     }
   );
 }
@@ -426,6 +433,11 @@ export function subscribeTransactions(
   onTransactionsUpdate: (transactions: Transaction[]) => void,
   onError?: (err: any) => void
 ) {
+  if (!auth.currentUser) {
+    if (onError) onError(new Error('User not authenticated'));
+    return () => {};
+  }
+
   const txCol = collection(db, 'transactions');
   const q = query(txCol, orderBy('timestamp', 'desc'), limit(100));
 
@@ -457,7 +469,9 @@ export function subscribeTransactions(
     (error) => {
       console.warn('Firestore Transactions sync error:', error);
       if (onError) onError(error);
-      handleFirestoreError(error, OperationType.GET, 'transactions');
+      if (auth.currentUser) {
+        handleFirestoreError(error, OperationType.GET, 'transactions');
+      }
     }
   );
 }
@@ -515,30 +529,41 @@ export function subscribeStoreSettings(
   onSettingsUpdate: (settings: StoreSettings) => void,
   onError?: (err: any) => void
 ) {
+  if (!auth.currentUser) {
+    if (onError) onError(new Error('User not authenticated'));
+    return () => {};
+  }
+
   const settingsDocRef = doc(db, 'settings', 'main');
   return onSnapshot(
     settingsDocRef,
     (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        onSettingsUpdate({
-          storeName: data.storeName || DEFAULT_SETTINGS.storeName,
-          address: data.address || DEFAULT_SETTINGS.address,
-          phone: data.phone || DEFAULT_SETTINGS.phone,
-          footerMessage: data.footerMessage || DEFAULT_SETTINGS.footerMessage,
+        const updatedSettings: StoreSettings = {
+          storeName: data.storeName !== undefined && data.storeName !== '' ? data.storeName : DEFAULT_SETTINGS.storeName,
+          address: data.address !== undefined ? data.address : DEFAULT_SETTINGS.address,
+          phone: data.phone !== undefined ? data.phone : DEFAULT_SETTINGS.phone,
+          footerMessage: data.footerMessage !== undefined ? data.footerMessage : DEFAULT_SETTINGS.footerMessage,
           paperWidthChars: Number(data.paperWidthChars) || 32,
           currencyPrefix: data.currencyPrefix || 'Rp',
           enableTax: Boolean(data.enableTax),
-          taxRate: Number(data.taxRate) || 10,
+          taxRate: Number(data.taxRate) !== undefined ? Number(data.taxRate) : 10,
           cashierName: data.cashierName || DEFAULT_SETTINGS.cashierName,
           linuxDevicePath: data.linuxDevicePath || '/dev/usb/lp0'
-        });
+        };
+        try {
+          localStorage.setItem('kasirpro_settings', JSON.stringify(updatedSettings));
+        } catch (e) {}
+        onSettingsUpdate(updatedSettings);
       }
     },
     (error) => {
       console.warn('Firestore Settings sync error:', error);
       if (onError) onError(error);
-      handleFirestoreError(error, OperationType.GET, 'settings/main');
+      if (auth.currentUser) {
+        handleFirestoreError(error, OperationType.GET, 'settings/main');
+      }
     }
   );
 }
@@ -546,10 +571,23 @@ export function subscribeStoreSettings(
 export async function saveStoreSettingsToFirestore(settings: StoreSettings): Promise<void> {
   const path = 'settings/main';
   try {
-    await setDoc(doc(db, 'settings', 'main'), {
-      ...settings,
+    const payload = {
+      storeName: settings.storeName,
+      address: settings.address,
+      phone: settings.phone,
+      footerMessage: settings.footerMessage,
+      paperWidthChars: Number(settings.paperWidthChars) || 32,
+      currencyPrefix: settings.currencyPrefix || 'Rp',
+      enableTax: Boolean(settings.enableTax),
+      taxRate: Number(settings.taxRate) || 0,
+      cashierName: settings.cashierName || 'Kasir 01',
+      linuxDevicePath: settings.linuxDevicePath || '/dev/usb/lp0',
       updatedAt: new Date().toISOString()
-    }, { merge: true });
+    };
+    await setDoc(doc(db, 'settings', 'main'), payload, { merge: true });
+    try {
+      localStorage.setItem('kasirpro_settings', JSON.stringify(settings));
+    } catch (e) {}
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }

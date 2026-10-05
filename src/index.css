@@ -1,1 +1,27 @@
 @import "tailwindcss";
+
+/* 
+  Fix dropdown select & option visibility across all Desktop OS (Linux CachyOS/GTK/Qt, Windows, macOS, Android) 
+  and light/dark browser themes
+*/
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #0f172a !important; /* bg-slate-900 */
+  color: #f8fafc !important; /* text-slate-50 */
+  padding: 8px 12px;
+}
+
+select option:checked,
+select option:hover,
+select option:focus {
+  background-color: #059669 !important; /* bg-emerald-600 */
+  color: #ffffff !important;
+}
+
+select option:disabled {
+  color: #64748b !important; /* text-slate-500 */
+  background-color: #020617 !important;
+}

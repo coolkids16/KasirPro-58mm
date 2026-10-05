@@ -1,397 +1,226 @@
-# KasirPro 58mm - Arsitektur POS Cross-Platform (Linux Desktop & Android)
+# KasirPro 58mm - Sistem POS Kasir Cross-Platform (Linux Desktop & Android)
 
-Aplikasi Point of Sale (POS) kasir offline-first berkinerja tinggi yang dirancang untuk berjalan di **Linux Desktop** (menggunakan **Tauri**) dan **Android** (menggunakan **Capacitor**), dengan fitur utama dukungan **printer thermal 58mm (ESC/POS)** berstandar 32 karakter per baris.
-
----
-
-## 1. Tech Stack & Prinsip Arsitektur
-
-- **Frontend / UI Core**: React (TypeScript) + Vite + Tailwind CSS (100% *shared codebase*).
-- **Desktop Wrapper (Linux)**: **Tauri** (menggunakan WebKit2GTK native webview dan backend Rust ultra-ringan dengan konsumsi RAM < 35MB).
-- **Mobile Wrapper (Android)**: **Capacitor** (akses native hardware, Bluetooth, dan Android SDK).
-- **Cloud Database & Auth**: **Firebase Firestore & Authentication** (sinkronisasi cloud katalog produk, riwayat penjualan, profil kasir, dan pengaturan struk).
-- **Database Lokal (Offline-first)**: **Dexie.js** (IndexedDB lokal yang menjaga kasir tetap beroperasi normal saat offline).
-- **Package Manager & Runtime**: **Bun** (cepat, hemat resource, pengganti `npm` dan `npx` via `bunx`).
-- **Pencetakan Struk**: **ESC/POS Binary Encoder** khusus lebar 58mm (32 karakter kolom per baris).
+Aplikasi Point of Sale (POS) kasir *offline-first* berkinerja tinggi yang dirancang untuk berjalan di **Linux Desktop** (menggunakan **Tauri v2**) dan **Android** (menggunakan **Capacitor**), dengan fitur utama dukungan **printer thermal 58mm (ESC/POS)** berstandar 32 karakter per baris.
 
 ---
 
-## 2. Rekomendasi Struktur Folder Monorepo (Shared-Core)
+## 🚀 Fitur Utama
 
-```text
-kasirpro-pos/
-├── android/                    # Proyek Android Native (dihasilkan oleh Capacitor)
-│   ├── app/src/main/
-│   │   ├── AndroidManifest.xml # Izin Bluetooth & Hardware Thermal Printer
-│   │   └── res/
-│   └── build.gradle
-│
-├── src-tauri/                  # Wrapper Linux Desktop (dihasilkan oleh Tauri)
-│   ├── src/
-│   │   └── main.rs             # Backend Rust: Direct I/O ke /dev/usb/lp0
-│   ├── Cargo.toml              # Dependensi Rust
-│   └── tauri.conf.json         # Konfigurasi Window, Permission, dan Build
-│
-├── src/                        # 🌐 100% SHARED CORE CODE (Digunakan bersama)
-│   ├── components/             # Komponen UI (PosScreen, ReceiptModal, ProductManagement, dll)
-│   ├── db/
-│   │   └── db.ts               # Skema & operasi Dexie.js (Offline IndexedDB)
-│   ├── services/
-│   │   ├── printerService.ts   # Hardware Abstraction Layer (HAL) Printer 58mm
-│   │   └── ...
-│   ├── utils/
-│   │   └── escpos.ts           # 32-character ESC/POS Generator & Binary Encoder
-│   ├── types/
-│   │   └── index.ts            # Definisi Interface TypeScript
-│   ├── App.tsx
-│   ├── main.tsx
-│   └── index.css               # Tailwind CSS
-│
-├── capacitor.config.ts         # Konfigurasi Capacitor (webDir: "dist")
-├── vite.config.ts              # Konfigurasi bundler Vite
-├── package.json
-└── tsconfig.json
-```
+- **Dual Database System**:
+  - **Dexie.js (IndexedDB)**: Penyimpanan lokal *offline-first*, kasir tetap beroperasi 100% cepat saat internet padam.
+  - **Firebase Firestore**: Sinkronisasi cloud *real-time* otomatis ke semua perangkat kasir (multi-cabang / multi-device).
+- **Direct ESC/POS 58mm Thermal Printing**:
+  - **Linux Desktop**: Akses langsung hardware via port `/dev/usb/lp0` (Tauri Native IPC).
+  - **Android Mobile**: Web Bluetooth API & Capacitor BLE untuk printer thermal saku portabel Bluetooth.
+  - **Simulator**: Virtual thermal printer 58mm bawaan (32 kolom teks & barcode/QR).
+- **Laporan & Manajemen Stok**:
+  - Dashboard analitik & grafik omzet harian interaktif (Recharts).
+  - Manajemen produk, kategori kustom, varian harga, dan pelacak sisa stok.
+  - Pusat backup, ekspor, dan impor data lengkap (Format CSV Excel & JSON).
 
 ---
 
-## 3. Modul Pencetakan Struk Thermal 58mm (Format ESC/POS 32 Karakter)
+## 🖥️ BAGIAN 1: Panduan Instalasi & Build di Linux Desktop (Arch / CachyOS / Ubuntu)
 
-Printer thermal 58mm memiliki area cetak 384 dot. Menggunakan Font standar A (12×24 dot), baris cetak dibatasi **tepat 32 karakter per baris**.
+### 1. Pasang Dependensi Sistem
 
-### Aturan Format:
-1. **Header Toko**: Rata tengah (*center align*), ukuran teks dapat menggunakan tinggi ganda (*double height*).
-2. **Item Belanja**:
-   - Baris 1: Nama produk (maksimal 32 karakter).
-   - Baris 2: `  [Qty] x [Harga Satuan]` di rata kiri, dan `[Subtotal]` di rata kanan.
-3. **Pemisah**: Garis karakter tanda hubung (`-`) atau sama dengan (`=`) sepanjang 32 karakter.
-4. **Perintah Kontrol Khusus**:
-   - `ESC @` (`0x1B, 0x40`): Reset & inisialisasi printer.
-   - `ESC p 0 25 250` (`0x1B, 0x70, 0x00, 0x19, 0xFA`): Sinyal pulsa buka laci kasir (RJ11 Cash Drawer).
-   - `GS V 66 0` (`0x1D, 0x56, 0x42, 0x00`): Pemotongan kertas otomatis (*auto-cutter*).
-
-### Implementasi TypeScript (`src/utils/escpos.ts`):
-
-```typescript
-export class EscPosEncoder {
-  private buffer: number[] = [];
-
-  constructor() {
-    this.buffer.push(0x1B, 0x40); // ESC @ : Reset printer
-  }
-
-  // Baris dua kolom rata kiri dan kanan (Total tepat 32 karakter)
-  twoColumn(left: string, right: string, width = 32): this {
-    const spaces = Math.max(1, width - left.length - right.length);
-    const line = left + ' '.repeat(spaces) + right;
-    return this.textLine(line);
-  }
-
-  // Format baris item belanja
-  itemRow(name: string, qty: number, price: number, subtotal: number): this {
-    this.textLine(name.substring(0, 32));
-    const qtyPrice = `  ${qty} x ${price.toLocaleString('id-ID')}`;
-    const total = subtotal.toLocaleString('id-ID');
-    return this.twoColumn(qtyPrice, total, 32);
-  }
-
-  separator(char = '-', width = 32): this {
-    return this.textLine(char.repeat(width));
-  }
-
-  // Pulsa buka laci kasir RJ11
-  kickDrawer(): this {
-    this.buffer.push(0x1B, 0x70, 0x00, 0x19, 0xFA);
-    return this;
-  }
-
-  // Potong kertas
-  cut(): this {
-    this.buffer.push(0x0A, 0x0A, 0x0A);
-    this.buffer.push(0x1D, 0x56, 0x01);
-    return this;
-  }
-
-  textLine(str: string): this {
-    for (let i = 0; i < str.length; i++) {
-      this.buffer.push(str.charCodeAt(i));
-    }
-    this.buffer.push(0x0A); // LF
-    return this;
-  }
-
-  encode(): Uint8Array {
-    return new Uint8Array(this.buffer);
-  }
-}
-```
-
----
-
-## 4. Hardware Abstraction Layer (HAL) untuk Linux & Android
-
-### A. Linux Desktop CachyOS (Tauri via Direct File I/O ke `/dev/usb/lp0`)
-
-Di Linux (seperti CachyOS / Arch / Ubuntu), printer thermal USB (misal Vendor ID: `28e9`, Product ID: `0289`) otomatis dikenali kernel Linux dan modul `usblp` di `/dev/usb/lp0`. 
-
-Melalui Tauri IPC command `tauri_raw` / `print_raw_escpos`, buffer biner `Uint8Array` langsung ditulis ke file descriptor tersebut:
-
-```rust
-// src-tauri/src/main.rs
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::path::Path;
-
-#[tauri::command]
-fn tauri_raw(bytes: Vec<u8>, device_path: Option<String>) -> Result<String, String> {
-    let path = device_path.unwrap_or_else(|| "/dev/usb/lp0".to_string());
-    
-    let mut file = OpenOptions::new()
-        .write(true)
-        .open(&path)
-        .map_err(|e| format!("Gagal membuka {}: {}. Pastikan izin akses lp/dialout sudah diberikan.", path, e))?;
-
-    file.write_all(&bytes)
-        .map_err(|e| format!("Gagal menulis data ke printer: {}", e))?;
-    file.flush()
-        .map_err(|e| format!("Flush data gagal: {}", e))?;
-
-    Ok(format!("Berhasil mencetak {} bytes ke {}", bytes.len(), path))
-}
-
-#[tauri::command]
-fn print_raw_escpos(bytes: Vec<u8>, device_path: Option<String>) -> Result<String, String> {
-    tauri_raw(bytes, device_path)
-}
-```
-
-**Konfigurasi Izin di Linux CachyOS (Cukup jalankan sekali):**
+#### A. Untuk Distro Berbasis Arch Linux (CachyOS, EndeavourOS, Manjaro, Arch):
 ```bash
-# 1. Tambahkan user Anda ke grup lp dan dialout
+# 1. Update sistem
+sudo pacman -Syu
+
+# 2. Pasang Bun (Utama), Rust, Cargo, dan WebKitGTK
+sudo pacman -S base-devel git bun rust cargo webkit2gtk-4.1 libappindicator-gtk3 openssl libsoup3
+
+# (Opsi ke-2 jika ingin memasang Node.js & npm: sudo pacman -S nodejs npm)
+```
+
+#### B. Untuk Distro Berbasis Debian / Ubuntu:
+```bash
+sudo apt update
+sudo apt install build-essential git curl rustc cargo libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev
+
+# Pasang Bun (Utama):
+curl -fsSL https://bun.sh/install | bash
+source ~/.bashrc
+```
+
+---
+
+### 2. Atur Izin Port Printer USB Thermal Linux (`/dev/usb/lp0`)
+
+Agar aplikasi dapat menulis biner ESC/POS langsung ke printer tanpa perlu `sudo`:
+
+```bash
+# 1. Tambahkan akun pengguna Anda ke grup printer Linux (lp & dialout)
 sudo usermod -a -G lp,dialout $USER
 
-# 2. Buat udev rule agar port /dev/usb/lp* memiliki hak akses 0666 untuk Vendor 28e9 Product 0289:
+# 2. Pastikan modul kernel usblp aktif
+sudo modprobe usblp
+
+# 3. (Opsional) Tambahkan aturan udev untuk akses permanen
 echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="28e9", ATTRS{idProduct}=="0289", MODE="0666", GROUP="lp"' | sudo tee /etc/udev/rules.d/99-thermal-printer.rules
-
-# 3. Reload udev rules
 sudo udevadm control --reload-rules && sudo udevadm trigger
-
-# 4. Logout dan login kembali (atau restart) agar perubahan grup aktif.
 ```
 
----
+> ⚠️ **PENTING**: Lakukan **Logout lalu Login kembali** (atau restart komputer) agar penambahan grup `lp` aktif di sesi pengguna Anda.
 
-### B. Android (Capacitor & Web Bluetooth BLE)
-
-Untuk printer thermal saku Bluetooth 58mm (seperti Panda, VSC, EPPOS, Iware), gunakan Web Bluetooth API atau plugin Capacitor:
-
-```typescript
-// Pengiriman biner Bluetooth dengan chunking agar MTU tidak overflow
-export async function printWebBluetooth(data: Uint8Array): Promise<void> {
-  const device = await (navigator as any).bluetooth.requestDevice({
-    acceptAllDevices: true,
-    optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb', 0xffe0]
-  });
-
-  const server = await device.gatt.connect();
-  const service = await server.getPrimaryService(0xffe0);
-  const characteristic = await service.getCharacteristic(0xffe1);
-
-  const CHUNK_SIZE = 50;
-  for (let i = 0; i < data.length; i += CHUNK_SIZE) {
-    const chunk = data.slice(i, i + CHUNK_SIZE);
-    await characteristic.writeValue(chunk);
-    await new Promise(resolve => setTimeout(resolve, 20));
-  }
-}
-```
-
-**Izin di `android/app/src/main/AndroidManifest.xml`:**
-```xml
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-</manifest>
-```
-
----
-
-## 5. Panduan Setup Lengkap Menggunakan Bun
-
-### Langkah 1: Inisialisasi Proyek React + Vite + Tailwind + Dexie.js
+Periksa status port printer USB:
 ```bash
-# 1. Buat proyek menggunakan Bun
-bun create vite kasirpro-pos --template react-ts
-cd kasirpro-pos
-
-# 2. Pasang dependensi utama
-bun install dexie lucide-react canvas-confetti
-
-# 3. Pasang dependensi styling Tailwind CSS
-bun install -d tailwindcss @tailwindcss/vite @types/canvas-confetti
+ls -l /dev/usb/lp*
+# Output normal: crw-rw---- 1 root lp ... /dev/usb/lp0
 ```
 
 ---
 
-### Langkah 2: Setup Wrapper Linux Desktop (Tauri)
+### 3. Clone Repositori & Pasang Dependensi
+
 ```bash
-# 1. Pasang dependensi sistem operasi (Ubuntu/Debian)
-sudo apt update
-sudo apt install build-essential curl wget file libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+# 1. Clone repository project
+git clone https://github.com/USERNAME/kasirpro-58mm.git
 
-# 2. Pasang Tauri CLI menggunakan Bun
-bun install -d @tauri-apps/cli @tauri-apps/api
+# 2. Masuk ke folder project
+cd kasirpro-58mm
 
-# 3. Inisialisasi Tauri (Gunakan bunx sebagai pengganti npx)
-bunx tauri init
+# 3. Instal paket dependensi
+bun install
+# (Alternatif ke-2: npm install)
 ```
-*Saat ditanya opsi konfigurasi:*
-- What is your app name? `kasirpro-pos`
-- What should the window title be? `KasirPro 58mm`
-- Where are your web assets? `../dist`
-- What is the url of your dev server? `http://localhost:3000`
-- What is your frontend dev command? `bun run dev`
-- What is your frontend build command? `bun run build`
 
 ---
 
-### Langkah 3: Setup Wrapper Android (Capacitor)
+### 4. Menjalankan di Linux Desktop
+
+#### Mode Desktop Native Tauri (Rekomendasi untuk Kasir):
+```bash
+bunx tauri dev
+# (Alternatif ke-2: npx @tauri-apps/cli dev)
+```
+
+#### Mode Web Browser Lokal (PWA):
+```bash
+bun run dev
+# (Alternatif ke-2: npm run dev)
+```
+Akses di browser: **`http://localhost:3000`**
+
+---
+
+### 5. Build File Aplikasi Siap Pakai Linux (`.AppImage`)
+
+```bash
+bunx tauri build
+# (Alternatif ke-2: npx @tauri-apps/cli build)
+```
+Hasil file biner rilis:
+- **AppImage**: `src-tauri/target/release/bundle/appimage/KasirPro 58mm POS_0.1.0_amd64.AppImage`
+- **Biner Executable**: `src-tauri/target/release/kasirpro-58mm-pos`
+
+---
+
+## 📱 BAGIAN 2: Panduan Setup & Build untuk Android (Capacitor APK)
+
+Aplikasi KasirPro dapat dibungkus menjadi aplikasi Android native menggunakan **Capacitor** untuk digunakan pada Tablet Kasir atau Smartphone Android dengan printer Bluetooth thermal 58mm.
+
+### 1. Inisialisasi Platform Android
+
 ```bash
 # 1. Pasang Capacitor Core & CLI
 bun install @capacitor/core
-bun install -d @capacitor/cli
+bun install -d @capacitor/cli @capacitor/android
+# (Alternatif ke-2: npm install @capacitor/core && npm install -D @capacitor/cli @capacitor/android)
 
-# 2. Inisialisasi Capacitor dengan bunx
+# 2. Inisialisasi konfigurasi Capacitor (cukup sekali di awal)
 bunx cap init "KasirPro 58mm" "com.kasirpro.pos" --web-dir "dist"
 
-# 3. Tambahkan platform Android
-bun install @capacitor/android
+# 3. Tambahkan folder platform Android
 bunx cap add android
 ```
 
 ---
 
-### Langkah 4: Perintah Menjalankan & Build Aplikasi
+### 2. Izin Bluetooth Printer di `android/app/src/main/AndroidManifest.xml`
 
-#### A. Menjalankan di Linux Desktop (Tauri):
-```bash
-# Menjalankan mode pengembangan (hot reload)
-bunx tauri dev
+Buka berkas `android/app/src/main/AndroidManifest.xml` dan tambahkan izin Bluetooth berikut di dalam tag `<manifest>`:
 
-# Menghasilkan installer .deb dan AppImage mandiri
-bunx tauri build
-```
-
-#### B. Menjalankan di Android:
-```bash
-# 1. Build aset web React
-bun run build
-
-# 2. Sinkronkan file dist ke folder android
-bunx cap sync android
-
-# 3. Buka proyek di Android Studio untuk dijalankan ke HP atau build APK
-bunx cap open android
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Izin Bluetooth Printer Thermal Thermal 58mm -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.INTERNET" />
+</manifest>
 ```
 
 ---
 
-## 6. Konfigurasi Kredensial Firebase Firestore & Cloud Database
+### 3. Build Aset & Buka di Android Studio / Generate APK
 
-Aplikasi KasirPro menggunakan **Firebase Firestore & Firebase Authentication** untuk sinkronisasi katalog produk, sisa stok, riwayat struk penjualan, dan pengaturan toko secara *real-time* antar perangkat (Web, Desktop Linux, dan Android).
+```bash
+# 1. Build frontend React
+bun run build
+# (Alternatif ke-2: npm run build)
 
-### A. Berkas Kredensial API (`firebase-applet-config.json`)
+# 2. Sinkronkan hasil build web ke proyek Android native
+bunx cap sync android
+# (Alternatif ke-2: npx cap sync android)
 
-Kredensial API Firebase disimpan pada berkas `firebase-applet-config.json` di direktori utama (*root*) proyek:
+# 3. Buka proyek langsung di Android Studio
+bunx cap open android
+# (Alternatif ke-2: npx cap open android)
+```
+
+Setelah Android Studio terbuka:
+1. Hubungkan HP / Tablet Android dengan kabel USB (aktifkan *USB Debugging*).
+2. Klik tombol hijau **Run (`Shift + F10`)** untuk langsung menginstal dan menjalankan KasirPro di HP Anda.
+3. Untuk membuat file APK rilis: Pilih menu **Build > Build Bundle(s) / APK(s) > Build APK(s)**. File APK siap dibagikan ke seluruh karyawan kasir toko.
+
+---
+
+## 🖨️ Spesifikasi Struk Thermal 58mm (ESC/POS 32 Kolom)
+
+Printer thermal 58mm standar memiliki lebar cetak 384 dot atau **tepat 32 karakter per baris** pada Font A standar.
+
+| Perintah ESC/POS | Byte Hex | Fungsi |
+| :--- | :--- | :--- |
+| `ESC @` | `1B 40` | Inisialisasi dan reset printer |
+| `ESC a 1` | `1B 61 01` | Format teks rata tengah (*center*) |
+| `ESC a 0` | `1B 61 00` | Format teks rata kiri (*left*) |
+| `ESC ! 16` | `1B 21 10` | Mode teks tinggi ganda (*double height*) |
+| `ESC p 0 25 250` | `1B 70 00 19 FA` | Pulsa buka laci uang kasir (RJ11 Cash Drawer) |
+| `GS V 66 0` | `1D 56 42 00` | Pemotong kertas otomatis (*auto cutter*) |
+
+---
+
+## 🗄️ Konfigurasi Cloud Database Firebase
+
+Aplikasi terhubung ke Firebase Firestore untuk sinkronisasi multi-kasir. Konfigurasi kredensial tersimpan di `firebase-applet-config.json`:
 
 ```json
 {
   "projectId": "gen-lang-client-0584948514",
-  "appId": "1:1059881335154:web:2e6a0001313e9b6a0b45eb",
   "apiKey": "AIzaSyB765hjOihywJXyCU-p0ZIVsCZdis3A43A",
-  "authDomain": "gen-lang-client-0584948514.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-kasirpro58mmcros-28515d52-416e-4b24-a9e0-855a8d9b8109",
-  "storageBucket": "gen-lang-client-0584948514.firebasestorage.app",
-  "messagingSenderId": "1059881335154",
-  "measurementId": "",
-  "oAuthClientId": "1059881335154-teb8lka6uc1m61luijm6ecicb37fin9r.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "firestoreDatabaseId": "ai-studio-kasirpro58mmcros-28515d52-416e-4b24-a9e0-855a8d9b8109"
 }
 ```
 
-### B. Detail Kredensial & Parameter API:
-
-| Parameter | Nilai Konfigurasi | Deskripsi Fungsi |
-| :--- | :--- | :--- |
-| **Project ID** | `gen-lang-client-0584948514` | ID Cloud Project Google Firebase |
-| **API Key** | `AIzaSyB765hjOihywJXyCU-p0ZIVsCZdis3A43A` | Kunci otentikasi client SDK Firebase |
-| **Firestore Database ID** | `ai-studio-kasirpro58mmcros-28515d52-416e-4b24-a9e0-855a8d9b8109` | ID *Named Database* Firestore khusus aplikasi ini |
-| **App ID** | `1:1059881335154:web:2e6a0001313e9b6a0b45eb` | Pengenal aplikasi web client |
-| **Auth Domain** | `gen-lang-client-0584948514.firebaseapp.com` | Domain otentikasi Google Sign-In |
-| **OAuth Client ID** | `1059881335154-teb8lka6uc1m61luijm6ecicb37fin9r.apps.googleusercontent.com` | Client ID untuk otentikasi Google Account |
-| **Messaging Sender ID** | `1059881335154` | Pengenal pengiriman notifikasi/cloud messaging |
-| **Storage Bucket** | `gen-lang-client-0584948514.firebasestorage.app` | Bucket penyimpanan media/aset |
-
-> ⚠️ **Catatan Penting `firestoreDatabaseId`**:
-> Database Firestore pada proyek ini menggunakan *Dedicated Database Instance* (bukan `(default)`). Oleh karena itu, inisialisasi Firestore di kode program **wajib** menyertakan parameter `firestoreDatabaseId`:
-> ```typescript
-> import { initializeApp } from 'firebase/app';
-> import { getFirestore } from 'firebase/firestore';
-> import firebaseConfig from './firebase-applet-config.json';
-> 
-> const app = initializeApp(firebaseConfig);
-> export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-> ```
-
-### C. Skema Struktur Koleksi Firestore (`firebase-blueprint.json`):
-
-1. **/products (`collection`)**:
-   - `name` (*string*): Nama produk / menu.
-   - `sku` (*string*): Kode unik produk (misal: `PRD-101`).
-   - `category` (*string*): Kategori (misal: `Makanan`, `Minuman`, `Sembako`, dll).
-   - `price` (*number*): Harga jual satuan (Rp).
-   - `stock` (*number*): Sisa stok fisik produk.
-   - `barcode` (*string, opsional*): Kode batang EAN-13/UPC untuk pemindai barcode.
-   - `color` (*string*): Kode warna label hex untuk tampilan tombol kasir.
-
-2. **/transactions (`collection`)**:
-   - `invoiceNumber` (*string*): Nomor struk unik (misal: `INV-20261005-001`).
-   - `timestamp` (*number*): Waktu transaksi (epoch millisecond).
-   - `items` (*array*): Daftar item yang dibeli, kuantitas, harga, dan catatan pesanan.
-   - `subtotal` (*number*): Total sebelum diskon/pajak.
-   - `discount` (*number*): Potongan harga (Rp).
-   - `tax` (*number*): Pajak PPN (Rp).
-   - `total` (*number*): Total akhir yang harus dibayar.
-   - `paidAmount` (*number*): Jumlah uang tunai/digital yang diterima kasir.
-   - `changeAmount` (*number*): Jumlah uang kembalian.
-   - `paymentMethod` (*string*): `cash` (Tunai), `qris` (QRIS), atau `transfer` (Transfer Bank).
-   - `cashierName` (*string*): Nama kasir yang bertugas.
-
-3. **/settings (`collection`)**:
-   - `/settings/main`: Berisi nama toko, alamat, nomor telepon, teks footer struk, status aktif pajak/diskon, dan path printer USB `/dev/usb/lp0`.
-
-4. **/users (`collection`)**:
-   - `/users/{userId}`: Data profil kasir terdaftar (email, nama, role kasir/admin).
+### Struktur Koleksi:
+1. **/products**: Data master katalog, harga jual, barcode, warna tombol, dan sisa stok.
+2. **/transactions**: Riwayat struk penjualan lengkap, waktu transaksi, kasir, diskon, pajak, dan metode bayar.
+3. **/settings**: Konfigurasi toko, alamat, telepon, format struk, dan device port printer `/dev/usb/lp0`.
 
 ---
 
-## 7. Pusat Cadangan, Ekspor, dan Impor Data Menyeluruh
+## 💾 Pusat Ekspor, Impor & Backup Data
 
-Aplikasi menyediakan modul ekspor dan impor data menyeluruh di `src/utils/exportImport.ts` dan `src/components/DataBackupModal.tsx`:
+Modul backup di tombol **Database (`Data`)** menyediakan:
+- **Full Backup JSON**: Seluruh data produk, stok, transaksi, dan setting dalam 1 file JSON bertanda waktu.
+- **Ekspor CSV (Excel)**: Laporan penjualan dan katalog produk format spreadsheet.
+- **Impor & Restore Fleksibel**: Pilihan mode *Gabungkan (Merge)* atau *Timpa Semua (Replace)* dengan sinkronisasi instan ke Dexie.js dan Cloud Firestore.
 
-1. **Cadangan Penuh (Full Backup JSON)**:
-   - Mengemas seluruh koleksi Produk, Sisa Stok, Riwayat Transaksi Penjualan, dan Pengaturan Toko ke dalam 1 file JSON bertanda waktu (*timestamped*).
-2. **Ekspor Produk & Stok**:
-   - Format **CSV (Excel/Spreadsheet)**: Dapat langsung dibuka di Microsoft Excel atau Google Sheets.
-   - Format **JSON**: Untuk integrasi programatis.
-3. **Ekspor Riwayat Penjualan**:
-   - Format **CSV (Laporan Penjualan)**: Rincian invoice, tanggal, kasir, metode pembayaran, subtotal, diskon, pajak, dan omzet total.
-   - Format **JSON**: Struktur array transaksi lengkap.
-4. **Impor Fleksibel (Restore Data)**:
-   - Mendukung berkas cadangan JSON dan file katalog Excel `.csv`.
-   - Mode **Gabungkan (Merge)**: Menambahkan item baru tanpa menghapus data lama.
-   - Mode **Timpa Semua (Replace)**: Menggantikan seluruh data sistem dengan file backup.
-   - Data yang diimpor otomatis tersinkronisasi ke **Dexie.js (IndexedDB lokal)** dan **Firebase Firestore (Cloud)** secara *batch*.
+---
 
+## 📄 Lisensi
+Hak Cipta © 2026 KasirPro POS. Dibuat untuk sistem kasir modern, cepat, dan handal di Linux & Android.

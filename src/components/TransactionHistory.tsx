@@ -34,7 +34,7 @@ import {
 } from 'recharts';
 import { Transaction, StoreSettings } from '../types';
 import { db } from '../db/db';
-import { deleteTransactionFromFirestore, subscribeTransactions } from '../services/firebase';
+import { deleteTransactionFromFirestore, subscribeTransactions, subscribeToAuthState } from '../services/firebase';
 import { formatRupiah } from '../utils/escpos';
 
 interface TransactionHistoryProps {
@@ -96,21 +96,35 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   useEffect(() => {
     loadTransactionsLocal();
 
-    // Subscribe to Firestore transactions in real time
-    const unsub = subscribeTransactions(
-      (firestoreTxs) => {
-        if (firestoreTxs && firestoreTxs.length > 0) {
-          setTransactions(firestoreTxs);
-        } else {
-          loadTransactionsLocal();
+    let unsubFirestore: (() => void) | null = null;
+
+    const unsubAuth = subscribeToAuthState((user) => {
+      if (user) {
+        unsubFirestore = subscribeTransactions(
+          (firestoreTxs) => {
+            if (firestoreTxs && firestoreTxs.length > 0) {
+              setTransactions(firestoreTxs);
+            } else {
+              loadTransactionsLocal();
+            }
+          },
+          () => {
+            loadTransactionsLocal();
+          }
+        );
+      } else {
+        if (unsubFirestore) {
+          unsubFirestore();
+          unsubFirestore = null;
         }
-      },
-      () => {
         loadTransactionsLocal();
       }
-    );
+    });
 
-    return () => unsub();
+    return () => {
+      unsubAuth();
+      if (unsubFirestore) unsubFirestore();
+    };
   }, []);
 
   const filtered = transactions.filter(t => 

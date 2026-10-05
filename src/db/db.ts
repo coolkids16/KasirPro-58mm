@@ -151,7 +151,14 @@ export async function initializeDatabase() {
 
     const savedSettings = await db.settings.get('main');
     if (!savedSettings) {
-      await db.settings.put({ ...DEFAULT_SETTINGS, id: 'main' });
+      let initialSettings = DEFAULT_SETTINGS;
+      try {
+        const local = localStorage.getItem('kasirpro_settings');
+        if (local) {
+          initialSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(local) };
+        }
+      } catch (e) {}
+      await db.settings.put({ ...initialSettings, id: 'main' });
     }
   } catch (err) {
     console.error('Error initializing database:', err);

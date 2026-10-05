@@ -16,6 +16,7 @@ import {
   subscribeToAuthState, 
   subscribeProducts, 
   subscribeStoreSettings, 
+  saveStoreSettingsToFirestore,
   validateFirestoreConnection,
   seedProductsIfEmpty 
 } from './services/firebase';
@@ -23,7 +24,18 @@ import {
 export default function App() {
   const [activeTab, setActiveTab] = useState<'pos' | 'products' | 'transactions' | 'printer'>('pos');
   const [products, setProducts] = useState<Product[]>([]);
-  const [settings, setSettings] = useState<StoreSettings>(DEFAULT_SETTINGS);
+  
+  // Synchronously initialize settings from localStorage if available, otherwise DEFAULT_SETTINGS
+  const [settings, setSettings] = useState<StoreSettings>(() => {
+    try {
+      const saved = localStorage.getItem('kasirpro_settings');
+      if (saved) {
+        return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+      }
+    } catch (e) {}
+    return DEFAULT_SETTINGS;
+  });
+
   const [printerStatus, setPrinterStatus] = useState<PrinterDeviceStatus>(printerService.getStatus());
   const [currentReceiptTx, setCurrentReceiptTx] = useState<Transaction | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
@@ -51,11 +63,33 @@ export default function App() {
       const s = await db.settings.get('main');
       if (s) {
         setSettings(s);
+        try {
+          localStorage.setItem('kasirpro_settings', JSON.stringify(s));
+        } catch (e) {}
+      } else {
+        const local = localStorage.getItem('kasirpro_settings');
+        if (local) {
+          const parsed = JSON.parse(local);
+          setSettings(parsed);
+          await db.settings.put({ ...parsed, id: 'main' });
+        }
       }
     } catch (err) {
       console.error('Failed to load settings from Dexie:', err);
     }
   }, []);
+
+  const handleUpdateSettings = (newSettings: StoreSettings) => {
+    setSettings(newSettings);
+    try {
+      localStorage.setItem('kasirpro_settings', JSON.stringify(newSettings));
+    } catch (e) {}
+    db.settings.put({ ...newSettings, id: 'main' }).catch(console.warn);
+    if (currentUser) {
+      saveStoreSettingsToFirestore(newSettings).catch(console.warn);
+    }
+    printerService.setDevicePath(newSettings.linuxDevicePath || '/dev/usb/lp0');
+  };
 
   // 1. Initial boot: local database, hardware detection, connection test
   useEffect(() => {
@@ -101,14 +135,35 @@ export default function App() {
         } catch (e) {
           // offline or permission
         }
+
+        // Also ensure current local store settings are saved to Firestore
+        try {
+          const currentSettings = await db.settings.get('main');
+          if (currentSettings) {
+            await saveStoreSettingsToFirestore(currentSettings);
+          } else {
+            const local = localStorage.getItem('kasirpro_settings');
+            if (local) {
+              await saveStoreSettingsToFirestore(JSON.parse(local));
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
       }
     });
 
     return () => unsubscribeAuth();
   }, []);
 
-  // 3. Real-time sync with Firebase Firestore for Products & Settings
+  // 3. Real-time sync with Firebase Firestore for Products & Settings (active when authenticated)
   useEffect(() => {
+    if (!currentUser) {
+      refreshProductsLocal();
+      loadSettingsLocal();
+      return;
+    }
+
     // Sync products from Firestore
     const unsubProducts = subscribeProducts(
       (firestoreProducts) => {
@@ -144,7 +199,7 @@ export default function App() {
       unsubProducts();
       unsubSettings();
     };
-  }, [refreshProductsLocal, loadSettingsLocal]);
+  }, [currentUser, refreshProductsLocal, loadSettingsLocal]);
 
   // When cashier completes a transaction
   const handleTransactionComplete = (tx: Transaction) => {
@@ -248,7 +303,7 @@ export default function App() {
       {/* Store and Printer Settings Modal */}
       <SettingsModal
         settings={settings}
-        onUpdateSettings={(newSettings) => setSettings(newSettings)}
+        onUpdateSettings={handleUpdateSettings}
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
         onOpenBackupModal={() => setIsBackupModalOpen(true)}

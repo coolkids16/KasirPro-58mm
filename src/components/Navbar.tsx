@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Store, 
   Package, 
@@ -7,10 +7,13 @@ import {
   Settings, 
   LogIn, 
   User as UserIcon, 
-  CloudCheck, 
   HardDrive,
-  Cpu,
-  Database
+  Cloud,
+  CloudOff,
+  Database,
+  Wifi,
+  WifiOff,
+  CheckCircle2
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { PrinterDeviceStatus } from '../types';
@@ -38,11 +41,45 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   runtimeEnv
 }) => {
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [showSyncInfo, setShowSyncInfo] = useState<boolean>(false);
+  const syncPopoverRef = useRef<HTMLDivElement>(null);
+
+  // Monitor network connectivity
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Close popover when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (syncPopoverRef.current && !syncPopoverRef.current.contains(event.target as Node)) {
+        setShowSyncInfo(false);
+      }
+    };
+    if (showSyncInfo) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSyncInfo]);
+
+  // Firestore sync is active when user is signed in AND device is online
+  const isFirestoreActive = Boolean(currentUser && isOnline);
+
   return (
     <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo & Platform Info */}
+          {/* Logo & Platform Info with Live Indicators */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-bold text-lg">
               KP
@@ -54,17 +91,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                   58mm POS
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <span className="flex items-center gap-1 text-cyan-400">
-                  <CloudCheck className="w-3 h-3" />
-                  Firestore Sync
-                </span>
-                <span>•</span>
-                <span className="flex items-center gap-1 text-slate-400">
-                  <HardDrive className="w-3 h-3 text-emerald-400" />
-                  Dexie (Offline)
-                </span>
-              </div>
+              <p className="text-[11px] text-slate-400 font-mono hidden sm:block">
+                ESC/POS (32 Kolom) • Linux & Android
+              </p>
             </div>
           </div>
 
@@ -119,8 +148,142 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </nav>
 
-          {/* Quick Actions: Backup, Settings, Printer & Login Status */}
-          <div className="flex items-center gap-2.5">
+          {/* Quick Actions: Sync Status, Backup, Settings, Printer & Login Status */}
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            {/* Live Sync Status Pill Indicator */}
+            <div className="relative" ref={syncPopoverRef}>
+              <button
+                onClick={() => setShowSyncInfo(!showSyncInfo)}
+                title="Status Database & Sinkronisasi (Klik untuk rincian)"
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition ${
+                  isFirestoreActive
+                    ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60'
+                    : 'bg-amber-950/50 border-amber-500/40 text-amber-300 hover:bg-amber-900/50'
+                }`}
+              >
+                {/* Visual Dual-LED Lights */}
+                <div className="flex items-center gap-1.5">
+                  {/* Dexie LED (Always Active) */}
+                  <span 
+                    className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" 
+                    title="Dexie IndexedDB (Offline): Aktif" 
+                  />
+                  {/* Firestore Cloud LED */}
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      isFirestoreActive
+                        ? 'bg-cyan-400 animate-pulse shadow-sm shadow-cyan-400'
+                        : 'bg-slate-600'
+                    }`}
+                    title={isFirestoreActive ? 'Firestore Cloud: Aktif' : 'Firestore: Nonaktif'}
+                  />
+                </div>
+
+                {isFirestoreActive ? (
+                  <Cloud className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                ) : (
+                  <HardDrive className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                )}
+
+                <span className="hidden xl:inline text-[11px] font-mono">
+                  {isFirestoreActive ? 'Cloud + Dexie (2/2 Aktif)' : 'Hanya Dexie (1/2 Aktif)'}
+                </span>
+                <span className="hidden sm:inline xl:hidden text-[11px] font-mono">
+                  {isFirestoreActive ? '2/2 DB' : '1/2 DB'}
+                </span>
+              </button>
+
+              {/* Popover Card Info */}
+              {showSyncInfo && (
+                <div className="absolute right-0 mt-2 w-80 p-4 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 text-xs space-y-3 animate-in fade-in">
+                  <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
+                    <span className="font-bold text-white flex items-center gap-1.5 text-xs">
+                      <Database className="w-4 h-4 text-emerald-400" />
+                      Status Sinkronisasi Database
+                    </span>
+                    <button
+                      onClick={() => setShowSyncInfo(false)}
+                      className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* 1. Dexie.js (IndexedDB) Status */}
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" />
+                        <span className="font-bold text-white">Dexie.js (IndexedDB)</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        🟢 AKTIF (100%)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 pl-4.5">
+                      Penyimpanan lokal di memori browser/perangkat. Kasir tetap beroperasi cepat tanpa jeda meski tanpa koneksi internet.
+                    </p>
+                  </div>
+
+                  {/* 2. Firebase Firestore (Cloud) Status */}
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span 
+                          className={`w-2.5 h-2.5 rounded-full ${
+                            isFirestoreActive
+                              ? 'bg-cyan-400 animate-pulse shadow-sm shadow-cyan-400'
+                              : 'bg-amber-400'
+                          }`}
+                        />
+                        <span className="font-bold text-white">Firebase Firestore</span>
+                      </div>
+                      <span 
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          isFirestoreActive
+                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+                            : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                        }`}
+                      >
+                        {isFirestoreActive ? '🟢 TERSINKRON' : '🟡 MODE OFFLINE'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 pl-4.5">
+                      {isFirestoreActive ? (
+                        <span className="text-emerald-300">
+                          Sinkronisasi Cloud aktif secara real-time. Perubahan stok, transaksi, dan pengaturan otomatis tersinkron ke semua kasir.
+                        </span>
+                      ) : !currentUser ? (
+                        <span>
+                          Masuk dengan akun Google/Email untuk mengaktifkan sinkronisasi otomatis ke cloud.
+                        </span>
+                      ) : (
+                        <span className="text-amber-300 flex items-center gap-1">
+                          <WifiOff className="w-3 h-3 shrink-0" />
+                          Koneksi internet terputus. Data disimpan di Dexie lokal dan akan otomatis sinkron saat online kembali.
+                        </span>
+                      )}
+                    </p>
+
+                    {!currentUser && (
+                      <div className="pt-2 pl-4.5">
+                        <button
+                          onClick={() => {
+                            setShowSyncInfo(false);
+                            onOpenAuthModal();
+                          }}
+                          className="w-full py-1.5 px-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition shadow"
+                        >
+                          <LogIn className="w-3.5 h-3.5" />
+                          Login untuk Aktifkan Cloud Sync (2/2)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Full Backup & Export/Import Button */}
             <button
               onClick={onOpenBackupModal}
@@ -137,19 +300,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition"
             >
               <Settings className="w-4 h-4" />
-            </button>
-
-            {/* Printer Status Pill */}
-            <button
-              onClick={onOpenPrinterModal}
-              title="Konfigurasi Printer 58mm"
-              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-800 text-xs text-slate-300 hover:text-white transition-colors"
-            >
-              <span className={`w-2 h-2 rounded-full ${printerStatus.connected ? 'bg-emerald-400 animate-pulse' : 'bg-cyan-400'}`} />
-              <Printer className="w-3.5 h-3.5 text-slate-400" />
-              <span className="hidden md:inline font-mono text-[11px]">
-                {printerStatus.deviceName || (printerStatus.connected ? 'Printer Siap' : 'Simulator 58mm')}
-              </span>
             </button>
 
             {/* User Login Status Button */}

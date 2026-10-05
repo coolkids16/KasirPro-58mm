@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Store, 
   Printer, 
@@ -14,7 +14,7 @@ import {
   Upload
 } from 'lucide-react';
 import { StoreSettings } from '../types';
-import { saveStoreSettingsToFirestore } from '../services/firebase';
+import { saveStoreSettingsToFirestore, auth } from '../services/firebase';
 import { db } from '../db/db';
 import { printerService } from '../services/printerService';
 import { EscPosEncoder, padCenter, padRow, padSeparator } from '../utils/escpos';
@@ -40,6 +40,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [testPrintSuccess, setTestPrintSuccess] = useState<string | null>(null);
 
+  // Sync formData whenever modal opens or settings change
+  useEffect(() => {
+    if (isOpen) {
+      setFormData({ ...settings });
+    }
+  }, [isOpen, settings]);
+
   if (!isOpen) return null;
 
   const handleSave = async (e: React.FormEvent) => {
@@ -48,13 +55,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setSaveSuccess(false);
 
     try {
-      // 1. Simpan ke Firestore
-      await saveStoreSettingsToFirestore(formData);
+      // 1. Simpan segera ke localStorage
+      try {
+        localStorage.setItem('kasirpro_settings', JSON.stringify(formData));
+      } catch (e) {}
 
-      // 2. Simpan juga ke Dexie IndexedDB lokal untuk offline persistence
+      // 2. Simpan ke Dexie IndexedDB lokal untuk offline persistence
       await db.settings.put({ ...formData, id: 'main' });
 
-      // 3. Update state di parent App
+      // 3. Simpan ke Firestore jika user terotentikasi
+      if (auth.currentUser) {
+        await saveStoreSettingsToFirestore(formData);
+      }
+
+      // 4. Update state di parent App
       onUpdateSettings(formData);
       printerService.setDevicePath(formData.linuxDevicePath || '/dev/usb/lp0');
 
@@ -62,7 +76,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
       console.error('Failed to save settings:', err);
-      // Tetap simpan ke local Dexie jika koneksi firestore gagal
+      // Tetap simpan ke local Dexie & localStorage jika koneksi firestore gagal
+      try {
+        localStorage.setItem('kasirpro_settings', JSON.stringify(formData));
+      } catch (e) {}
       await db.settings.put({ ...formData, id: 'main' });
       onUpdateSettings(formData);
       setSaveSuccess(true);
@@ -328,9 +345,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={e => setFormData({ ...formData, paperWidthChars: Number(e.target.value) })}
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono"
                   >
-                    <option value={32}>32 Karakter (Standar Thermal 58mm)</option>
-                    <option value={42}>42 Karakter (Font B Thermal 58mm)</option>
-                    <option value={48}>48 Karakter (Thermal 80mm)</option>
+                    <option value={32} className="bg-slate-900 text-white">32 Karakter (Standar Thermal 58mm)</option>
+                    <option value={42} className="bg-slate-900 text-white">42 Karakter (Font B Thermal 58mm)</option>
+                    <option value={48} className="bg-slate-900 text-white">48 Karakter (Thermal 80mm)</option>
                   </select>
                 </div>
 
