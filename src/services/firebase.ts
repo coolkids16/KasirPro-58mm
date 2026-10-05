@@ -1,6 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import { 
-  getAuth, 
+  initializeAuth,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
   signInWithPopup, 
   signOut, 
   GoogleAuthProvider, 
@@ -44,7 +46,11 @@ export const db = initializeFirestore(app, {
   ? (firebaseConfig as any).firestoreDatabaseId
   : undefined);
 
-export const auth = getAuth(app);
+// Initialize Firebase Auth with fallback persistence (IndexedDB falling back to localStorage)
+// This is essential under WebKitGTK / Tauri sandbox to prevent Auth hanging or initialization errors
+export const auth = initializeAuth(app, {
+  persistence: [indexedDBLocalPersistence, browserLocalPersistence]
+});
 export const googleProvider = new GoogleAuthProvider();
 
 export enum OperationType {
