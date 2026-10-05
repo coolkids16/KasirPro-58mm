@@ -7,9 +7,9 @@
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
+    "tauri": "bunx @tauri-apps/cli",
+    "tauri:dev": "bunx @tauri-apps/cli dev",
+    "tauri:build": "bunx @tauri-apps/cli build",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
   },
