@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Printer, 
   Bluetooth, 
@@ -9,15 +9,20 @@ import {
   CheckCircle2, 
   AlertCircle, 
   Send, 
-  RefreshCw,
-  Zap,
-  Info
+  Zap, 
+  Cpu, 
+  ShieldCheck, 
+  RefreshCw 
 } from 'lucide-react';
-import { PrinterDeviceStatus, PrinterConnectionType } from '../types';
+import { 
+  PrinterDeviceStatus, 
+  PrinterConnectionType, 
+  LinuxPrinterInfo 
+} from '../types';
 import { EscPosEncoder, padRow, padCenter, padSeparator } from '../utils/escpos';
 import { printerService } from '../services/printerService';
 
-interface PrinterTesterProps {
+export interface PrinterTesterProps {
   printerStatus: PrinterDeviceStatus;
   setPrinterStatus: (status: PrinterDeviceStatus) => void;
   runtimeEnv: 'tauri' | 'capacitor' | 'browser';
@@ -33,7 +38,36 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
   );
   const [testResult, setTestResult] = useState<{ success: boolean; msg: string } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selectedMethod, setSelectedMethod] = useState<PrinterConnectionType>('simulator');
+  const [devicePathInput, setDevicePathInput] = useState('/dev/usb/lp0');
+  const [linuxInfo, setLinuxInfo] = useState<LinuxPrinterInfo | null>(null);
+
+  // Set default method based on runtime
+  const [selectedMethod, setSelectedMethod] = useState<PrinterConnectionType>(
+    runtimeEnv === 'tauri' ? 'tauri_raw' : 'tauri_raw'
+  );
+
+  // Cek otomatis device Linux saat komponen dibuka
+  useEffect(() => {
+    checkLinuxPort();
+  }, []);
+
+  const checkLinuxPort = async () => {
+    try {
+      const info = await printerService.checkLinuxPrinter(devicePathInput);
+      setLinuxInfo(info);
+      if (info.exists && info.writable) {
+        setPrinterStatus({
+          connected: true,
+          type: 'tauri_raw',
+          deviceName: `Linux ${devicePathInput} (28e9:0289)`,
+          devicePath: devicePathInput,
+          linuxInfo: info
+        });
+      }
+    } catch (err: any) {
+      console.warn('Gagal cek device port:', err);
+    }
+  };
 
   const handleConnectBluetooth = async () => {
     setLoading(true);
@@ -76,7 +110,12 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
     setTestResult(null);
     try {
       const binary = encoder.encode();
-      const res = await printerService.printUnified(binary, plainText, selectedMethod);
+      const res = await printerService.printUnified(
+        binary, 
+        plainText, 
+        selectedMethod, 
+        devicePathInput
+      );
       setTestResult({
         success: true,
         msg: `${actionName}: Berhasil! (${res.message})`
@@ -154,27 +193,147 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
       {/* Top Banner */}
       <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-            <Printer className="w-5 h-5 text-emerald-400" />
-            Laboratorium & Uji Printer Thermal 58mm
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+              <Printer className="w-5 h-5 text-emerald-400" />
+              Laboratorium & Uji Printer Thermal 58mm
+            </h2>
+            <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-mono px-2 py-0.5 rounded-md font-bold">
+              Linux CachyOS
+            </span>
+          </div>
           <p className="text-xs text-slate-400 mt-1">
-            Uji kompatibilitas perintah biner ESC/POS, koneksi Web Bluetooth (Android/Chrome) dan Web Serial (Linux USB).
+            Uji komunikasi langsung ke port <code className="text-cyan-300 font-mono">/dev/usb/lp0</code> (Vendor: 28e9, PID: 0289) via Tauri v2 Rust IPC.
           </p>
         </div>
 
         {/* Runtime info badge */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-400">Environment:</span>
-          <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-xl text-xs font-mono uppercase font-bold">
-            {runtimeEnv}
+          <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-xl text-xs font-mono uppercase font-bold flex items-center gap-1.5">
+            <Cpu className="w-3.5 h-3.5" />
+            {runtimeEnv === 'tauri' ? 'Tauri v2 Desktop' : 'Web Preview / Browser'}
           </span>
         </div>
       </div>
 
+      {/* Linux Hardware Target Card (Primary Feature for CachyOS) */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-cyan-500/30 p-6 rounded-2xl shadow-xl">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+          <div>
+            <div className="flex items-center gap-2">
+              <Cpu className="w-5 h-5 text-cyan-400" />
+              <h3 className="font-extrabold text-white text-base">
+                Driver Port Linux Desktop: {devicePathInput}
+              </h3>
+              <span className="text-[11px] font-mono bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2 py-0.5 rounded">
+                VID: 28e9 • PID: 0289
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Printer thermal terdeteksi di Linux CachyOS pada device character <code className="text-cyan-300 font-mono">/dev/usb/lp0</code>.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 w-full lg:w-auto">
+            <input
+              type="text"
+              value={devicePathInput}
+              onChange={(e) => {
+                setDevicePathInput(e.target.value);
+                printerService.setDevicePath(e.target.value);
+              }}
+              className="px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-xs font-mono text-cyan-300 w-44 focus:outline-none focus:border-cyan-500"
+              placeholder="/dev/usb/lp0"
+            />
+            <button
+              onClick={checkLinuxPort}
+              className="px-3.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 transition shrink-0"
+              title="Periksa izin dan status ketersediaan port di sistem operasi"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Cek Port
+            </button>
+          </div>
+        </div>
+
+        {/* Linux Port Inspection Result */}
+        {linuxInfo && (
+          <div className="mt-4 p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5">
+              <ShieldCheck className={`w-5 h-5 ${linuxInfo.writable ? 'text-emerald-400' : 'text-amber-400'}`} />
+              <div>
+                <div className="font-bold text-white flex items-center gap-2">
+                  <span>Status Device:</span>
+                  <span className={linuxInfo.writable ? 'text-emerald-400' : 'text-amber-400'}>
+                    {linuxInfo.writable ? 'Siap Ditulis (Ready)' : 'Izin Akses Perlu Diatur'}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                  {linuxInfo.details}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setSelectedMethod('tauri_raw');
+                handleTest32Chars();
+              }}
+              className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 transition shrink-0 shadow-lg shadow-emerald-500/20"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Test Cetak ke {devicePathInput}
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Connection Drivers Panel */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between">
+        <div className={`border p-5 rounded-2xl flex flex-col justify-between transition ${
+          selectedMethod === 'tauri_raw' 
+            ? 'bg-slate-900 border-cyan-500 shadow-md shadow-cyan-500/10' 
+            : 'bg-slate-900 border-slate-800'
+        }`}>
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <span className="p-2.5 bg-cyan-500/10 text-cyan-400 rounded-xl">
+                <Cpu className="w-5 h-5" />
+              </span>
+              <span className="text-[10px] font-mono bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded font-bold">
+                Rekomendasi CachyOS
+              </span>
+            </div>
+            <h4 className="font-bold text-white text-sm">Tauri Raw (/dev/usb/lp0)</h4>
+            <p className="text-xs text-slate-400 mt-1">
+              Backend Rust menulis biner ESC/POS langsung ke file device printer thermal di Linux.
+            </p>
+          </div>
+
+          <button
+            onClick={() => {
+              setSelectedMethod('tauri_raw');
+              setTestResult({
+                success: true,
+                msg: `Metode aktif: Tauri Raw -> ${devicePathInput}`
+              });
+            }}
+            className={`mt-4 w-full py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+              selectedMethod === 'tauri_raw'
+                ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
+                : 'bg-slate-800 hover:bg-slate-750 text-slate-300'
+            }`}
+          >
+            {selectedMethod === 'tauri_raw' ? '✓ Mode Aktif' : 'Pilih Tauri Raw'}
+          </button>
+        </div>
+
+        <div className={`border p-5 rounded-2xl flex flex-col justify-between transition ${
+          selectedMethod === 'web_bluetooth' 
+            ? 'bg-slate-900 border-blue-500' 
+            : 'bg-slate-900 border-slate-800'
+        }`}>
           <div>
             <div className="flex items-center justify-between mb-3">
               <span className="p-2.5 bg-blue-500/10 text-blue-400 rounded-xl">
@@ -186,7 +345,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
             </div>
             <h4 className="font-bold text-white text-sm">Web Bluetooth API</h4>
             <p className="text-xs text-slate-400 mt-1">
-              Hubungkan langsung ke printer thermal portabel Bluetooth (SPP / GATT 0xFFE0 / 0x18F0).
+              Untuk printer thermal saku portabel Bluetooth di Android / Chrome.
             </p>
           </div>
 
@@ -200,51 +359,42 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
           </button>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="p-2.5 bg-amber-500/10 text-amber-400 rounded-xl">
-                <Usb className="w-5 h-5" />
-              </span>
-              <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">
-                Linux Desktop
-              </span>
-            </div>
-            <h4 className="font-bold text-white text-sm">Web Serial / USB COM</h4>
-            <p className="text-xs text-slate-400 mt-1">
-              Akses kabel USB printer di Linux (/dev/ttyUSB*, /dev/ttyACM*) via Chrome Serial API.
-            </p>
-          </div>
-
-          <button
-            onClick={handleConnectSerial}
-            disabled={loading}
-            className="mt-4 w-full py-2.5 px-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-amber-600/20"
-          >
-            <Usb className="w-3.5 h-3.5" />
-            Buka Port USB/Serial
-          </button>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between">
+        <div className={`border p-5 rounded-2xl flex flex-col justify-between transition ${
+          selectedMethod === 'simulator' 
+            ? 'bg-slate-900 border-emerald-500' 
+            : 'bg-slate-900 border-slate-800'
+        }`}>
           <div>
             <div className="flex items-center justify-between mb-3">
               <span className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl">
                 <Terminal className="w-5 h-5" />
               </span>
               <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">
-                Native Wrapper
+                Simulasi UI
               </span>
             </div>
-            <h4 className="font-bold text-white text-sm">Tauri & Capacitor Bridge</h4>
+            <h4 className="font-bold text-white text-sm">Simulator 58mm</h4>
             <p className="text-xs text-slate-400 mt-1">
-              Mode runtime native: Tauri Linux direct socket/raw USB atau Capacitor Android native plugin.
+              Simulasi virtual pengiriman biner ESC/POS tanpa ketergantungan perangkat keras.
             </p>
           </div>
 
-          <div className="mt-4 p-2 bg-slate-950 border border-slate-800 rounded-xl text-[11px] text-slate-400 text-center font-mono">
-            {printerStatus.connected ? `Terhubung: ${printerStatus.deviceName}` : 'Siap Beroperasi'}
-          </div>
+          <button
+            onClick={() => {
+              setSelectedMethod('simulator');
+              setTestResult({
+                success: true,
+                msg: 'Beralih ke mode simulator virtual 58mm.'
+              });
+            }}
+            className={`mt-4 w-full py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+              selectedMethod === 'simulator'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                : 'bg-slate-800 hover:bg-slate-750 text-slate-300'
+            }`}
+          >
+            {selectedMethod === 'simulator' ? '✓ Mode Aktif' : 'Pilih Simulator'}
+          </button>
         </div>
       </div>
 
@@ -297,7 +447,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
               disabled={loading}
               className="p-4 bg-slate-950 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 rounded-xl text-left transition group"
             >
-              <div className="font-bold text-white text-xs group-hover:text-emerald-400 flex items-center justify-between">
+              <div className="font-bold text-white text-xs group-hover:text-cyan-400 flex items-center justify-between">
                 <span>1. Uji Lebar 32 Kolom</span>
                 <span className="font-mono text-[10px] text-slate-500">58mm</span>
               </div>
@@ -325,7 +475,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
               disabled={loading}
               className="p-4 bg-slate-950 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 rounded-xl text-left transition group"
             >
-              <div className="font-bold text-white text-xs group-hover:text-emerald-400 flex items-center justify-between">
+              <div className="font-bold text-white text-xs group-hover:text-indigo-400 flex items-center justify-between">
                 <span>3. Uji Potong Kertas</span>
                 <Scissors className="w-3.5 h-3.5 text-indigo-400" />
               </div>
@@ -355,7 +505,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
               disabled={loading}
               className="p-4 bg-slate-950 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 rounded-xl text-left transition group"
             >
-              <div className="font-bold text-white text-xs group-hover:text-emerald-400 flex items-center justify-between">
+              <div className="font-bold text-white text-xs group-hover:text-cyan-400 flex items-center justify-between">
                 <span>4. Format Font & Bold</span>
                 <span className="font-mono text-[10px] text-cyan-400">GS ! / ESC E</span>
               </div>
@@ -368,32 +518,42 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
           {/* Quick Target Dispatcher Selector */}
           <div className="pt-3 border-t border-slate-800">
             <label className="text-xs text-slate-400 block mb-1.5 font-medium">
-              Metode Eksekusi Cetak Aktif:
+              Target Metode Eksekusi Cetak:
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
+              <button
+                onClick={() => setSelectedMethod('tauri_raw')}
+                className={`py-2 px-2 rounded-xl text-xs font-semibold border transition text-center ${
+                  selectedMethod === 'tauri_raw'
+                    ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300'
+                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                }`}
+              >
+                Tauri Raw
+              </button>
               <button
                 onClick={() => setSelectedMethod('simulator')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-semibold border transition ${
+                className={`py-2 px-2 rounded-xl text-xs font-semibold border transition text-center ${
                   selectedMethod === 'simulator'
                     ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
                     : 'bg-slate-950 border-slate-800 text-slate-400'
                 }`}
               >
-                Simulator Web
+                Simulator
               </button>
               <button
                 onClick={() => setSelectedMethod('web_bluetooth')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-semibold border transition ${
+                className={`py-2 px-2 rounded-xl text-xs font-semibold border transition text-center ${
                   selectedMethod === 'web_bluetooth'
                     ? 'bg-blue-500/20 border-blue-500 text-blue-300'
                     : 'bg-slate-950 border-slate-800 text-slate-400'
                 }`}
               >
-                Web Bluetooth
+                Bluetooth
               </button>
               <button
                 onClick={() => setSelectedMethod('web_serial')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-semibold border transition ${
+                className={`py-2 px-2 rounded-xl text-xs font-semibold border transition text-center ${
                   selectedMethod === 'web_serial'
                     ? 'bg-amber-500/20 border-amber-500 text-amber-300'
                     : 'bg-slate-950 border-slate-800 text-slate-400'
@@ -436,69 +596,12 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
             className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition"
           >
             <Send className="w-4 h-4" />
-            {loading ? 'Mengirim Data...' : 'Cetak Teks Kustom ke Printer 58mm'}
+            {loading ? 'Mengirim Data...' : `Cetak Teks Kustom ke ${devicePathInput}`}
           </button>
-        </div>
-      </div>
-
-      {/* ESC/POS Command Reference Reference Sheet */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-        <h4 className="font-bold text-white text-sm mb-3 flex items-center gap-2">
-          <Info className="w-4 h-4 text-emerald-400" />
-          Kamus Perintah Biner Standar ESC/POS untuk Kertas 58mm
-        </h4>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
-            <thead className="bg-slate-950 text-slate-400 font-mono border-b border-slate-800">
-              <tr>
-                <th className="py-2.5 px-3">Fungsi</th>
-                <th className="py-2.5 px-3">Kode Biner (Hex)</th>
-                <th className="py-2.5 px-3">Kode ASCII</th>
-                <th className="py-2.5 px-3">Deskripsi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800 font-mono text-slate-300">
-              <tr>
-                <td className="py-2.5 px-3 font-sans font-medium text-white">Reset/Init Printer</td>
-                <td className="py-2.5 px-3 text-cyan-400">1B 40</td>
-                <td className="py-2.5 px-3 text-emerald-400">ESC @</td>
-                <td className="py-2.5 px-3 font-sans text-slate-400">Mengembalikan printer ke status awal (clear buffer).</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-sans font-medium text-white">Rata Kiri / Tengah / Kanan</td>
-                <td className="py-2.5 px-3 text-cyan-400">1B 61 00 / 01 / 02</td>
-                <td className="py-2.5 px-3 text-emerald-400">ESC a 0 / 1 / 2</td>
-                <td className="py-2.5 px-3 font-sans text-slate-400">Menentukan alignment teks horizontal baris berikutnya.</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-sans font-medium text-white">Teks Tebal (Bold On/Off)</td>
-                <td className="py-2.5 px-3 text-cyan-400">1B 45 01 / 00</td>
-                <td className="py-2.5 px-3 text-emerald-400">ESC E 1 / 0</td>
-                <td className="py-2.5 px-3 font-sans text-slate-400">Mengaktifkan/mematikan penekanan cetak huruf tebal.</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-sans font-medium text-white">Ukuran Dobel (Header)</td>
-                <td className="py-2.5 px-3 text-cyan-400">1D 21 11</td>
-                <td className="py-2.5 px-3 text-emerald-400">GS ! 0x11</td>
-                <td className="py-2.5 px-3 font-sans text-slate-400">Memperbesar font 2x tinggi & 2x lebar untuk nama toko.</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-sans font-medium text-white">Buka Laci Kasir (Cash Drawer)</td>
-                <td className="py-2.5 px-3 text-cyan-400">1B 70 00 19 FA</td>
-                <td className="py-2.5 px-3 text-emerald-400">ESC p 0 25 250</td>
-                <td className="py-2.5 px-3 font-sans text-slate-400">Menembakkan pulsa tegangan ke port RJ11 laci kasir.</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-sans font-medium text-white">Potong Kertas (Auto Cut)</td>
-                <td className="py-2.5 px-3 text-cyan-400">1D 56 42 00</td>
-                <td className="py-2.5 px-3 text-emerald-400">GS V 66 0</td>
-                <td className="py-2.5 px-3 font-sans text-slate-400">Mengaktifkan pisau pemotong kertas otomatis.</td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </div>
     </div>
   );
 };
+
+export default PrinterTester;

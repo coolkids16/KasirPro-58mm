@@ -44,19 +44,31 @@ export interface StoreSettings {
   enableTax: boolean;
   taxRate: number; // in percentage e.g. 10%
   cashierName: string;
+  linuxDevicePath: string; // default: /dev/usb/lp0
 }
 
 export type PrinterConnectionType = 
   | 'simulator' 
+  | 'tauri_raw' 
   | 'web_bluetooth' 
   | 'web_serial' 
-  | 'tauri_raw' 
   | 'capacitor_bluetooth' 
   | 'browser_print';
+
+export interface LinuxPrinterInfo {
+  path: string;
+  exists: boolean;
+  writable: boolean;
+  vendorId?: string;
+  productId?: string;
+  details?: string;
+}
 
 export interface PrinterDeviceStatus {
   connected: boolean;
   type: PrinterConnectionType;
   deviceName?: string;
+  devicePath?: string;
   error?: string;
+  linuxInfo?: LinuxPrinterInfo;
 }

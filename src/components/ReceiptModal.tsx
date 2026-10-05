@@ -8,14 +8,15 @@ import {
   Code, 
   Copy, 
   Check, 
-  FileText
+  FileText,
+  Cpu
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Transaction, StoreSettings, PrinterConnectionType } from '../types';
 import { generateReceiptText, generateEscPosBinary } from '../utils/escpos';
 import { printerService } from '../services/printerService';
 
-interface ReceiptModalProps {
+export interface ReceiptModalProps {
   transaction: Transaction;
   settings: StoreSettings;
   isOpen: boolean;
@@ -39,6 +40,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   if (!isOpen) return null;
 
+  const isTauri = printerService.getRuntimeEnv() === 'tauri';
+  const linuxPath = settings.linuxDevicePath || '/dev/usb/lp0';
+
   const receiptPlainText = generateReceiptText(transaction, settings);
   const escPosBinary = generateEscPosBinary(transaction, settings);
   const hexDump = Array.from(escPosBinary)
@@ -50,11 +54,15 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     setPrintSuccessMessage(null);
     setPrintErrorMessage(null);
 
+    // Otomatis arahkan ke tauri_raw jika method tidak ditentukan dan runtime adalah Tauri
+    const chosenMethod = method || (isTauri ? 'tauri_raw' : 'simulator');
+
     try {
       const result = await printerService.printUnified(
         escPosBinary,
         receiptPlainText,
-        method
+        chosenMethod,
+        linuxPath
       );
 
       if (result.success) {
@@ -122,7 +130,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <Printer className="w-5 h-5 text-emerald-400" />
-                  Cetak Struk Thermal
+                  Cetak Struk Thermal 58mm
                 </h3>
                 <p className="text-xs text-slate-400">Invoice: #{transaction.invoiceNumber}</p>
               </div>
@@ -132,6 +140,17 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* Linux Hardware Target Badge */}
+            <div className="mt-3 p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1.5 text-slate-300 font-medium">
+                <Cpu className="w-4 h-4 text-cyan-400" />
+                Target Port: <code className="font-mono text-cyan-300">{linuxPath}</code>
+              </span>
+              <span className="font-mono text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">
+                VID: 28e9 PID: 0289
+              </span>
             </div>
 
             {/* Notification messages */}
@@ -166,45 +185,55 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             )}
 
             {/* Primary Print Button */}
-            <div className="mt-5 space-y-2.5">
+            <div className="mt-4 space-y-2.5">
               <button
-                onClick={() => handlePrint()}
+                onClick={() => handlePrint('tauri_raw')}
                 disabled={isPrinting}
                 className="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-50"
               >
-                <Printer className="w-4 h-4" />
-                {isPrinting ? 'Mengirim Data ke Printer...' : 'Cetak Cepat (ESC/POS)'}
+                <Cpu className="w-4 h-4" />
+                {isPrinting ? 'Mengirim Data ke Printer...' : `Cetak ke ${linuxPath} (Tauri Linux)`}
               </button>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <button
+                  onClick={() => handlePrint('simulator')}
+                  disabled={isPrinting}
+                  className="p-2.5 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-xl flex items-center justify-center gap-2 font-medium transition"
+                >
+                  <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                  Uji Simulator
+                </button>
+
+                <button
+                  onClick={() => handlePrint('browser_print')}
+                  disabled={isPrinting}
+                  className="p-2.5 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-xl flex items-center justify-center gap-2 font-medium transition"
+                >
+                  <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                  Cetak Browser / PDF
+                </button>
+              </div>
 
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <button
                   onClick={() => handlePrint('web_bluetooth')}
                   disabled={isPrinting}
-                  className="p-2.5 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-xl flex items-center justify-center gap-2 font-medium transition"
-                  title="Cari & Cetak ke Printer Bluetooth 58mm Android/Desktop"
+                  className="p-2 bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl flex items-center justify-center gap-1.5 text-[11px] font-medium transition"
                 >
-                  <Bluetooth className="w-3.5 h-3.5 text-blue-400" />
-                  Web Bluetooth
+                  <Bluetooth className="w-3 h-3 text-blue-400" />
+                  Bluetooth (Android)
                 </button>
 
                 <button
                   onClick={() => handlePrint('web_serial')}
                   disabled={isPrinting}
-                  className="p-2.5 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-xl flex items-center justify-center gap-2 font-medium transition"
-                  title="Kirim ke Printer USB Linux (/dev/ttyUSB0 / Virtual COM)"
+                  className="p-2 bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl flex items-center justify-center gap-1.5 text-[11px] font-medium transition"
                 >
-                  <Usb className="w-3.5 h-3.5 text-amber-400" />
-                  Web Serial (USB)
+                  <Usb className="w-3 h-3 text-amber-400" />
+                  Web Serial (Browser)
                 </button>
               </div>
-
-              <button
-                onClick={() => handlePrint('browser_print')}
-                className="w-full py-2 px-3 bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded-xl flex items-center justify-center gap-2 text-xs font-medium transition"
-              >
-                <FileText className="w-3.5 h-3.5 text-indigo-400" />
-                Dialog Cetak Sistem (Print via Browser / PDF)
-              </button>
             </div>
 
             {/* Raw ESC/POS Command Hex Inspector */}
@@ -218,7 +247,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               </button>
 
               {showHex && (
-                <div className="mt-2.5 p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-[10px] font-mono text-cyan-300 max-h-36 overflow-y-auto break-all">
+                <div className="mt-2.5 p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-[10px] font-mono text-cyan-300 max-h-32 overflow-y-auto break-all">
                   <div className="flex items-center justify-between text-slate-400 mb-1 pb-1 border-b border-slate-800 font-sans">
                     <span>Ukuran Buffer: {escPosBinary.length} Bytes</span>
                     <button
@@ -236,7 +265,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
           </div>
 
           {/* Footer Controls */}
-          <div className="pt-4 border-t border-slate-800 mt-6 flex items-center gap-2">
+          <div className="pt-4 border-t border-slate-800 mt-4 flex items-center gap-2">
             <button
               onClick={handleCopyText}
               className="py-2 px-3 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl flex items-center gap-1.5 transition"
@@ -269,3 +298,5 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     </div>
   );
 };
+
+export default ReceiptModal;

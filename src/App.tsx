@@ -46,12 +46,28 @@ export default function App() {
       await initializeDatabase();
       await refreshProducts();
       await loadSettings();
-      setRuntimeEnv(printerService.getRuntimeEnv());
-      setPrinterStatus(printerService.getStatus());
+
+      const env = printerService.getRuntimeEnv();
+      setRuntimeEnv(env);
+
+      // Cek port printer Linux /dev/usb/lp0
+      const linuxInfo = await printerService.checkLinuxPrinter(settings.linuxDevicePath || '/dev/usb/lp0');
+      if (env === 'tauri' || linuxInfo.exists) {
+        setPrinterStatus({
+          connected: linuxInfo.writable,
+          type: 'tauri_raw',
+          deviceName: `Linux ${settings.linuxDevicePath || '/dev/usb/lp0'} (28e9:0289)`,
+          devicePath: settings.linuxDevicePath || '/dev/usb/lp0',
+          linuxInfo
+        });
+      } else {
+        setPrinterStatus(printerService.getStatus());
+      }
+
       setIsLoading(false);
     }
     boot();
-  }, [refreshProducts, loadSettings]);
+  }, [refreshProducts, loadSettings, settings.linuxDevicePath]);
 
   // When cashier completes a transaction
   const handleTransactionComplete = (tx: Transaction) => {

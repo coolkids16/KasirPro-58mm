@@ -443,3 +443,5 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     </div>
   );
 };
+
+export default ProductManagement;

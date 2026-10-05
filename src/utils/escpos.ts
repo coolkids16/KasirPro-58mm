@@ -342,3 +342,5 @@ export function generateEscPosBinary(
 
   return encoder.encode();
 }
+
+export default EscPosEncoder;

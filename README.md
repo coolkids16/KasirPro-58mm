@@ -129,42 +129,53 @@ export class EscPosEncoder {
 
 ## 4. Hardware Abstraction Layer (HAL) untuk Linux & Android
 
-### A. Linux Desktop (Tauri via Rust Direct File I/O)
+### A. Linux Desktop CachyOS (Tauri via Direct File I/O ke `/dev/usb/lp0`)
 
-Di Linux, printer thermal USB dikenali sebagai character device file di `/dev/usb/lp0` (atau `/dev/usb/lp1`). Melalui Tauri IPC, data byte `Uint8Array` langsung ditulis ke file descriptor tersebut tanpa perlu driver CUPS:
+Di Linux (seperti CachyOS / Arch / Ubuntu), printer thermal USB (misal Vendor ID: `28e9`, Product ID: `0289`) otomatis dikenali kernel Linux dan modul `usblp` di `/dev/usb/lp0`. 
+
+Melalui Tauri IPC command `tauri_raw` / `print_raw_escpos`, buffer biner `Uint8Array` langsung ditulis ke file descriptor tersebut:
 
 ```rust
 // src-tauri/src/main.rs
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::path::Path;
 
 #[tauri::command]
-fn print_raw_escpos(bytes: Vec<u8>, device_path: Option<String>) -> Result<(), String> {
+fn tauri_raw(bytes: Vec<u8>, device_path: Option<String>) -> Result<String, String> {
     let path = device_path.unwrap_or_else(|| "/dev/usb/lp0".to_string());
+    
     let mut file = OpenOptions::new()
         .write(true)
         .open(&path)
-        .map_err(|e| format!("Gagal membuka device {}: {}", path, e))?;
+        .map_err(|e| format!("Gagal membuka {}: {}. Pastikan izin akses lp/dialout sudah diberikan.", path, e))?;
 
     file.write_all(&bytes)
-        .map_err(|e| format!("Gagal menulis byte ke printer: {}", e))?;
+        .map_err(|e| format!("Gagal menulis data ke printer: {}", e))?;
     file.flush()
-        .map_err(|e| format!("Flush buffer gagal: {}", e))?;
+        .map_err(|e| format!("Flush data gagal: {}", e))?;
 
-    Ok(())
+    Ok(format!("Berhasil mencetak {} bytes ke {}", bytes.len(), path))
 }
 
-fn main() {
-    tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![print_raw_escpos])
-        .run(tauri::generate_context!())
-        .expect("Gagal menjalankan aplikasi Tauri");
+#[tauri::command]
+fn print_raw_escpos(bytes: Vec<u8>, device_path: Option<String>) -> Result<String, String> {
+    tauri_raw(bytes, device_path)
 }
 ```
 
-**Izin Port USB di Linux (Cukup dijalankan sekali):**
+**Konfigurasi Izin di Linux CachyOS (Cukup jalankan sekali):**
 ```bash
+# 1. Tambahkan user Anda ke grup lp dan dialout
 sudo usermod -a -G lp,dialout $USER
+
+# 2. Buat udev rule agar port /dev/usb/lp* memiliki hak akses 0666 untuk Vendor 28e9 Product 0289:
+echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="28e9", ATTRS{idProduct}=="0289", MODE="0666", GROUP="lp"' | sudo tee /etc/udev/rules.d/99-thermal-printer.rules
+
+# 3. Reload udev rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# 4. Logout dan login kembali (atau restart) agar perubahan grup aktif.
 ```
 
 ---

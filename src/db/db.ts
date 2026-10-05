@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   enableTax: false,
   taxRate: 10,
   cashierName: 'Kasir 01',
+  linuxDevicePath: '/dev/usb/lp0' // Target default Linux CachyOS
 };
 
 export const INITIAL_PRODUCTS: Omit<Product, 'id'>[] = [
@@ -156,3 +157,5 @@ export async function initializeDatabase() {
     console.error('Error initializing database:', err);
   }
 }
+
+export default db;

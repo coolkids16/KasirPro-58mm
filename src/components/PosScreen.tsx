@@ -592,3 +592,5 @@ export const PosScreen: React.FC<PosScreenProps> = ({
     </div>
   );
 };
+
+export default PosScreen;
