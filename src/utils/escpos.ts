@@ -129,8 +129,10 @@ export function generateReceiptText(
   }
 
   lines.push(padCenter('*** KASIRPRO 58MM ***', W));
-  lines.push(''); // Feed 1
-  lines.push(''); // Feed 2
+  const feedCount = settings.feedLines !== undefined ? settings.feedLines : 1;
+  for (let i = 0; i < feedCount; i++) {
+    lines.push('');
+  }
 
   return lines.join('\n');
 }
@@ -188,6 +190,10 @@ export class EscPosEncoder {
     return this;
   }
 
+  feed(lines = 1): this {
+    return this.newline(lines);
+  }
+
   textLine(str: string): this {
     this.text(str);
     this.newline();
@@ -217,8 +223,10 @@ export class EscPosEncoder {
    * Cut paper command (Full/Partial cut)
    * GS V m n
    */
-  cut(fullCut = false): this {
-    this.newline(3); // Feed 3 lines before cut so text clears the tear blade
+  cut(fullCut = false, feedCount = 1): this {
+    if (feedCount > 0) {
+      this.newline(feedCount);
+    }
     this.buffer.push(GS, 0x56, fullCut ? 0x00 : 0x01);
     return this;
   }
@@ -240,6 +248,7 @@ export function generateEscPosBinary(
   settings: StoreSettings
 ): Uint8Array {
   const W = settings.paperWidthChars || 32;
+  const feedCount = settings.feedLines !== undefined ? settings.feedLines : 1;
   const encoder = new EscPosEncoder();
 
   // Buka Laci Kasir otomatis saat struk dicetak jika diaktifkan
@@ -337,8 +346,14 @@ export function generateEscPosBinary(
   }
   encoder.textLine('*** KASIRPRO 58MM ***');
 
-  // Potong kertas
-  encoder.cut(false);
+  // Akhir Struk:
+  // Hanya kirim perintah cut jika hardware mendukung auto-cutter aktif.
+  // Untuk printer sobek manual (mayoritas 58mm), cukup feed 1 baris agar teks keluar dari kepala cetak tanpa buang kertas!
+  if (settings.enableAutoCut) {
+    encoder.cut(false, feedCount);
+  } else {
+    encoder.feed(feedCount);
+  }
 
   return encoder.encode();
 }

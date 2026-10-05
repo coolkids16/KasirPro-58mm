@@ -122,17 +122,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
       }
       encoder.textLine('*** PENGATURAN TERSIMPAN ***');
-      encoder.cut();
+      
+      const feedCount = formData.feedLines !== undefined ? formData.feedLines : 1;
+      if (formData.enableAutoCut) {
+        encoder.cut(false, feedCount);
+      } else {
+        encoder.feed(feedCount);
+      }
 
-      const plain = [
+      const plainLines = [
         padCenter(formData.storeName.toUpperCase(), W),
         formData.address ? padCenter(formData.address, W) : '',
         padSeparator('=', W),
         padRow('TEST STRUK 58MM', 'BERHASIL', W),
         padRow('Port Linux', formData.linuxDevicePath || '/dev/usb/lp0', W),
+        padRow('Spasi Bawah', `${feedCount} Baris`, W),
+        padRow('Auto-Cutter', formData.enableAutoCut ? 'AKTIF' : 'NONAKTIF', W),
         padSeparator('-', W),
         padCenter('*** PENGATURAN TERSIMPAN ***', W)
-      ].join('\n');
+      ];
+      for (let i = 0; i < feedCount; i++) plainLines.push('');
+      const plain = plainLines.join('\n');
 
       const result = await printerService.printUnified(
         encoder.encode(),
@@ -361,6 +371,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={e => setFormData({ ...formData, currencyPrefix: e.target.value })}
                     placeholder="Rp"
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* Pengaturan Hemat Kertas & Feed Lines */}
+              <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-slate-200 font-medium text-xs">
+                      Jarak Spasi Kertas Bawah (Feed Lines)
+                    </label>
+                    <p className="text-[11px] text-slate-400">
+                      Mengatur seberapa banyak kertas kosong yang digulung di akhir struk.
+                    </p>
+                  </div>
+                  <select
+                    value={formData.feedLines !== undefined ? formData.feedLines : 1}
+                    onChange={e => setFormData({ ...formData, feedLines: Number(e.target.value) })}
+                    className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-emerald-400 font-bold text-xs"
+                  >
+                    <option value={0}>0 Baris (Ultra Hemat)</option>
+                    <option value={1}>1 Baris (Rekomendasi Hemat)</option>
+                    <option value={2}>2 Baris (Normal)</option>
+                    <option value={3}>3 Baris (Lebar)</option>
+                  </select>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                  <div>
+                    <div className="text-slate-200 font-medium text-xs">
+                      Perintah Auto-Cutter (Potong Kertas)
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Nonaktifkan jika printer 58mm menggunakan sobekan manual (mencegah kertas kosong berlebih).
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={formData.enableAutoCut || false}
+                    onChange={e => setFormData({ ...formData, enableAutoCut: e.target.checked })}
+                    className="w-4 h-4 accent-emerald-500 rounded"
                   />
                 </div>
               </div>

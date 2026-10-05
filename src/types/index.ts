@@ -47,6 +47,9 @@ export interface StoreSettings {
   taxRate: number; // in percentage e.g. 10%
   cashierName: string;
   linuxDevicePath: string; // default: /dev/usb/lp0
+  feedLines?: number; // Jumlah baris feed kosong di akhir (default: 1)
+  enableAutoCut?: boolean; // Kirim perintah auto-cutter GS V (default: false untuk 58mm sobek manual)
+  compactMode?: boolean; // Mode ringkas hemat kertas
 }
 
 export type PrinterConnectionType = 
