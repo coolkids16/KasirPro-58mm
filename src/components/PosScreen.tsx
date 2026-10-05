@@ -439,7 +439,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         </div>
 
         {/* Calculations & Discounts */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/50 space-y-2 text-xs">
+        <div className="p-4 border-t border-slate-800/80 bg-slate-900/40 dark:bg-slate-950/50 space-y-2 text-xs">
           <div className="flex justify-between text-slate-400">
             <span>Subtotal</span>
             <span className="text-white">Rp {formatRupiah(subtotal)}</span>

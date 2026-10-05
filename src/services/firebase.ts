@@ -234,6 +234,10 @@ export function subscribeProducts(
 }
 
 export async function saveProductToFirestore(product: Product): Promise<string> {
+  if (!auth.currentUser) {
+    // In local offline mode, return local id without attempting cloud sync
+    return String(product.id || '');
+  }
   const path = 'products';
   try {
     const productData = {
@@ -281,6 +285,7 @@ export async function deleteProductFromFirestore(
   sku?: string, 
   name?: string
 ): Promise<void> {
+  if (!auth.currentUser) return;
   const path = 'products';
   try {
     // 1. If we have a string ID, delete it
@@ -311,6 +316,7 @@ export async function deleteProductFromFirestore(
 }
 
 export async function clearAllStockInFirestore(): Promise<void> {
+  if (!auth.currentUser) return;
   const path = 'products';
   try {
     const snaps = await getDocs(collection(db, path));
@@ -331,6 +337,7 @@ export async function clearAllStockInFirestore(): Promise<void> {
 }
 
 export async function deleteAllProductsFromFirestore(): Promise<void> {
+  if (!auth.currentUser) return;
   const path = 'products';
   try {
     const snaps = await getDocs(collection(db, path));
@@ -348,11 +355,14 @@ export async function deleteAllProductsFromFirestore(): Promise<void> {
 }
 
 export async function batchSaveProductsToFirestore(products: Product[]): Promise<void> {
+  if (!auth.currentUser) return;
   const path = 'products';
   try {
     const batch = writeBatch(db);
     for (const p of products) {
-      const docRef = p.id ? doc(db, path, String(p.id)) : doc(collection(db, path));
+      const docRef = p.id && typeof p.id === 'string' && isNaN(Number(p.id)) 
+        ? doc(db, path, String(p.id)) 
+        : doc(collection(db, path));
       batch.set(docRef, {
         name: p.name,
         sku: p.sku,
@@ -379,11 +389,14 @@ export async function batchSaveProductsToFirestore(products: Product[]): Promise
 }
 
 export async function batchSaveTransactionsToFirestore(transactions: Transaction[]): Promise<void> {
+  if (!auth.currentUser) return;
   const path = 'transactions';
   try {
     const batch = writeBatch(db);
     for (const t of transactions) {
-      const docRef = t.id ? doc(db, path, String(t.id)) : doc(collection(db, path));
+      const docRef = t.id && typeof t.id === 'string' && isNaN(Number(t.id)) 
+        ? doc(db, path, String(t.id)) 
+        : doc(collection(db, path));
       batch.set(docRef, {
         invoiceNumber: t.invoiceNumber,
         timestamp: t.timestamp || Date.now(),
@@ -414,6 +427,7 @@ export async function batchSaveTransactionsToFirestore(transactions: Transaction
 }
 
 export async function seedProductsIfEmpty(): Promise<void> {
+  if (!auth.currentUser) return;
   // Prevent re-seeding if user has already initialized or deleted products
   const hasSeeded = localStorage.getItem('kasirpro_seeded_v1');
   if (hasSeeded) {
@@ -490,6 +504,7 @@ export function subscribeTransactions(
 }
 
 export async function deleteTransactionFromFirestore(id: number | string, invoiceNumber?: string): Promise<void> {
+  if (!auth.currentUser) return;
   const path = `transactions/${id}`;
   try {
     await deleteDoc(doc(db, 'transactions', String(id)));
@@ -510,6 +525,9 @@ export async function deleteTransactionFromFirestore(id: number | string, invoic
 }
 
 export async function saveTransactionToFirestore(transaction: Transaction): Promise<string> {
+  if (!auth.currentUser) {
+    return String(transaction.id || '');
+  }
   const path = 'transactions';
   try {
     const txData = {
@@ -555,6 +573,7 @@ export function subscribeStoreSettings(
         const data = snapshot.data();
         const updatedSettings: StoreSettings = {
           storeName: data.storeName !== undefined && data.storeName !== '' ? data.storeName : DEFAULT_SETTINGS.storeName,
+          logoUrl: data.logoUrl || '',
           address: data.address !== undefined ? data.address : DEFAULT_SETTINGS.address,
           phone: data.phone !== undefined ? data.phone : DEFAULT_SETTINGS.phone,
           footerMessage: data.footerMessage !== undefined ? data.footerMessage : DEFAULT_SETTINGS.footerMessage,
@@ -563,7 +582,9 @@ export function subscribeStoreSettings(
           enableTax: Boolean(data.enableTax),
           taxRate: Number(data.taxRate) !== undefined ? Number(data.taxRate) : 10,
           cashierName: data.cashierName || DEFAULT_SETTINGS.cashierName,
-          linuxDevicePath: data.linuxDevicePath || '/dev/usb/lp0'
+          linuxDevicePath: data.linuxDevicePath || '/dev/usb/lp0',
+          feedLines: data.feedLines !== undefined ? Number(data.feedLines) : 1,
+          enableAutoCut: Boolean(data.enableAutoCut)
         };
         try {
           localStorage.setItem('kasirpro_settings', JSON.stringify(updatedSettings));
@@ -586,6 +607,7 @@ export async function saveStoreSettingsToFirestore(settings: StoreSettings): Pro
   try {
     const payload = {
       storeName: settings.storeName,
+      logoUrl: settings.logoUrl || '',
       address: settings.address,
       phone: settings.phone,
       footerMessage: settings.footerMessage,
@@ -595,6 +617,8 @@ export async function saveStoreSettingsToFirestore(settings: StoreSettings): Pro
       taxRate: Number(settings.taxRate) || 0,
       cashierName: settings.cashierName || 'Kasir 01',
       linuxDevicePath: settings.linuxDevicePath || '/dev/usb/lp0',
+      feedLines: settings.feedLines !== undefined ? Number(settings.feedLines) : 1,
+      enableAutoCut: Boolean(settings.enableAutoCut),
       updatedAt: new Date().toISOString()
     };
     await setDoc(doc(db, 'settings', 'main'), payload, { merge: true });

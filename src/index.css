@@ -25,3 +25,143 @@ select option:disabled {
   color: #64748b !important; /* text-slate-500 */
   background-color: #020617 !important;
 }
+
+/* ==========================================================================
+   LIGHT MODE THEME OVERRIDES (.light / html.light)
+   ========================================================================== */
+
+html.light,
+.light {
+  color-scheme: light;
+}
+
+html.light select,
+.light select {
+  color-scheme: light;
+}
+
+html.light select option,
+.light select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.light body,
+.light main {
+  background-color: #f8fafc !important; /* bg-slate-50 */
+  color: #0f172a !important;
+}
+
+/* Card & panel backgrounds in Light Mode - Clean White & Soft Slate-50 */
+.light .bg-slate-950,
+.light .bg-slate-950\/90,
+.light .bg-slate-950\/80,
+.light .bg-slate-950\/70,
+.light .bg-slate-950\/60,
+.light .bg-slate-950\/50,
+.light .bg-slate-950\/40,
+.light .bg-slate-950\/30,
+.light .bg-slate-950\/20,
+.light .bg-slate-950\/10 {
+  background-color: #f8fafc !important; /* bg-slate-50 */
+}
+
+.light .bg-slate-900,
+.light .bg-slate-850,
+.light .bg-slate-900\/90,
+.light .bg-slate-900\/80,
+.light .bg-slate-900\/60,
+.light .bg-slate-900\/50,
+.light .bg-slate-900\/40 {
+  background-color: #ffffff !important; /* white card background */
+}
+
+.light .bg-slate-800,
+.light .bg-slate-800\/80,
+.light .bg-slate-800\/60,
+.light .bg-slate-850 {
+  background-color: #f1f5f9 !important; /* bg-slate-100 */
+}
+
+.light .hover\:bg-slate-850:hover,
+.light .hover\:bg-slate-800:hover,
+.light .hover\:bg-slate-750:hover {
+  background-color: #e2e8f0 !important; /* bg-slate-200 */
+}
+
+/* Light mode borders */
+.light .border-slate-800,
+.light .border-slate-800\/80,
+.light .border-slate-750,
+.light .border-slate-700 {
+  border-color: #e2e8f0 !important; /* border-slate-200 */
+}
+
+/* Light mode typography overrides */
+.light .text-white,
+.light .text-slate-100,
+.light .text-slate-200,
+.light .text-slate-300 {
+  color: #0f172a !important; /* text-slate-900 */
+}
+
+.light .text-slate-400 {
+  color: #475569 !important; /* text-slate-600 */
+}
+
+.light .text-slate-500 {
+  color: #64748b !important; /* text-slate-500 */
+}
+
+/* High contrast accent colors in Light Mode */
+.light .text-emerald-400,
+.light .text-emerald-300 {
+  color: #059669 !important; /* emerald-600 for sharp readability */
+}
+
+.light .text-rose-400 {
+  color: #e11d48 !important; /* rose-600 */
+}
+
+.light .text-cyan-400 {
+  color: #0284c7 !important; /* sky-600 */
+}
+
+.light .text-amber-400 {
+  color: #d97706 !important; /* amber-600 */
+}
+
+/* Header & Navbar in Light Mode */
+.light header {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.light nav {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Form inputs & textareas in Light Mode */
+.light input[type="text"],
+.light input[type="email"],
+.light input[type="password"],
+.light input[type="number"],
+.light input[type="search"],
+.light textarea,
+.light select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light input::placeholder,
+.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Smooth theme transition */
+body, header, nav, div, button, input, textarea, select {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}

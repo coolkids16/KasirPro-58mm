@@ -38,6 +38,7 @@ export interface Transaction {
 
 export interface StoreSettings {
   storeName: string;
+  logoUrl?: string; // Custom Store Logo (Data URL / Base64 image)
   address: string;
   phone: string;
   footerMessage: string;

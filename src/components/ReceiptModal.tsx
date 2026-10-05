@@ -110,6 +110,16 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               |..5...10...15...20...25...30.32|
             </div>
 
+            {settings.logoUrl && (
+              <div className="flex justify-center mb-2 pb-2 border-b border-zinc-200">
+                <img 
+                  src={settings.logoUrl} 
+                  alt="Logo Toko" 
+                  className="max-h-12 max-w-[120px] object-contain filter grayscale contrast-125"
+                />
+              </div>
+            )}
+
             <pre className="whitespace-pre-wrap font-mono font-medium tracking-tight text-zinc-800 break-words select-all">
               {receiptPlainText}
             </pre>

@@ -1,23 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Store, 
-  Printer, 
   Save, 
   CheckCircle2, 
-  Cpu, 
   Percent, 
-  Receipt, 
   X,
-  FileText,
-  Database,
-  Download,
-  Upload
+  Upload,
+  Trash2,
+  Image as ImageIcon
 } from 'lucide-react';
 import { StoreSettings } from '../types';
 import { saveStoreSettingsToFirestore, auth } from '../services/firebase';
 import { db } from '../db/db';
-import { printerService } from '../services/printerService';
-import { EscPosEncoder, padCenter, padRow, padSeparator } from '../utils/escpos';
 
 export interface SettingsModalProps {
   settings: StoreSettings;
@@ -31,14 +25,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   onUpdateSettings,
   isOpen,
-  onClose,
-  onOpenBackupModal
+  onClose
 }) => {
   const [formData, setFormData] = useState<StoreSettings>({ ...settings });
-  const [activeTab, setActiveTab] = useState<'store' | 'receipt' | 'hardware' | 'backup'>('store');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [testPrintSuccess, setTestPrintSuccess] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync formData whenever modal opens or settings change
   useEffect(() => {
@@ -48,6 +40,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [isOpen, settings]);
 
   if (!isOpen) return null;
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        // Compress & scale to max 200x200 px for optimal lightweight offline & Firestore storage
+        const maxDim = 200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedBase64 = canvas.toDataURL('image/png', 0.85);
+          setFormData(prev => ({ ...prev, logoUrl: compressedBase64 }));
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = () => {
+    setFormData(prev => ({ ...prev, logoUrl: '' }));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,107 +109,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
       // 4. Update state di parent App
       onUpdateSettings(formData);
-      printerService.setDevicePath(formData.linuxDevicePath || '/dev/usb/lp0');
 
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      setTimeout(() => {
+        setSaveSuccess(false),
+        onClose();
+      }, 1200);
     } catch (err: any) {
       console.error('Failed to save settings:', err);
-      // Tetap simpan ke local Dexie & localStorage jika koneksi firestore gagal
       try {
         localStorage.setItem('kasirpro_settings', JSON.stringify(formData));
       } catch (e) {}
       await db.settings.put({ ...formData, id: 'main' });
       onUpdateSettings(formData);
       setSaveSuccess(true);
+      setTimeout(() => {
+        setSaveSuccess(false);
+        onClose();
+      }, 1200);
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleTestPrintSample = async () => {
-    setTestPrintSuccess(null);
-    try {
-      const W = formData.paperWidthChars || 32;
-      const encoder = new EscPosEncoder();
-      encoder.init();
-      encoder.align('center');
-      encoder.bold(true);
-      encoder.doubleHeight(true);
-      encoder.textLine(formData.storeName.toUpperCase());
-      encoder.doubleHeight(false);
-      encoder.bold(false);
-
-      if (formData.address) {
-        encoder.textLine(formData.address.substring(0, W));
-      }
-      if (formData.phone) {
-        encoder.textLine('Telp: ' + formData.phone.substring(0, W - 6));
-      }
-      encoder.separator('=', W);
-      encoder.align('left');
-      encoder.twoColumn('TEST STRUK 58MM', 'BERHASIL', W);
-      encoder.twoColumn('Port Linux', formData.linuxDevicePath || '/dev/usb/lp0', W);
-      encoder.twoColumn('Lebar Kertas', `${W} Kolom`, W);
-      encoder.separator('-', W);
-
-      if (formData.footerMessage) {
-        encoder.align('center');
-        const lines = formData.footerMessage.split('\n');
-        for (const l of lines) {
-          encoder.textLine(l.substring(0, W));
-        }
-      }
-      encoder.textLine('*** PENGATURAN TERSIMPAN ***');
-      
-      const feedCount = formData.feedLines !== undefined ? formData.feedLines : 1;
-      if (formData.enableAutoCut) {
-        encoder.cut(false, feedCount);
-      } else {
-        encoder.feed(feedCount);
-      }
-
-      const plainLines = [
-        padCenter(formData.storeName.toUpperCase(), W),
-        formData.address ? padCenter(formData.address, W) : '',
-        padSeparator('=', W),
-        padRow('TEST STRUK 58MM', 'BERHASIL', W),
-        padRow('Port Linux', formData.linuxDevicePath || '/dev/usb/lp0', W),
-        padRow('Spasi Bawah', `${feedCount} Baris`, W),
-        padRow('Auto-Cutter', formData.enableAutoCut ? 'AKTIF' : 'NONAKTIF', W),
-        padSeparator('-', W),
-        padCenter('*** PENGATURAN TERSIMPAN ***', W)
-      ];
-      for (let i = 0; i < feedCount; i++) plainLines.push('');
-      const plain = plainLines.join('\n');
-
-      const result = await printerService.printUnified(
-        encoder.encode(),
-        plain,
-        undefined,
-        formData.linuxDevicePath || '/dev/usb/lp0'
-      );
-
-      setTestPrintSuccess(result.message);
-      setTimeout(() => setTestPrintSuccess(null), 4000);
-    } catch (err: any) {
-      alert('Gagal mengirim uji cetak: ' + err.message);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden my-6">
+      <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden my-6">
         
         {/* Header */}
         <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
               <Store className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-white text-base">Pengaturan Toko & Printer Thermal</h3>
-              <p className="text-xs text-slate-400">Sinkronisasi Cloud Firestore & Konfigurasi Struk 58mm</p>
+              <h3 className="font-bold text-white text-base">Pengaturan Profil Toko</h3>
+              <p className="text-xs text-slate-400">Logo toko, identitas outlet kasir & perhitungan PPN</p>
             </div>
           </div>
           <button
@@ -181,368 +155,181 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
 
-        {/* Tab Selector */}
-        <div className="flex items-center border-b border-slate-800 bg-slate-950/60 px-5 gap-4 text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => setActiveTab('store')}
-            className={`py-3 flex items-center gap-2 border-b-2 transition ${
-              activeTab === 'store'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <Store className="w-4 h-4" />
-            Profil Toko
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('receipt')}
-            className={`py-3 flex items-center gap-2 border-b-2 transition ${
-              activeTab === 'receipt'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <Receipt className="w-4 h-4" />
-            Format Struk 58mm
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('hardware')}
-            className={`py-3 flex items-center gap-2 border-b-2 transition ${
-              activeTab === 'hardware'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <Cpu className="w-4 h-4" />
-            Hardware & Port
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('backup')}
-            className={`py-3 flex items-center gap-2 border-b-2 transition ${
-              activeTab === 'backup'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <Database className="w-4 h-4" />
-            Cadangan & Data
-          </button>
-        </div>
-
         {/* Form Body */}
         <form onSubmit={handleSave} className="p-6 space-y-4 text-xs">
           {saveSuccess && (
             <div className="p-3 bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 rounded-xl flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Pengaturan berhasil disimpan ke Firebase Firestore dan memori lokal!</span>
+              <span>Profil toko & logo berhasil disimpan!</span>
             </div>
           )}
 
-          {testPrintSuccess && (
-            <div className="p-3 bg-cyan-950/70 border border-cyan-500/30 text-cyan-300 rounded-xl flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
-              <span>{testPrintSuccess}</span>
-            </div>
-          )}
-
-          {/* TAB 1: PROFIL TOKO */}
-          {activeTab === 'store' && (
-            <div className="space-y-3.5">
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">
-                  Nama Toko / Outlet
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.storeName}
-                  onChange={e => setFormData({ ...formData, storeName: e.target.value })}
-                  placeholder="WARUNG KASIRPRO 58MM"
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none focus:border-emerald-500 font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">
-                  Alamat Lengkap Toko
-                </label>
-                <textarea
-                  rows={2}
-                  value={formData.address}
-                  onChange={e => setFormData({ ...formData, address: e.target.value })}
-                  placeholder="Jl. Merdeka No. 45, Bandung"
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-300 font-medium mb-1">
-                    No. Telepon / WhatsApp
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.phone}
-                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="0812-3456-7890"
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-medium mb-1">
-                    Nama Kasir Default
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.cashierName}
-                    onChange={e => setFormData({ ...formData, cashierName: e.target.value })}
-                    placeholder="Kasir 01"
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-white"
-                  />
-                </div>
-              </div>
-
-              {/* Pajak PPN */}
-              <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-slate-200 font-medium">
-                    <Percent className="w-4 h-4 text-emerald-400" />
-                    Aktifkan Perhitungan Pajak (PPN)
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={formData.enableTax}
-                    onChange={e => setFormData({ ...formData, enableTax: e.target.checked })}
-                    className="w-4 h-4 accent-emerald-500 rounded"
-                  />
-                </div>
-
-                {formData.enableTax && (
-                  <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
-                    <span className="text-slate-400">Tarif Pajak (%):</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={formData.taxRate}
-                      onChange={e => setFormData({ ...formData, taxRate: Number(e.target.value) || 0 })}
-                      className="w-20 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-white font-bold text-center"
+          <div className="space-y-4">
+            {/* Custom Store Logo Uploader */}
+            <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl">
+              <label className="block text-slate-300 font-medium mb-2">
+                Logo Kustom Toko / Brand
+              </label>
+              
+              <div className="flex items-center gap-4">
+                {/* Logo Preview Box */}
+                <div className="w-16 h-16 rounded-xl bg-slate-900 border border-slate-750 flex items-center justify-center overflow-hidden shrink-0 shadow-inner relative group">
+                  {formData.logoUrl ? (
+                    <img 
+                      src={formData.logoUrl} 
+                      alt="Logo Toko" 
+                      className="w-full h-full object-contain p-1"
                     />
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: FORMAT STRUK THERMAL 58MM */}
-          {activeTab === 'receipt' && (
-            <div className="space-y-3.5">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-300 font-medium mb-1">
-                    Lebar Kolom Kertas
-                  </label>
-                  <select
-                    value={formData.paperWidthChars}
-                    onChange={e => setFormData({ ...formData, paperWidthChars: Number(e.target.value) })}
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono"
-                  >
-                    <option value={32} className="bg-slate-900 text-white">32 Karakter (Standar Thermal 58mm)</option>
-                    <option value={42} className="bg-slate-900 text-white">42 Karakter (Font B Thermal 58mm)</option>
-                    <option value={48} className="bg-slate-900 text-white">48 Karakter (Thermal 80mm)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-medium mb-1">
-                    Awalan Mata Uang
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.currencyPrefix}
-                    onChange={e => setFormData({ ...formData, currencyPrefix: e.target.value })}
-                    placeholder="Rp"
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono font-bold"
-                  />
-                </div>
-              </div>
-
-              {/* Pengaturan Hemat Kertas & Feed Lines */}
-              <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="block text-slate-200 font-medium text-xs">
-                      Jarak Spasi Kertas Bawah (Feed Lines)
-                    </label>
-                    <p className="text-[11px] text-slate-400">
-                      Mengatur seberapa banyak kertas kosong yang digulung di akhir struk.
-                    </p>
-                  </div>
-                  <select
-                    value={formData.feedLines !== undefined ? formData.feedLines : 1}
-                    onChange={e => setFormData({ ...formData, feedLines: Number(e.target.value) })}
-                    className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-emerald-400 font-bold text-xs"
-                  >
-                    <option value={0}>0 Baris (Ultra Hemat)</option>
-                    <option value={1}>1 Baris (Rekomendasi Hemat)</option>
-                    <option value={2}>2 Baris (Normal)</option>
-                    <option value={3}>3 Baris (Lebar)</option>
-                  </select>
-                </div>
-
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                  <div>
-                    <div className="text-slate-200 font-medium text-xs">
-                      Perintah Auto-Cutter (Potong Kertas)
+                  ) : (
+                    <div className="flex flex-col items-center text-slate-600">
+                      <ImageIcon className="w-6 h-6" />
+                      <span className="text-[9px] mt-0.5">No Logo</span>
                     </div>
-                    <p className="text-[11px] text-slate-400">
-                      Nonaktifkan jika printer 58mm menggunakan sobekan manual (mencegah kertas kosong berlebih).
-                    </p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={formData.enableAutoCut || false}
-                    onChange={e => setFormData({ ...formData, enableAutoCut: e.target.checked })}
-                    className="w-4 h-4 accent-emerald-500 rounded"
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <input 
+                    type="file" 
+                    ref={fileInputRef}
+                    accept="image/png, image/jpeg, image/webp, image/svg+xml"
+                    onChange={handleLogoUpload}
+                    className="hidden"
                   />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">
-                  Pesan Catatan Kaki (Footer Struk)
-                </label>
-                <textarea
-                  rows={3}
-                  value={formData.footerMessage}
-                  onChange={e => setFormData({ ...formData, footerMessage: e.target.value })}
-                  placeholder="Terima kasih atas kunjungan Anda!&#10;Barang yang dibeli tidak dapat ditukar."
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
-                />
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Teks ini akan dicetak di bagian paling bawah struk secara rata tengah.
-                </p>
-              </div>
-
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between">
-                <div>
-                  <div className="font-medium text-white">Preview Hasil Cetak Struk</div>
-                  <div className="text-[11px] text-slate-400">Kirim struk sampel ke printer untuk menguji layout</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleTestPrintSample}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
-                >
-                  <FileText className="w-3.5 h-3.5 text-cyan-400" />
-                  Uji Cetak Sampel
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: HARDWARE & LINUX PORT */}
-          {activeTab === 'hardware' && (
-            <div className="space-y-3.5">
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">
-                  Jalur Device Printer Thermal di Linux CachyOS
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.linuxDevicePath}
-                  onChange={e => setFormData({ ...formData, linuxDevicePath: e.target.value })}
-                  placeholder="/dev/usb/lp0"
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-cyan-300 font-mono font-bold focus:outline-none focus:border-cyan-500"
-                />
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Default kernel Linux untuk printer thermal USB adalah <code className="text-slate-300">/dev/usb/lp0</code> (Vendor: 28e9, PID: 0289).
-                </p>
-              </div>
-
-              <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl text-xs space-y-2">
-                <div className="font-bold text-white flex items-center gap-2">
-                  <Printer className="w-4 h-4 text-emerald-400" />
-                  Perintah ESC/POS Otomatis
-                </div>
-                <div className="text-slate-400 text-[11px] space-y-1">
-                  <div>• Buka Laci Kasir: <code className="text-cyan-400 font-mono">ESC p 0 25 250</code> otomatis ditembakkan saat transaksi tunai.</div>
-                  <div>• Potong Kertas: <code className="text-cyan-400 font-mono">GS V 66 0</code> otomatis dieksekusi di akhir struk jika printer mendukung cutter.</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: CADANGAN & DATA */}
-          {activeTab === 'backup' && (
-            <div className="space-y-4">
-              <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
-                <div className="flex items-center gap-2.5 font-bold text-white text-sm">
-                  <Database className="w-5 h-5 text-cyan-400" />
-                  Pusat Cadangan & Pemulihan Data
-                </div>
-                <p className="text-slate-400 text-xs leading-relaxed">
-                  Anda dapat mencadangkan seluruh data toko termasuk Produk, Sisa Stok, Riwayat Penjualan, dan Pengaturan Struk ke file JSON atau CSV (Excel). File cadangan dapat diimpor kembali ke perangkat lain atau saat mengganti komputer kasir.
-                </p>
-
-                {onOpenBackupModal && (
-                  <div className="pt-2">
+                  
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        onClose();
-                        onOpenBackupModal();
-                      }}
-                      className="w-full py-2.5 px-4 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-cyan-600/20 transition"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 transition shadow-sm"
                     >
-                      <Download className="w-4 h-4" />
-                      <Upload className="w-4 h-4" />
-                      Buka Menu Ekspor & Impor Menyeluruh
+                      <Upload className="w-3.5 h-3.5" />
+                      {formData.logoUrl ? 'Ganti Logo' : 'Upload Logo Toko'}
                     </button>
+
+                    {formData.logoUrl && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveLogo}
+                        className="px-2.5 py-1.5 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-500/30 rounded-lg text-xs flex items-center gap-1 transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Hapus
+                      </button>
+                    )}
                   </div>
-                )}
+
+                  <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                    Mendukung format PNG, JPG, atau SVG. Logo akan otomatis ditampilkan di bilah navigasi dan struk thermal.
+                  </p>
+                </div>
               </div>
             </div>
-          )}
+
+            <div>
+              <label className="block text-slate-300 font-medium mb-1">
+                Nama Toko / Outlet
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.storeName}
+                onChange={e => setFormData({ ...formData, storeName: e.target.value })}
+                placeholder="WARUNG KOPI & KASIRPRO"
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none focus:border-emerald-500 font-bold"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 font-medium mb-1">
+                Alamat Lengkap Toko
+              </label>
+              <textarea
+                rows={2}
+                value={formData.address}
+                onChange={e => setFormData({ ...formData, address: e.target.value })}
+                placeholder="Jl. Merdeka No. 45, Bandung"
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-300 font-medium mb-1">
+                  No. Telepon / WhatsApp
+                </label>
+                <input
+                  type="text"
+                  value={formData.phone}
+                  onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="0812-3456-7890"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-medium mb-1">
+                  Nama Kasir Default
+                </label>
+                <input
+                  type="text"
+                  value={formData.cashierName}
+                  onChange={e => setFormData({ ...formData, cashierName: e.target.value })}
+                  placeholder="Kasir 01"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-white"
+                />
+              </div>
+            </div>
+
+            {/* Pajak PPN */}
+            <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-slate-200 font-medium">
+                  <Percent className="w-4 h-4 text-emerald-400" />
+                  Aktifkan Perhitungan Pajak (PPN)
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formData.enableTax}
+                  onChange={e => setFormData({ ...formData, enableTax: e.target.checked })}
+                  className="w-4 h-4 accent-emerald-500 rounded"
+                />
+              </div>
+
+              {formData.enableTax && (
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+                  <span className="text-slate-400">Tarif Pajak (%):</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={formData.taxRate}
+                    onChange={e => setFormData({ ...formData, taxRate: Number(e.target.value) || 0 })}
+                    className="w-20 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-white font-bold text-center"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Action Buttons */}
-          <div className="pt-4 border-t border-slate-800 flex items-center justify-between gap-3">
+          <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-2.5">
             <button
               type="button"
-              onClick={handleTestPrintSample}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl font-medium transition flex items-center gap-1.5"
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl font-medium transition"
             >
-              <Printer className="w-3.5 h-3.5 text-emerald-400" />
-              Uji Struk 58mm
+              Batal
             </button>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl font-medium transition"
-              >
-                Batal
-              </button>
-
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center gap-2"
-              >
-                <Save className="w-4 h-4" />
-                {isSaving ? 'Menyimpan...' : 'Simpan Pengaturan'}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center gap-2"
+            >
+              <Save className="w-4 h-4" />
+              {isSaving ? 'Menyimpan...' : 'Simpan Profil Toko'}
+            </button>
           </div>
         </form>
       </div>

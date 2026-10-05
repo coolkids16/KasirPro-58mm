@@ -45,6 +45,26 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [runtimeEnv, setRuntimeEnv] = useState<'tauri' | 'capacitor' | 'browser'>('browser');
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      const saved = localStorage.getItem('kasirpro_theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    } catch (e) {}
+    return 'dark';
+  });
+
+  // Sync theme to root html element & localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('kasirpro_theme', theme);
+    } catch (e) {}
+    document.documentElement.classList.remove('dark', 'light');
+    document.documentElement.classList.add(theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   // Load products & settings from Dexie.js IndexedDB for offline resilience
   const refreshProductsLocal = useCallback(async () => {
@@ -220,7 +240,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className={`min-h-screen ${theme} ${theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-slate-950 text-slate-100'} flex flex-col font-sans`}>
       {/* Top Navbar */}
       <Navbar
         activeTab={activeTab}
@@ -232,6 +252,9 @@ export default function App() {
         onOpenBackupModal={() => setIsBackupModalOpen(true)}
         currentUser={currentUser}
         runtimeEnv={runtimeEnv}
+        settings={settings}
+        theme={theme}
+        toggleTheme={toggleTheme}
       />
 
       {/* Main Content Area */}
@@ -273,6 +296,8 @@ export default function App() {
                 printerStatus={printerStatus}
                 setPrinterStatus={setPrinterStatus}
                 runtimeEnv={runtimeEnv}
+                settings={settings}
+                onUpdateSettings={handleUpdateSettings}
               />
             )}
           </>

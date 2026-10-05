@@ -2,43 +2,52 @@ import React, { useState, useEffect } from 'react';
 import { 
   Printer, 
   Bluetooth, 
-  Usb, 
   Terminal, 
   Scissors, 
   DollarSign, 
   CheckCircle2, 
   AlertCircle, 
-  Send, 
   Zap, 
   Cpu, 
   ShieldCheck, 
-  RefreshCw 
+  RefreshCw,
+  Save,
+  FileText,
+  Receipt,
+  Settings2
 } from 'lucide-react';
 import { 
   PrinterDeviceStatus, 
   PrinterConnectionType, 
-  LinuxPrinterInfo 
+  LinuxPrinterInfo,
+  StoreSettings 
 } from '../types';
 import { EscPosEncoder, padRow, padCenter, padSeparator } from '../utils/escpos';
 import { printerService } from '../services/printerService';
+import { saveStoreSettingsToFirestore, auth } from '../services/firebase';
+import { db } from '../db/db';
 
 export interface PrinterTesterProps {
   printerStatus: PrinterDeviceStatus;
   setPrinterStatus: (status: PrinterDeviceStatus) => void;
   runtimeEnv: 'tauri' | 'capacitor' | 'browser';
+  settings: StoreSettings;
+  onUpdateSettings: (settings: StoreSettings) => void;
 }
 
 export const PrinterTester: React.FC<PrinterTesterProps> = ({
   printerStatus,
   setPrinterStatus,
-  runtimeEnv
+  runtimeEnv,
+  settings,
+  onUpdateSettings
 }) => {
-  const [customText, setCustomText] = useState(
-    'WARUNG KASIRPRO 58MM\nJl. Merdeka No. 45\n================================\nKopi Susu Aren         18.000\nEs Teh Manis            6.000\n--------------------------------\nTOTAL                  24.000\n================================\nTerima Kasih!'
-  );
+  const [formData, setFormData] = useState<StoreSettings>({ ...settings });
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; msg: string } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [devicePathInput, setDevicePathInput] = useState('/dev/usb/lp0');
+  const [devicePathInput, setDevicePathInput] = useState(settings.linuxDevicePath || '/dev/usb/lp0');
   const [linuxInfo, setLinuxInfo] = useState<LinuxPrinterInfo | null>(null);
 
   // Set default method based on runtime
@@ -46,10 +55,18 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
     runtimeEnv === 'tauri' ? 'tauri_raw' : 'tauri_raw'
   );
 
+  // Sync formData whenever settings prop changes
+  useEffect(() => {
+    setFormData({ ...settings });
+    if (settings.linuxDevicePath) {
+      setDevicePathInput(settings.linuxDevicePath);
+    }
+  }, [settings]);
+
   // Cek otomatis device Linux saat komponen dibuka
   useEffect(() => {
     checkLinuxPort();
-  }, []);
+  }, [devicePathInput]);
 
   const checkLinuxPort = async () => {
     try {
@@ -87,24 +104,6 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
     }
   };
 
-  const handleConnectSerial = async () => {
-    setLoading(true);
-    setTestResult(null);
-    try {
-      const status = await printerService.connectWebSerial();
-      setPrinterStatus(status);
-      setSelectedMethod('web_serial');
-      setTestResult({
-        success: true,
-        msg: `Terhubung ke port USB/Serial printer.`
-      });
-    } catch (err: any) {
-      setTestResult({ success: false, msg: err.message || 'Gagal konek Web Serial' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const executePrintData = async (encoder: EscPosEncoder, plainText: string, actionName: string) => {
     setLoading(true);
     setTestResult(null);
@@ -130,6 +129,138 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
     }
   };
 
+  const handleSaveReceiptFormat = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSaving(true);
+    setSaveSuccess(false);
+
+    try {
+      const updated = {
+        ...formData,
+        linuxDevicePath: devicePathInput
+      };
+
+      try {
+        localStorage.setItem('kasirpro_settings', JSON.stringify(updated));
+      } catch (e) {}
+
+      await db.settings.put({ ...updated, id: 'main' });
+
+      if (auth.currentUser) {
+        await saveStoreSettingsToFirestore(updated);
+      }
+
+      onUpdateSettings(updated);
+      printerService.setDevicePath(devicePathInput);
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: any) {
+      console.error('Failed to save receipt format:', err);
+      const updated = { ...formData, linuxDevicePath: devicePathInput };
+      try {
+        localStorage.setItem('kasirpro_settings', JSON.stringify(updated));
+      } catch (e) {}
+      await db.settings.put({ ...updated, id: 'main' });
+      onUpdateSettings(updated);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Test Sample Struk Toko dengan Pengaturan Aktual
+  const handleTestPrintSample = async () => {
+    const W = formData.paperWidthChars || 32;
+    const feedCount = formData.feedLines !== undefined ? formData.feedLines : 1;
+    const encoder = new EscPosEncoder();
+    encoder.init();
+    encoder.kickDrawer();
+    encoder.align('center');
+    encoder.bold(true);
+    encoder.doubleHeight(true);
+    encoder.textLine(formData.storeName.toUpperCase());
+    encoder.doubleHeight(false);
+    encoder.bold(false);
+
+    if (formData.address) {
+      encoder.textLine(formData.address.substring(0, W));
+    }
+    if (formData.phone) {
+      encoder.textLine('Telp: ' + formData.phone.substring(0, W - 6));
+    }
+    encoder.separator('=', W);
+    encoder.align('left');
+    encoder.twoColumn('No: INV-TEST-001', '05/10/26 12:30', W);
+    encoder.twoColumn(`Kasir: ${formData.cashierName || 'Kasir 01'}`, 'Metode: TUNAI', W);
+    encoder.separator('-', W);
+    
+    // Sample items
+    encoder.textLine('Kopi Susu Aren Gula Asli');
+    encoder.twoColumn('  2 x 18.000', `${formData.currencyPrefix || 'Rp'} 36.000`, W);
+    encoder.textLine('Roti Bakar Cokelat Keju');
+    encoder.twoColumn('  1 x 16.000', `${formData.currencyPrefix || 'Rp'} 16.000`, W);
+    encoder.separator('-', W);
+    
+    encoder.twoColumn('Subtotal', `${formData.currencyPrefix || 'Rp'} 52.000`, W);
+    encoder.separator('=', W);
+
+    encoder.bold(true);
+    encoder.doubleHeight(true);
+    encoder.twoColumn('TOTAL', `${formData.currencyPrefix || 'Rp'} 52.000`, W);
+    encoder.doubleHeight(false);
+    encoder.bold(false);
+
+    encoder.twoColumn('BAYAR', `${formData.currencyPrefix || 'Rp'} 100.000`, W);
+    encoder.twoColumn('KEMBALI', `${formData.currencyPrefix || 'Rp'} 48.000`, W);
+    encoder.separator('=', W);
+
+    if (formData.footerMessage) {
+      encoder.align('center');
+      const lines = formData.footerMessage.split('\n');
+      for (const l of lines) {
+        encoder.textLine(l.substring(0, W));
+      }
+    }
+    encoder.textLine('*** KASIRPRO 58MM ***');
+
+    if (formData.enableAutoCut) {
+      encoder.cut(false, feedCount);
+    } else {
+      encoder.feed(feedCount);
+    }
+
+    const plainLines = [
+      padCenter(formData.storeName.toUpperCase(), W),
+      formData.address ? padCenter(formData.address, W) : '',
+      formData.phone ? padCenter('Telp: ' + formData.phone, W) : '',
+      padSeparator('=', W),
+      padRow('No: INV-TEST-001', '05/10/26 12:30', W),
+      padRow(`Kasir: ${formData.cashierName || 'Kasir 01'}`, 'Metode: TUNAI', W),
+      padSeparator('-', W),
+      'Kopi Susu Aren Gula Asli',
+      padRow('  2 x 18.000', `${formData.currencyPrefix || 'Rp'} 36.000`, W),
+      'Roti Bakar Cokelat Keju',
+      padRow('  1 x 16.000', `${formData.currencyPrefix || 'Rp'} 16.000`, W),
+      padSeparator('-', W),
+      padRow('Subtotal', `${formData.currencyPrefix || 'Rp'} 52.000`, W),
+      padSeparator('=', W),
+      padRow('TOTAL', `${formData.currencyPrefix || 'Rp'} 52.000`, W),
+      padRow('BAYAR', `${formData.currencyPrefix || 'Rp'} 100.000`, W),
+      padRow('KEMBALI', `${formData.currencyPrefix || 'Rp'} 48.000`, W),
+      padSeparator('=', W)
+    ];
+    if (formData.footerMessage) {
+      const fLines = formData.footerMessage.split('\n');
+      for (const fl of fLines) plainLines.push(padCenter(fl, W));
+    }
+    plainLines.push(padCenter('*** KASIRPRO 58MM ***', W));
+    for (let i = 0; i < feedCount; i++) plainLines.push('');
+
+    await executePrintData(encoder, plainLines.join('\n'), 'Uji Cetak Sampel Toko');
+  };
+
   // Test 1: 32 Karakter Grid Test
   const handleTest32Chars = () => {
     const encoder = new EscPosEncoder();
@@ -144,7 +275,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
     encoder.twoColumn('KOLOM KIRI', 'KOLOM KANAN', 32);
     encoder.twoColumn('1 x Kopi Susu', 'Rp 18.000', 32);
     encoder.separator('=', 32);
-    encoder.cut();
+    encoder.feed(formData.feedLines ?? 1);
 
     const plain = [
       padCenter('TEST BATAS 32 KARAKTER 58MM', 32),
@@ -171,21 +302,8 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
   // Test 3: Potong Kertas (Paper Cut)
   const handleCutPaper = () => {
     const encoder = new EscPosEncoder();
-    encoder.newline(3);
-    encoder.cut(true);
+    encoder.cut(true, formData.feedLines ?? 1);
     executePrintData(encoder, '[Perintah GS V 0: Potong Kertas]', 'Potong Kertas');
-  };
-
-  // Test 4: Custom Text
-  const handlePrintCustom = () => {
-    const encoder = new EscPosEncoder();
-    const lines = customText.split('\n');
-    for (const l of lines) {
-      encoder.textLine(l.substring(0, 32));
-    }
-    encoder.newline(2);
-    encoder.cut();
-    executePrintData(encoder, customText, 'Cetak Teks Kustom');
   };
 
   return (
@@ -196,14 +314,14 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
               <Printer className="w-5 h-5 text-emerald-400" />
-              Laboratorium & Uji Printer Thermal 58mm
+              Laboratorium & Format Struk 58mm
             </h2>
             <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-mono px-2 py-0.5 rounded-md font-bold">
               Linux CachyOS
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Uji komunikasi langsung ke port <code className="text-cyan-300 font-mono">/dev/usb/lp0</code> (Vendor: 28e9, PID: 0289) via Tauri v2 Rust IPC.
+            Konfigurasi layout struk belanja, hemat kertas, dan uji driver hardware <code className="text-cyan-300 font-mono">/dev/usb/lp0</code>.
           </p>
         </div>
 
@@ -217,7 +335,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
         </div>
       </div>
 
-      {/* Linux Hardware Target Card (Primary Feature for CachyOS) */}
+      {/* Linux Hardware Target Card */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-cyan-500/30 p-6 rounded-2xl shadow-xl">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
           <div>
@@ -231,7 +349,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              Printer thermal terdeteksi di Linux CachyOS pada device character <code className="text-cyan-300 font-mono">/dev/usb/lp0</code>.
+              Jalur device printer thermal di Linux CachyOS pada <code className="text-cyan-300 font-mono">/dev/usb/lp0</code>.
             </p>
           </div>
 
@@ -302,7 +420,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
                 <Cpu className="w-5 h-5" />
               </span>
               <span className="text-[10px] font-mono bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded font-bold">
-                Rekomendasi CachyOS
+                Rekomendasi Linux
               </span>
             </div>
             <h4 className="font-bold text-white text-sm">Tauri Raw (/dev/usb/lp0)</h4>
@@ -343,9 +461,9 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
                 Android / BLE
               </span>
             </div>
-            <h4 className="font-bold text-white text-sm">Web Bluetooth API</h4>
+            <h4 className="font-bold text-white text-sm">Bluetooth Wireless</h4>
             <p className="text-xs text-slate-400 mt-1">
-              Untuk printer thermal saku portabel Bluetooth di Android / Chrome.
+              Untuk printer thermal saku portabel Bluetooth di Android / Tablet Kasir.
             </p>
           </div>
 
@@ -431,10 +549,10 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
         </div>
       )}
 
-      {/* Main Testing Workstation */}
+      {/* Main Workstation: Uji Cepat & Format Struk 58mm */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Quick Action Test Buttons */}
+        {/* Left Column: Quick Action Test Buttons */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
           <h3 className="font-bold text-white text-sm flex items-center gap-2 pb-3 border-b border-slate-800">
             <Zap className="w-4 h-4 text-emerald-400" />
@@ -498,8 +616,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
                 encoder.doubleHeight(false);
                 encoder.bold(false);
                 encoder.textLine('Normal Text 12x24');
-                encoder.newline(2);
-                encoder.cut();
+                encoder.feed(formData.feedLines ?? 1);
                 executePrintData(encoder, 'DOUBLE SIZE\nDOUBLE HEIGHT\nNormal Text', 'Uji Format Font');
               }}
               disabled={loading}
@@ -515,89 +632,140 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
             </button>
           </div>
 
-          {/* Quick Target Dispatcher Selector */}
-          <div className="pt-3 border-t border-slate-800">
-            <label className="text-xs text-slate-400 block mb-1.5 font-medium">
-              Target Metode Eksekusi Cetak:
-            </label>
-            <div className="grid grid-cols-4 gap-2">
-              <button
-                onClick={() => setSelectedMethod('tauri_raw')}
-                className={`py-2 px-2 rounded-xl text-xs font-semibold border transition text-center ${
-                  selectedMethod === 'tauri_raw'
-                    ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400'
-                }`}
-              >
-                Tauri Raw
-              </button>
-              <button
-                onClick={() => setSelectedMethod('simulator')}
-                className={`py-2 px-2 rounded-xl text-xs font-semibold border transition text-center ${
-                  selectedMethod === 'simulator'
-                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400'
-                }`}
-              >
-                Simulator
-              </button>
-              <button
-                onClick={() => setSelectedMethod('web_bluetooth')}
-                className={`py-2 px-2 rounded-xl text-xs font-semibold border transition text-center ${
-                  selectedMethod === 'web_bluetooth'
-                    ? 'bg-blue-500/20 border-blue-500 text-blue-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400'
-                }`}
-              >
-                Bluetooth
-              </button>
-              <button
-                onClick={() => setSelectedMethod('web_serial')}
-                className={`py-2 px-2 rounded-xl text-xs font-semibold border transition text-center ${
-                  selectedMethod === 'web_serial'
-                    ? 'bg-amber-500/20 border-amber-500 text-amber-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400'
-                }`}
-              >
-                Web Serial
-              </button>
-            </div>
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={handleTestPrintSample}
+              disabled={loading}
+              className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-750 text-emerald-400 font-bold border border-emerald-500/30 rounded-xl text-xs flex items-center justify-center gap-2 transition"
+            >
+              <FileText className="w-4 h-4" />
+              Cetak Sampel Struk Lengkap (Format Toko Anda)
+            </button>
           </div>
         </div>
 
-        {/* Custom Text & 32-character Live Editor */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between space-y-4">
-          <div>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                <Terminal className="w-4 h-4 text-cyan-400" />
-                Editor Teks Struk Bebas (Maks 32 Karakter/Baris)
-              </h3>
-            </div>
-
-            <div className="mt-3">
-              <label className="text-[11px] text-slate-400 flex items-center justify-between mb-1.5 font-mono">
-                <span>Ruler 32 Karakter:</span>
-                <span className="text-cyan-400">|..5...10...15...20...25...30.32|</span>
-              </label>
-
-              <textarea
-                value={customText}
-                onChange={e => setCustomText(e.target.value)}
-                rows={9}
-                className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl font-mono text-xs text-white leading-relaxed focus:outline-none focus:border-cyan-500"
-              />
-            </div>
+        {/* Right Column: FORMAT STRUK 58MM CONFIGURATION (Migrated & Integrated) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <h3 className="font-bold text-white text-sm flex items-center gap-2">
+              <Receipt className="w-4 h-4 text-emerald-400" />
+              Konfigurasi Format Struk 58mm
+            </h3>
+            {saveSuccess && (
+              <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Format Tersimpan
+              </span>
+            )}
           </div>
 
-          <button
-            onClick={handlePrintCustom}
-            disabled={loading}
-            className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition"
-          >
-            <Send className="w-4 h-4" />
-            {loading ? 'Mengirim Data...' : `Cetak Teks Kustom ke ${devicePathInput}`}
-          </button>
+          <form onSubmit={handleSaveReceiptFormat} className="space-y-3.5 text-xs">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-300 font-medium mb-1">
+                  Lebar Kolom Kertas
+                </label>
+                <select
+                  value={formData.paperWidthChars}
+                  onChange={e => setFormData({ ...formData, paperWidthChars: Number(e.target.value) })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono"
+                >
+                  <option value={32}>32 Karakter (Standar 58mm)</option>
+                  <option value={42}>42 Karakter (Font B 58mm)</option>
+                  <option value={48}>48 Karakter (Thermal 80mm)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-medium mb-1">
+                  Awalan Mata Uang
+                </label>
+                <input
+                  type="text"
+                  value={formData.currencyPrefix}
+                  onChange={e => setFormData({ ...formData, currencyPrefix: e.target.value })}
+                  placeholder="Rp"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono font-bold"
+                />
+              </div>
+            </div>
+
+            {/* Pengaturan Hemat Kertas & Feed Lines */}
+            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-slate-200 font-medium text-xs">
+                    Jarak Spasi Kertas Bawah (Feed Lines)
+                  </label>
+                  <p className="text-[11px] text-slate-400">
+                    Jumlah baris kosong yang digulung di akhir struk.
+                  </p>
+                </div>
+                <select
+                  value={formData.feedLines !== undefined ? formData.feedLines : 1}
+                  onChange={e => setFormData({ ...formData, feedLines: Number(e.target.value) })}
+                  className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-emerald-400 font-bold text-xs"
+                >
+                  <option value={0}>0 Baris (Ultra Hemat)</option>
+                  <option value={1}>1 Baris (Rekomendasi Hemat)</option>
+                  <option value={2}>2 Baris (Normal)</option>
+                  <option value={3}>3 Baris (Lebar)</option>
+                </select>
+              </div>
+
+              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                <div>
+                  <div className="text-slate-200 font-medium text-xs">
+                    Perintah Auto-Cutter (Potong Kertas)
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Nonaktifkan untuk printer 58mm sobek manual agar tidak keluar kertas berlebih.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formData.enableAutoCut || false}
+                  onChange={e => setFormData({ ...formData, enableAutoCut: e.target.checked })}
+                  className="w-4 h-4 accent-emerald-500 rounded"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-slate-300 font-medium mb-1">
+                Pesan Catatan Kaki (Footer Struk)
+              </label>
+              <textarea
+                rows={2}
+                value={formData.footerMessage}
+                onChange={e => setFormData({ ...formData, footerMessage: e.target.value })}
+                placeholder="Terima kasih atas kunjungan Anda!&#10;Barang yang dibeli tidak dapat ditukar."
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="pt-2 flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="flex-1 py-2.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition"
+              >
+                <Save className="w-4 h-4" />
+                {isSaving ? 'Menyimpan...' : 'Simpan Format Struk'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleTestPrintSample}
+                disabled={loading}
+                className="py-2.5 px-3 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shrink-0"
+              >
+                <Printer className="w-3.5 h-3.5 text-cyan-400" />
+                Uji Cetak
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>

@@ -13,10 +13,12 @@ import {
   Database,
   Wifi,
   WifiOff,
-  CheckCircle2
+  CheckCircle2,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
-import { PrinterDeviceStatus } from '../types';
+import { PrinterDeviceStatus, StoreSettings } from '../types';
 
 export interface NavbarProps {
   activeTab: 'pos' | 'products' | 'transactions' | 'printer';
@@ -28,6 +30,9 @@ export interface NavbarProps {
   onOpenBackupModal: () => void;
   currentUser: FirebaseUser | null;
   runtimeEnv: 'tauri' | 'capacitor' | 'browser';
+  settings?: StoreSettings;
+  theme?: 'dark' | 'light';
+  toggleTheme?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -39,7 +44,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuthModal,
   onOpenBackupModal,
   currentUser,
-  runtimeEnv
+  runtimeEnv,
+  settings,
+  theme = 'dark',
+  toggleTheme
 }) => {
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [showSyncInfo, setShowSyncInfo] = useState<boolean>(false);
@@ -81,12 +89,24 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center justify-between h-16">
           {/* Logo & Platform Info with Live Indicators */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-bold text-lg">
-              KP
-            </div>
+            {settings?.logoUrl ? (
+              <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-750 flex items-center justify-center p-1 shadow-md overflow-hidden shrink-0">
+                <img 
+                  src={settings.logoUrl} 
+                  alt={settings.storeName || 'Logo'} 
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-bold text-lg shrink-0">
+                KP
+              </div>
+            )}
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-lg tracking-tight text-white">KasirPro</span>
+                <span className="font-extrabold text-base sm:text-lg tracking-tight text-white truncate max-w-[140px] sm:max-w-[200px]">
+                  {settings?.storeName ? settings.storeName : 'KasirPro'}
+                </span>
                 <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider">
                   58mm POS
                 </span>
@@ -292,6 +312,25 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Database className="w-4 h-4" />
             </button>
+
+            {/* Theme Toggle Button (Dark / Light) */}
+            {toggleTheme && (
+              <button
+                onClick={toggleTheme}
+                title={theme === 'dark' ? 'Ganti ke Tema Terang (Light Mode)' : 'Ganti ke Tema Gelap (Dark Mode)'}
+                className={`p-2 rounded-xl border transition flex items-center justify-center ${
+                  theme === 'dark'
+                    ? 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-amber-400 hover:text-amber-300'
+                    : 'bg-slate-200 hover:bg-slate-300 border-slate-300 text-indigo-600'
+                }`}
+              >
+                {theme === 'dark' ? (
+                  <Sun className="w-4 h-4" />
+                ) : (
+                  <Moon className="w-4 h-4" />
+                )}
+              </button>
+            )}
 
             {/* Settings Button */}
             <button
