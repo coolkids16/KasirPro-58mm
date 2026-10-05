@@ -13,6 +13,9 @@ Aplikasi Point of Sale (POS) kasir *offline-first* berkinerja tinggi yang diranc
   - **Linux Desktop**: Akses langsung hardware via port `/dev/usb/lp0` (Tauri Native IPC).
   - **Android Mobile**: Web Bluetooth API & Capacitor BLE untuk printer thermal saku portabel Bluetooth.
   - **Simulator**: Virtual thermal printer 58mm bawaan (32 kolom teks & barcode/QR).
+- **Mode Hemat Kertas Otomatis**:
+  - Feed 1 baris minimal (mencegah kertas kosong terbuang).
+  - Pilihan baris kosong fleksibel (0–2 baris) & kontrol auto-cutter di menu Pengaturan.
 - **Laporan & Manajemen Stok**:
   - Dashboard analitik & grafik omzet harian interaktif (Recharts).
   - Manajemen produk, kategori kustom, varian harga, dan pelacak sisa stok.
@@ -32,8 +35,6 @@ sudo pacman -Syu
 
 # 2. Pasang Bun (Utama), Rust, Cargo, dan WebKitGTK
 sudo pacman -S base-devel git bun rust cargo webkit2gtk-4.1 libappindicator-gtk3 openssl libsoup3
-
-# (Opsi ke-2 jika ingin memasang Node.js & npm: sudo pacman -S nodejs npm)
 ```
 
 #### B. Untuk Distro Berbasis Debian / Ubuntu:
@@ -100,16 +101,12 @@ bun run tauri:dev
 
 # Atau menggunakan Bunx CLI:
 bunx @tauri-apps/cli dev
-
-# (Alternatif ke-2 via npm: npm run tauri:dev atau npx @tauri-apps/cli dev)
 ```
 
 #### 🌐 B. Mode Web Browser Lokal (PWA / Chrome):
 ```bash
 # Menggunakan Bun (Utama):
 bun run dev
-
-# (Alternatif ke-2 via npm: npm run dev)
 ```
 Akses di browser: **`http://localhost:3000`**
 
@@ -120,9 +117,6 @@ Akses di browser: **`http://localhost:3000`**
 ```bash
 # Menggunakan Bun (Utama):
 bun run tauri:build
-# (atau: bunx @tauri-apps/cli build)
-
-# (Alternatif ke-2 via npm: npm run tauri:build)
 ```
 
 Hasil file biner rilis siap pakai akan dibuat di:
@@ -138,90 +132,112 @@ Cukup beri izin eksekusi (`chmod +x *.AppImage`) dan jalankan aplikasi secara la
 Anda dapat mengganti logo aplikasi KasirPro dengan logo toko Anda sendiri dengan 2 cara mudah:
 
 ### Cara 1: Otomatis via Tauri Icon Generator (Paling Praktis)
-1. Siapkan 1 file logo toko Anda format **PNG** (disarankan berukuran minimal **512x512** atau **1024x1024 px** dengan background transparan), misalnya simpan sebagai `logo-toko.png`.
+1. Siapkan 1 file logo toko Anda format **PNG** (disarankan berukuran minimal **512x512** atau **1024x1024 px**), misalnya simpan sebagai `logo-toko.png`.
 2. Jalankan perintah generator:
    ```bash
    bunx @tauri-apps/cli icon logo-toko.png
-   # (atau jika pakai npm: npx @tauri-apps/cli icon logo-toko.png)
    ```
 3. Tauri CLI akan otomatis menghasilkan seluruh ukuran ikon (`32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.ico`, `icon.icns`) dan menimpanya ke folder `src-tauri/icons/`.
 
 ### Cara 2: Manual (Timpa Langsung ke Folder `src-tauri/icons/`)
-Jika Anda ingin mendesain ukuran tiap ikon secara terpisah, Anda cukup mengganti file gambar yang ada di dalam folder `src-tauri/icons/`:
+Ganti file gambar di dalam folder `src-tauri/icons/`:
 - `32x32.png` *(32 × 32 pixel)*
 - `128x128.png` *(128 × 128 pixel)*
 - `128x128@2x.png` *(256 × 256 pixel)*
 - `icon.png` *(512 × 512 pixel)*
 - `icon.ico` & `icon.icns` *(ikon sistem Windows & Mac)*
 
-Setelah mengganti ikon, cukup jalankan kembali `bun run tauri:build` untuk mengemas aplikasi dengan logo toko baru Anda.
-
 ---
 
 ## 📱 BAGIAN 2: Panduan Setup & Build untuk Android (Capacitor APK)
-
-Aplikasi KasirPro dapat dibungkus menjadi aplikasi Android native menggunakan **Capacitor** untuk digunakan pada Tablet Kasir atau Smartphone Android dengan printer Bluetooth thermal 58mm.
-
-### 1. Inisialisasi Platform Android
 
 ```bash
 # 1. Pasang Capacitor Core & CLI
 bun install @capacitor/core
 bun install -d @capacitor/cli @capacitor/android
-# (Alternatif ke-2: npm install @capacitor/core && npm install -D @capacitor/cli @capacitor/android)
 
 # 2. Inisialisasi konfigurasi Capacitor (cukup sekali di awal)
 bunx cap init "KasirPro 58mm" "com.kasirpro.pos" --web-dir "dist"
 
-# 3. Tambahkan folder platform Android
+# 3. Tambahkan platform Android
 bunx cap add android
-```
 
----
-
-### 2. Izin Bluetooth Printer di `android/app/src/main/AndroidManifest.xml`
-
-Buka berkas `android/app/src/main/AndroidManifest.xml` dan tambahkan izin Bluetooth berikut di dalam tag `<manifest>`:
-
-```xml
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Izin Bluetooth Printer Thermal 58mm -->
-    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.INTERNET" />
-</manifest>
-```
-
----
-
-### 3. Build Aset & Buka di Android Studio / Generate APK
-
-```bash
-# 1. Build frontend React
+# 4. Build web & sync ke Android
 bun run build
-# (Alternatif ke-2: npm run build)
-
-# 2. Sinkronkan hasil build web ke proyek Android native
 bunx cap sync android
-# (Alternatif ke-2: npx cap sync android)
-
-# 3. Buka proyek langsung di Android Studio
 bunx cap open android
-# (Alternatif ke-2: npx cap open android)
 ```
 
-Setelah Android Studio terbuka:
-1. Hubungkan HP / Tablet Android dengan kabel USB (aktifkan *USB Debugging*).
-2. Klik tombol hijau **Run (`Shift + F10`)** untuk langsung menginstal dan menjalankan KasirPro di HP Anda.
-3. Untuk membuat file APK rilis: Pilih menu **Build > Build Bundle(s) / APK(s) > Build APK(s)**. File APK siap dibagikan ke seluruh karyawan kasir toko.
+---
+
+## 🔥 BAGIAN 3: Panduan Menghubungkan & Mengganti Akun Firebase Sendiri
+
+Anda dapat menggunakan akun Google / Firebase pribadi Anda sendiri secara **100% gratis** (Free Tier Spark Plan).
+
+### Langkah 1: Buat Proyek di Firebase Console
+1. Buka [https://console.firebase.google.com/](https://console.firebase.google.com/) lalu login dengan akun Google Anda.
+2. Klik **Add Project** (Tambah Proyek), beri nama misal: `tokoku-kasir-pos`, lalu klik Lanjutkan hingga selesai.
+
+### Langkah 2: Aktifkan Fitur Authentication (Email/Password)
+1. Di sidebar kiri Firebase Console, pilih menu **Build > Authentication**.
+2. Klik tombol **Get Started**.
+3. Di tab **Sign-in method**, klik opsi **Email/Password**.
+4. Aktifkan sakelar **Enable** pada *Email/Password* (Email link / passwordless biarkan nonaktif).
+5. Klik **Save**.
+
+### Langkah 3: Aktifkan Database Cloud Firestore
+1. Di sidebar kiri, pilih menu **Build > Firestore Database**.
+2. Klik tombol **Create Database**.
+3. Pilih lokasi server database terdekat (misalnya: `asia-southeast2` Jakarta atau `asia-southeast1` Singapura).
+4. Pada mode aturan awal, pilih **Start in production mode** lalu klik **Create**.
+5. Buka tab **Rules** di bagian atas Firestore Database Anda, lalu tempelkan (*copy-paste*) isi dari file `firestore.rules` proyek ini dan klik **Publish**.
+
+### Langkah 4: Daftarkan Web App & Ambil Konfigurasi Kredensial
+1. Klik ikon gerigi (Project Settings) di pojok kiri atas samping tulisan *Project Overview*.
+2. Gulir ke bawah pada bagian *Your apps*, klik ikon Web **`</>`**.
+3. Beri nama aplikasi (misal: `KasirPro Web`), lalu klik **Register app**.
+4. Anda akan melihat blok kode `firebaseConfig` seperti ini:
+   ```javascript
+   const firebaseConfig = {
+     apiKey: "AIzaSyB...",
+     authDomain: "tokoku-kasir-pos.firebaseapp.com",
+     projectId: "tokoku-kasir-pos",
+     storageBucket: "tokoku-kasir-pos.firebasestorage.app",
+     messagingSenderId: "123456789",
+     appId: "1:123456789:web:abcdef"
+   };
+   ```
+
+### Langkah 5: Ganti File `firebase-applet-config.json` di Proyek
+Buka file **`firebase-applet-config.json`** di root folder aplikasi Anda dan gantikan isinya dengan konfigurasi Firebase baru Anda:
+
+```json
+{
+  "apiKey": "AIzaSyB...",
+  "authDomain": "tokoku-kasir-pos.firebaseapp.com",
+  "projectId": "tokoku-kasir-pos",
+  "storageBucket": "tokoku-kasir-pos.firebasestorage.app",
+  "messagingSenderId": "123456789",
+  "appId": "1:123456789:web:abcdef"
+}
+```
+
+> 💡 **Catatan**: Jika menggunakan database default Firebase Console, field `firestoreDatabaseId` dapat dihilangkan atau diisi `"(default)"`. Aplikasi sudah otomatis mendeteksi konfigurasi tersebut.
+
+Setelah file `firebase-applet-config.json` disimpan, aplikasi KasirPro akan otomatis terhubung ke akun database Firebase pribadi Anda!
+
+---
+
+## 🗄️ Struktur Koleksi Database Firestore
+
+1. **/products**: Data master katalog, harga jual, barcode, warna tombol, dan sisa stok.
+2. **/transactions**: Riwayat struk penjualan lengkap, waktu transaksi, kasir, diskon, pajak, dan metode bayar.
+3. **/settings**: Konfigurasi toko, alamat, telepon, format struk, dan device port printer `/dev/usb/lp0`.
+4. **/users**: Data profil kasir terdaftar.
 
 ---
 
 ## 🖨️ Spesifikasi Struk Thermal 58mm (ESC/POS 32 Kolom)
-
-Printer thermal 58mm standar memiliki lebar cetak 384 dot atau **tepat 32 karakter per baris** pada Font A standar.
 
 | Perintah ESC/POS | Byte Hex | Fungsi |
 | :--- | :--- | :--- |
@@ -231,25 +247,6 @@ Printer thermal 58mm standar memiliki lebar cetak 384 dot atau **tepat 32 karakt
 | `ESC ! 16` | `1B 21 10` | Mode teks tinggi ganda (*double height*) |
 | `ESC p 0 25 250` | `1B 70 00 19 FA` | Pulsa buka laci uang kasir (RJ11 Cash Drawer) |
 | `GS V 66 0` | `1D 56 42 00` | Pemotong kertas otomatis (*auto cutter*) |
-
----
-
-## 🗄️ Konfigurasi Cloud Database Firebase
-
-Aplikasi terhubung ke Firebase Firestore untuk sinkronisasi multi-kasir. Konfigurasi kredensial tersimpan di `firebase-applet-config.json`:
-
-```json
-{
-  "projectId": "gen-lang-client-0584948514",
-  "apiKey": "AIzaSyB765hjOihywJXyCU-p0ZIVsCZdis3A43A",
-  "firestoreDatabaseId": "ai-studio-kasirpro58mmcros-28515d52-416e-4b24-a9e0-855a8d9b8109"
-}
-```
-
-### Struktur Koleksi:
-1. **/products**: Data master katalog, harga jual, barcode, warna tombol, dan sisa stok.
-2. **/transactions**: Riwayat struk penjualan lengkap, waktu transaksi, kasir, diskon, pajak, dan metode bayar.
-3. **/settings**: Konfigurasi toko, alamat, telepon, format struk, dan device port printer `/dev/usb/lp0`.
 
 ---
 

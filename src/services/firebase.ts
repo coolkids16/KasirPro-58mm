@@ -7,6 +7,7 @@ import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  sendPasswordResetEmail,
   updateProfile,
   User as FirebaseUser
 } from 'firebase/auth';
@@ -35,8 +36,11 @@ import { INITIAL_PRODUCTS, DEFAULT_SETTINGS } from '../db/db';
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
 
-// CRITICAL: Connect to configured firestoreDatabaseId as required by AI Studio
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Connect to configured firestoreDatabaseId (or default database for custom personal Firebase project)
+export const db = (firebaseConfig as any).firestoreDatabaseId && (firebaseConfig as any).firestoreDatabaseId !== '(default)'
+  ? getFirestore(app, (firebaseConfig as any).firestoreDatabaseId)
+  : getFirestore(app);
+
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -160,6 +164,15 @@ export async function loginWithEmailPassword(email: string, pass: string): Promi
     return res.user;
   } catch (error: any) {
     console.error('Email login error:', error);
+    throw error;
+  }
+}
+
+export async function resetUserPassword(email: string): Promise<void> {
+  try {
+    await sendPasswordResetEmail(auth, email);
+  } catch (error: any) {
+    console.error('Password reset error:', error);
     throw error;
   }
 }

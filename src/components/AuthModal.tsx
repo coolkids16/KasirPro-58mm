@@ -12,13 +12,13 @@ import {
   Mail,
   Lock,
   CheckCircle2,
-  HelpCircle
+  KeyRound
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { 
-  loginWithGoogle, 
   registerWithEmailPassword, 
   loginWithEmailPassword, 
+  resetUserPassword,
   logoutUser 
 } from '../services/firebase';
 
@@ -33,7 +33,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   currentUser
 }) => {
-  const [authMode, setAuthMode] = useState<'google' | 'login' | 'register'>('google');
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -46,15 +46,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleGoogleLogin = async () => {
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      setErrorMsg('Mohon masukkan alamat email kasir Anda.');
+      return;
+    }
+
     setLoading(true);
     setErrorMsg(null);
+    setSuccessMsg(null);
+
     try {
-      await loginWithGoogle();
-      onClose();
+      await resetUserPassword(email.trim());
+      setSuccessMsg(`Tautan pemulihan kata sandi telah dikirim ke email: ${email.trim()}. Silakan periksa kotak masuk atau folder spam Anda.`);
     } catch (err: any) {
-      console.error(err);
-      setErrorMsg(err.message || 'Gagal masuk dengan akun Google.');
+      console.error('Forgot password error:', err);
+      if (err.code === 'auth/user-not-found') {
+        setErrorMsg('Email tersebut belum terdaftar.');
+      } else if (err.code === 'auth/invalid-email') {
+        setErrorMsg('Format email tidak valid.');
+      } else {
+        setErrorMsg(err.message || 'Gagal mengirim email reset kata sandi.');
+      }
     } finally {
       setLoading(false);
     }
@@ -88,7 +102,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (err.code === 'auth/email-already-in-use') {
         setErrorMsg('Email ini sudah terdaftar. Silakan pilih tab "Masuk"');
       } else if (err.code === 'auth/operation-not-allowed') {
-        setErrorMsg('Metode Email/Password belum diaktifkan di Firebase Console. Anda dapat menggunakan tombol Google (1-Klik) untuk masuk instan.');
+        setErrorMsg('Metode Email/Password belum diaktifkan di Firebase Console.');
       } else {
         setErrorMsg(err.message || 'Gagal mendaftarkan akun.');
       }
@@ -111,10 +125,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error(err);
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
         setErrorMsg('Email atau kata sandi salah, atau akun belum terdaftar.');
       } else if (err.code === 'auth/operation-not-allowed') {
-        setErrorMsg('Metode Email/Password belum diaktifkan di Firebase Console. Gunakan tombol Google (1-Klik) untuk langsung masuk.');
+        setErrorMsg('Metode Email/Password belum diaktifkan di Firebase Console.');
+      } else if (err.code === 'auth/network-request-failed') {
+        setErrorMsg('Gagal terhubung ke server Firebase. Periksa koneksi internet Anda.');
       } else {
         setErrorMsg(err.message || 'Gagal masuk.');
       }
@@ -157,7 +173,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <p className="text-xs text-slate-400 mt-1">
             {currentUser 
               ? 'Terhubung dengan Firebase Firestore untuk sinkronisasi inventaris & transaksi.' 
-              : 'Pilih metode masuk atau daftarkan akun kasir baru Anda.'}
+              : 'Masuk atau daftarkan akun kasir Anda untuk sinkronisasi cloud.'}
           </p>
         </div>
 
@@ -222,95 +238,47 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </button>
           </div>
         ) : (
-          /* View when user is not logged in: choice of Google / Email Login / Email Register */
+          /* View when user is not logged in */
           <div className="space-y-4">
-            {/* Tab Selector */}
-            <div className="grid grid-cols-3 gap-1 p-1 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode('google');
-                  setErrorMsg(null);
-                }}
-                className={`py-1.5 px-2 rounded-lg transition text-center ${
-                  authMode === 'google'
-                    ? 'bg-slate-800 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Google 1-Klik
-              </button>
+            {/* Tab Selector: Masuk / Daftar Baru */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold">
               <button
                 type="button"
                 onClick={() => {
                   setAuthMode('login');
                   setErrorMsg(null);
+                  setSuccessMsg(null);
                 }}
-                className={`py-1.5 px-2 rounded-lg transition text-center ${
-                  authMode === 'login'
-                    ? 'bg-slate-800 text-white shadow-sm'
+                className={`py-2 px-3 rounded-lg transition text-center flex items-center justify-center gap-2 ${
+                  authMode === 'login' || authMode === 'forgot'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md font-bold'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Masuk
+                <LogIn className="w-3.5 h-3.5" />
+                Masuk Kasir
               </button>
               <button
                 type="button"
                 onClick={() => {
                   setAuthMode('register');
                   setErrorMsg(null);
+                  setSuccessMsg(null);
                 }}
-                className={`py-1.5 px-2 rounded-lg transition text-center ${
+                className={`py-2 px-3 rounded-lg transition text-center flex items-center justify-center gap-2 ${
                   authMode === 'register'
-                    ? 'bg-slate-800 text-white shadow-sm'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md font-bold'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
+                <UserPlus className="w-3.5 h-3.5" />
                 Daftar Baru
               </button>
             </div>
 
-            {/* TAB 1: GOOGLE (1-Klik Registrasi & Login Sekaligus) */}
-            {authMode === 'google' && (
-              <div className="space-y-3.5">
-                <div className="p-3 bg-cyan-950/40 border border-cyan-500/20 rounded-xl text-xs text-cyan-300 flex items-start gap-2">
-                  <HelpCircle className="w-4 h-4 shrink-0 mt-0.5 text-cyan-400" />
-                  <p className="leading-relaxed text-[11px]">
-                    <strong>Registrasi Otomatis:</strong> Masuk dengan Google tidak memerlukan pendaftaran manual terlebih dahulu. Jika akun Google Anda baru pertama kali digunakan, akun kasir akan langsung dibuatkan dan disinkronkan ke Firestore.
-                  </p>
-                </div>
-
-                <button
-                  onClick={handleGoogleLogin}
-                  disabled={loading}
-                  className="w-full py-3 px-4 bg-white hover:bg-slate-100 text-slate-900 rounded-xl font-bold text-xs flex items-center justify-center gap-2.5 shadow-lg shadow-white/10 transition"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
-                  </svg>
-                  {loading ? 'Menghubungkan Akun Google...' : 'Masuk / Daftar dengan Google (1-Klik)'}
-                </button>
-              </div>
-            )}
-
-            {/* TAB 2: MASUK DENGAN EMAIL & PASSWORD */}
+            {/* TAB 1: MASUK DENGAN EMAIL & PASSWORD */}
             {authMode === 'login' && (
-              <form onSubmit={handleEmailLogin} className="space-y-3 text-xs">
+              <form onSubmit={handleEmailLogin} className="space-y-3.5 text-xs">
                 <div>
                   <label className="block text-slate-300 font-medium mb-1">Email Kasir</label>
                   <div className="relative">
@@ -327,7 +295,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Kata Sandi</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-300 font-medium">Kata Sandi</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('forgot');
+                        setErrorMsg(null);
+                        setSuccessMsg(null);
+                      }}
+                      className="text-[11px] text-cyan-400 hover:underline font-medium flex items-center gap-1"
+                    >
+                      <KeyRound className="w-3 h-3" />
+                      Lupa kata sandi?
+                    </button>
+                  </div>
                   <div className="relative">
                     <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
                     <input
@@ -344,7 +326,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition mt-2 shadow-md shadow-emerald-500/20"
+                  className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition mt-3 shadow-md shadow-emerald-500/20"
                 >
                   <LogIn className="w-4 h-4" />
                   {loading ? 'Memproses Masuk...' : 'Masuk ke Kasir'}
@@ -354,7 +336,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   Belum punya akun?{' '}
                   <button
                     type="button"
-                    onClick={() => setAuthMode('register')}
+                    onClick={() => {
+                      setAuthMode('register');
+                      setErrorMsg(null);
+                      setSuccessMsg(null);
+                    }}
                     className="text-emerald-400 hover:underline font-semibold"
                   >
                     Daftar di sini
@@ -363,11 +349,60 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </form>
             )}
 
+            {/* TAB 2: LUPA KATA SANDI / RESET PASSWORD */}
+            {authMode === 'forgot' && (
+              <form onSubmit={handleForgotPassword} className="space-y-3.5 text-xs">
+                <div className="p-3 bg-cyan-950/40 border border-cyan-500/20 rounded-xl text-xs text-cyan-300">
+                  <p className="leading-relaxed text-[11px]">
+                    Masukkan alamat email akun kasir Anda. Kami akan mengirimkan tautan resmi untuk mengatur ulang kata sandi baru Anda.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">Email Kasir Terdaftar</label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="kasir@tokosaya.com"
+                      className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-2.5 px-4 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-md shadow-cyan-600/20"
+                >
+                  <Mail className="w-4 h-4" />
+                  {loading ? 'Mengirim Tautan...' : 'Kirim Tautan Reset Sandi'}
+                </button>
+
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('login');
+                      setErrorMsg(null);
+                      setSuccessMsg(null);
+                    }}
+                    className="text-slate-400 hover:text-white text-[11px] underline"
+                  >
+                    ← Kembali ke Halaman Masuk
+                  </button>
+                </div>
+              </form>
+            )}
+
             {/* TAB 3: REGISTRASI AKUN BARU */}
             {authMode === 'register' && (
-              <form onSubmit={handleEmailRegister} className="space-y-3 text-xs">
+              <form onSubmit={handleEmailRegister} className="space-y-3.5 text-xs">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Nama Kasir / Lengkap</label>
+                  <label className="block text-slate-300 font-medium mb-1">Nama Kasir / Outlet</label>
                   <div className="relative">
                     <UserIcon className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
                     <input
@@ -382,7 +417,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Email</label>
+                  <label className="block text-slate-300 font-medium mb-1">Email Kasir</label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
                     <input
@@ -433,7 +468,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition mt-2 shadow-md shadow-emerald-500/20"
+                  className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition mt-3 shadow-md shadow-emerald-500/20"
                 >
                   <UserPlus className="w-4 h-4" />
                   {loading ? 'Mendaftarkan Akun...' : 'Daftar Akun Kasir Baru'}
@@ -443,7 +478,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   Sudah punya akun?{' '}
                   <button
                     type="button"
-                    onClick={() => setAuthMode('login')}
+                    onClick={() => {
+                      setAuthMode('login');
+                      setErrorMsg(null);
+                      setSuccessMsg(null);
+                    }}
                     className="text-emerald-400 hover:underline font-semibold"
                   >
                     Masuk di sini
@@ -456,10 +495,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-[11px] text-slate-400 space-y-1">
               <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
                 <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
-                Dukungan Offline-First
+                Dukungan Penuh Offline-First
               </div>
               <p className="leading-relaxed">
-                Aplikasi kasir tetap dapat dipakai tanpa login menggunakan database lokal IndexedDB. Jika login, data otomatis tersinkron ke Cloud Firestore.
+                Aplikasi kasir tetap dapat digunakan tanpa login (tersimpan di database lokal). Saat masuk akun, data otomatis disinkronkan ke Cloud Firestore.
               </p>
             </div>
           </div>
