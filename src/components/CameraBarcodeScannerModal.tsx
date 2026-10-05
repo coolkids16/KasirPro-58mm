@@ -116,13 +116,7 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
             barcodeDetectorRef.current = new (window as any).BarcodeDetector();
           }
         } else {
-          // Attempt safe dynamic import of html5-qrcode as fallback
-          try {
-            const html5QrcodeModule = await import('html5-qrcode');
-            console.log('html5-qrcode dynamically loaded as fallback');
-          } catch (e) {
-            console.log('html5-qrcode fallback not available, using standard WebRTC scan loop');
-          }
+          console.log('BarcodeDetector API is not supported in this browser. Please use a modern browser like Chrome/Chromium, or use the manual input box.');
         }
 
         // 3. Start scanning loop
