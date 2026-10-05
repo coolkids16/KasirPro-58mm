@@ -96,7 +96,13 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
  */
 export async function validateFirestoreConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'settings', 'test-connection'));
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Connection timeout')), 1500)
+    );
+    await Promise.race([
+      getDocFromServer(doc(db, 'settings', 'test-connection')),
+      timeoutPromise
+    ]);
     return true;
   } catch (error: any) {
     if (error instanceof Error && error.message.includes('the client is offline')) {

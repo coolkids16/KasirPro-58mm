@@ -136,8 +136,8 @@ export default function App() {
         setPrinterStatus(printerService.getStatus());
       }
 
-      // Test firestore connection
-      await validateFirestoreConnection();
+      // Test firestore connection (non-blocking to ensure instant offline-first boot)
+      validateFirestoreConnection().catch(console.warn);
 
       setIsLoading(false);
     }
