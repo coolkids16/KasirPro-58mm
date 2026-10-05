@@ -1,5 +1,6 @@
 export interface Product {
-  id?: number;
+  id?: number | string;
+  firestoreId?: string;
   name: string;
   sku: string;
   price: number;
@@ -19,7 +20,8 @@ export interface CartItem {
 export type PaymentMethod = 'cash' | 'qris' | 'transfer';
 
 export interface Transaction {
-  id?: number;
+  id?: number | string;
+  firestoreId?: string;
   invoiceNumber: string;
   timestamp: number;
   items: CartItem[];

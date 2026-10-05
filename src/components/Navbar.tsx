@@ -4,16 +4,26 @@ import {
   Package, 
   Receipt, 
   Printer, 
+  Settings, 
+  LogIn, 
+  User as UserIcon, 
+  CloudCheck, 
   HardDrive,
-  Cpu
+  Cpu,
+  Database
 } from 'lucide-react';
+import { User as FirebaseUser } from 'firebase/auth';
 import { PrinterDeviceStatus } from '../types';
 
-interface NavbarProps {
+export interface NavbarProps {
   activeTab: 'pos' | 'products' | 'transactions' | 'printer';
   setActiveTab: (tab: 'pos' | 'products' | 'transactions' | 'printer') => void;
   printerStatus: PrinterDeviceStatus;
   onOpenPrinterModal: () => void;
+  onOpenSettingsModal: () => void;
+  onOpenAuthModal: () => void;
+  onOpenBackupModal: () => void;
+  currentUser: FirebaseUser | null;
   runtimeEnv: 'tauri' | 'capacitor' | 'browser';
 }
 
@@ -22,6 +32,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveTab,
   printerStatus,
   onOpenPrinterModal,
+  onOpenSettingsModal,
+  onOpenAuthModal,
+  onOpenBackupModal,
+  currentUser,
   runtimeEnv
 }) => {
   return (
@@ -41,14 +55,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               </div>
               <div className="flex items-center gap-2 text-xs text-slate-400">
-                <span className="flex items-center gap-1">
-                  <HardDrive className="w-3 h-3 text-emerald-400" />
-                  Dexie.js (Offline)
+                <span className="flex items-center gap-1 text-cyan-400">
+                  <CloudCheck className="w-3 h-3" />
+                  Firestore Sync
                 </span>
                 <span>•</span>
-                <span className="flex items-center gap-1 text-slate-300">
-                  <Cpu className="w-3 h-3 text-cyan-400" />
-                  Target: Linux & Android
+                <span className="flex items-center gap-1 text-slate-400">
+                  <HardDrive className="w-3 h-3 text-emerald-400" />
+                  Dexie (Offline)
                 </span>
               </div>
             </div>
@@ -105,21 +119,65 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </nav>
 
-          {/* Printer Status & Quick Action */}
+          {/* Quick Actions: Backup, Settings, Printer & Login Status */}
           <div className="flex items-center gap-2.5">
+            {/* Full Backup & Export/Import Button */}
+            <button
+              onClick={onOpenBackupModal}
+              title="Pusat Ekspor & Impor Data (Backup & Restore)"
+              className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-cyan-400 hover:text-white transition"
+            >
+              <Database className="w-4 h-4" />
+            </button>
+
+            {/* Settings Button */}
+            <button
+              onClick={onOpenSettingsModal}
+              title="Pengaturan Toko & Struk Printer Thermal"
+              className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+
+            {/* Printer Status Pill */}
             <button
               onClick={onOpenPrinterModal}
               title="Konfigurasi Printer 58mm"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-800 text-xs text-slate-300 hover:text-white transition-colors"
+              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-800 text-xs text-slate-300 hover:text-white transition-colors"
             >
-              <span className={`w-2 h-2 rounded-full ${printerStatus.connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              <span className={`w-2 h-2 rounded-full ${printerStatus.connected ? 'bg-emerald-400 animate-pulse' : 'bg-cyan-400'}`} />
               <Printer className="w-3.5 h-3.5 text-slate-400" />
-              <span className="hidden sm:inline">
+              <span className="hidden md:inline font-mono text-[11px]">
                 {printerStatus.deviceName || (printerStatus.connected ? 'Printer Siap' : 'Simulator 58mm')}
               </span>
             </button>
 
-            <div className="px-2.5 py-1 rounded-md text-[11px] font-mono uppercase bg-slate-800 text-cyan-400 border border-slate-700">
+            {/* User Login Status Button */}
+            <button
+              onClick={onOpenAuthModal}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition ${
+                currentUser
+                  ? 'bg-slate-800/90 border-slate-700 text-emerald-300 hover:bg-slate-800'
+                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+              }`}
+            >
+              {currentUser?.photoURL ? (
+                <img
+                  src={currentUser.photoURL}
+                  alt={currentUser.displayName || 'Kasir'}
+                  className="w-4 h-4 rounded-full object-cover"
+                />
+              ) : currentUser ? (
+                <UserIcon className="w-3.5 h-3.5 text-emerald-400" />
+              ) : (
+                <LogIn className="w-3.5 h-3.5 text-emerald-400" />
+              )}
+              <span className="max-w-[100px] truncate">
+                {currentUser?.displayName ? currentUser.displayName.split(' ')[0] : 'Masuk'}
+              </span>
+            </button>
+
+            <div className="hidden lg:block px-2.5 py-1 rounded-md text-[11px] font-mono uppercase bg-slate-800 text-cyan-400 border border-slate-700">
               {runtimeEnv}
             </div>
           </div>
@@ -162,6 +220,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Printer className="w-4 h-4" />
             Printer
+          </button>
+          <button
+            onClick={onOpenBackupModal}
+            className="flex flex-col items-center gap-1 text-xs py-1 px-2 rounded text-cyan-400 hover:text-white"
+          >
+            <Database className="w-4 h-4" />
+            Data
+          </button>
+          <button
+            onClick={onOpenSettingsModal}
+            className="flex flex-col items-center gap-1 text-xs py-1 px-2 rounded text-slate-400 hover:text-white"
+          >
+            <Settings className="w-4 h-4" />
+            Atur
           </button>
         </div>
       </div>

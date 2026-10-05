@@ -2,8 +2,8 @@ import Dexie, { type Table } from 'dexie';
 import { Product, Transaction, StoreSettings } from '../types';
 
 export class KasirProDatabase extends Dexie {
-  products!: Table<Product, number>;
-  transactions!: Table<Transaction, number>;
+  products!: Table<Product, any>;
+  transactions!: Table<Transaction, any>;
   settings!: Table<StoreSettings & { id: string }, string>;
 
   constructor() {

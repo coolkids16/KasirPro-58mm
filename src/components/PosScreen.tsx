@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Product, CartItem, PaymentMethod, Transaction, StoreSettings } from '../types';
 import { db } from '../db/db';
+import { saveTransactionToFirestore, saveProductToFirestore } from '../services/firebase';
 import { formatRupiah } from '../utils/escpos';
 
 interface PosScreenProps {
@@ -40,9 +41,15 @@ export const PosScreen: React.FC<PosScreenProps> = ({
   const [itemNoteModal, setItemNoteModal] = useState<{ index: number; text: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
-  // Extract unique categories
+  // Extract unique categories (including custom categories)
   const categories = useMemo(() => {
     const set = new Set<string>();
+    try {
+      const saved = localStorage.getItem('kasirpro_custom_categories');
+      if (saved) {
+        JSON.parse(saved).forEach((c: string) => set.add(c));
+      }
+    } catch (e) {}
     products.forEach(p => {
       if (p.category) set.add(p.category);
     });
@@ -192,19 +199,34 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       const txId = await db.transactions.add(newTransaction);
       newTransaction.id = txId;
 
-      // 2. Reduce product stock in Dexie
+      // 2. Reduce product stock in Dexie & sync to Firestore
       for (const item of cart) {
         if (item.product.id) {
           const newStock = Math.max(0, item.product.stock - item.quantity);
           await db.products.update(item.product.id, { stock: newStock });
+          try {
+            await saveProductToFirestore({
+              ...item.product,
+              stock: newStock
+            });
+          } catch (e) {
+            // Offline fallback
+          }
         }
       }
 
-      // 3. Trigger receipt modal and callback
+      // 3. Sync transaction to Firebase Firestore
+      try {
+        await saveTransactionToFirestore(newTransaction);
+      } catch (e) {
+        console.warn('Saved transaction offline only:', e);
+      }
+
+      // 4. Trigger receipt modal and callback
       onTransactionComplete(newTransaction);
       onRefreshProducts();
 
-      // 4. Reset Cart
+      // 5. Reset Cart
       clearCart();
     } catch (err) {
       console.error('Checkout error:', err);

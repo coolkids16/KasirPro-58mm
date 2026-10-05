@@ -9,7 +9,8 @@ Aplikasi Point of Sale (POS) kasir offline-first berkinerja tinggi yang dirancan
 - **Frontend / UI Core**: React (TypeScript) + Vite + Tailwind CSS (100% *shared codebase*).
 - **Desktop Wrapper (Linux)**: **Tauri** (menggunakan WebKit2GTK native webview dan backend Rust ultra-ringan dengan konsumsi RAM < 35MB).
 - **Mobile Wrapper (Android)**: **Capacitor** (akses native hardware, Bluetooth, dan Android SDK).
-- **Database Lokal (Offline-first)**: **Dexie.js** (wrapper IndexedDB berkinerja tinggi tanpa ketergantungan server).
+- **Cloud Database & Auth**: **Firebase Firestore & Authentication** (sinkronisasi cloud katalog produk, riwayat penjualan, profil kasir, dan pengaturan struk).
+- **Database Lokal (Offline-first)**: **Dexie.js** (IndexedDB lokal yang menjaga kasir tetap beroperasi normal saat offline).
 - **Package Manager & Runtime**: **Bun** (cepat, hemat resource, pengganti `npm` dan `npx` via `bunx`).
 - **Pencetakan Struk**: **ESC/POS Binary Encoder** khusus lebar 58mm (32 karakter kolom per baris).
 
@@ -294,3 +295,24 @@ bunx cap sync android
 # 3. Buka proyek di Android Studio untuk dijalankan ke HP atau build APK
 bunx cap open android
 ```
+
+---
+
+## 7. Pusat Cadangan, Ekspor, dan Impor Data Menyeluruh
+
+Aplikasi menyediakan modul ekspor dan impor data menyeluruh di `src/utils/exportImport.ts` dan `src/components/DataBackupModal.tsx`:
+
+1. **Cadangan Penuh (Full Backup JSON)**:
+   - Mengemas seluruh koleksi Produk, Sisa Stok, Riwayat Transaksi Penjualan, dan Pengaturan Toko ke dalam 1 file JSON bertanda waktu (*timestamped*).
+2. **Ekspor Produk & Stok**:
+   - Format **CSV (Excel/Spreadsheet)**: Dapat langsung dibuka di Microsoft Excel atau Google Sheets.
+   - Format **JSON**: Untuk integrasi programatis.
+3. **Ekspor Riwayat Penjualan**:
+   - Format **CSV (Laporan Penjualan)**: Rincian invoice, tanggal, kasir, metode pembayaran, subtotal, diskon, pajak, dan omzet total.
+   - Format **JSON**: Struktur array transaksi lengkap.
+4. **Impor Fleksibel (Restore Data)**:
+   - Mendukung berkas cadangan JSON dan file katalog Excel `.csv`.
+   - Mode **Gabungkan (Merge)**: Menambahkan item baru tanpa menghapus data lama.
+   - Mode **Timpa Semua (Replace)**: Menggantikan seluruh data sistem dengan file backup.
+   - Data yang diimpor otomatis tersinkronisasi ke **Dexie.js (IndexedDB lokal)** dan **Firebase Firestore (Cloud)** secara *batch*.
+

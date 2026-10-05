@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User account and profile for cashier and store manager",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email", "description": "Email address" },
+        "displayName": { "type": "string", "description": "Display name of user" },
+        "photoURL": { "type": "string", "description": "Profile avatar URL" },
+        "role": { "type": "string", "enum": ["cashier", "admin"], "description": "User permission role" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Store inventory product item",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100, "description": "Product title" },
+        "sku": { "type": "string", "maxLength": 30, "description": "Stock keeping unit" },
+        "price": { "type": "number", "description": "Product selling price" },
+        "stock": { "type": "number", "description": "Available stock quantity" },
+        "category": { "type": "string", "maxLength": 50, "description": "Category name" },
+        "barcode": { "type": "string", "maxLength": 50, "description": "Optional barcode" },
+        "color": { "type": "string", "maxLength": 20, "description": "Accent label color hex" },
+        "description": { "type": "string", "maxLength": 250, "description": "Product details" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last updated timestamp" }
+      },
+      "required": ["name", "sku", "price", "stock", "category"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Recorded POS sales transaction receipt",
+      "type": "object",
+      "properties": {
+        "invoiceNumber": { "type": "string", "maxLength": 50, "description": "Unique receipt invoice number" },
+        "timestamp": { "type": "number", "description": "Epoch timestamp of checkout" },
+        "items": { "type": "array", "description": "Purchased items with quantity and unit price" },
+        "subtotal": { "type": "number", "description": "Subtotal amount before discount/tax" },
+        "discount": { "type": "number", "description": "Discount deduction" },
+        "tax": { "type": "number", "description": "Tax addition" },
+        "total": { "type": "number", "description": "Final total amount" },
+        "paidAmount": { "type": "number", "description": "Tendered amount" },
+        "changeAmount": { "type": "number", "description": "Calculated change amount" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "qris", "transfer"], "description": "Payment type" },
+        "cashierName": { "type": "string", "maxLength": 50, "description": "Cashier on duty name" },
+        "cashierId": { "type": "string", "description": "Cashier UID" },
+        "notes": { "type": "string", "maxLength": 200, "description": "Optional transaction notes" }
+      },
+      "required": ["invoiceNumber", "timestamp", "items", "total", "paidAmount", "paymentMethod"]
+    },
+    "StoreSettings": {
+      "title": "StoreSettings",
+      "description": "Store profile and 58mm thermal receipt printer configuration",
+      "type": "object",
+      "properties": {
+        "storeName": { "type": "string", "maxLength": 50, "description": "Store name printed on receipt header" },
+        "address": { "type": "string", "maxLength": 120, "description": "Store street address" },
+        "phone": { "type": "string", "maxLength": 30, "description": "Customer service telephone number" },
+        "receiptHeader": { "type": "string", "maxLength": 100, "description": "Custom header message above items" },
+        "receiptFooter": { "type": "string", "maxLength": 150, "description": "Footer message on receipt bottom" },
+        "paperWidthChars": { "type": "number", "description": "Columns width, standard 32 chars for 58mm" },
+        "currencyPrefix": { "type": "string", "maxLength": 10, "description": "Currency prefix e.g. Rp" },
+        "enableTax": { "type": "boolean", "description": "Whether tax calculation is enabled" },
+        "taxRate": { "type": "number", "description": "Tax percentage e.g. 10%" },
+        "cashierName": { "type": "string", "maxLength": 50, "description": "Default cashier name" },
+        "linuxDevicePath": { "type": "string", "maxLength": 50, "description": "Thermal printer port e.g. /dev/usb/lp0" },
+        "autoCut": { "type": "boolean", "description": "Whether to send auto-cut command after print" },
+        "autoDrawer": { "type": "boolean", "description": "Whether to send kick drawer pulse on cash sale" }
+      },
+      "required": ["storeName", "paperWidthChars", "currencyPrefix"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "User profiles and permission records"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "Product" },
+      "description": "Store inventory products catalog"
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "Transaction" },
+      "description": "Sales history transactions"
+    },
+    "/settings/{settingsId}": {
+      "schema": { "$ref": "StoreSettings" },
+      "description": "Store and thermal printer configurations"
+    }
+  }
+}

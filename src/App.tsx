@@ -1,13 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { User as FirebaseUser } from 'firebase/auth';
 import { Navbar } from './components/Navbar';
 import { PosScreen } from './components/PosScreen';
 import { ProductManagement } from './components/ProductManagement';
 import { TransactionHistory } from './components/TransactionHistory';
 import { PrinterTester } from './components/PrinterTester';
 import { ReceiptModal } from './components/ReceiptModal';
+import { AuthModal } from './components/AuthModal';
+import { SettingsModal } from './components/SettingsModal';
+import { DataBackupModal } from './components/DataBackupModal';
 import { Product, Transaction, StoreSettings, PrinterDeviceStatus } from './types';
 import { db, initializeDatabase, DEFAULT_SETTINGS } from './db/db';
 import { printerService } from './services/printerService';
+import { 
+  subscribeToAuthState, 
+  subscribeProducts, 
+  subscribeStoreSettings, 
+  validateFirestoreConnection,
+  seedProductsIfEmpty 
+} from './services/firebase';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'pos' | 'products' | 'transactions' | 'printer'>('pos');
@@ -16,20 +27,26 @@ export default function App() {
   const [printerStatus, setPrinterStatus] = useState<PrinterDeviceStatus>(printerService.getStatus());
   const [currentReceiptTx, setCurrentReceiptTx] = useState<Transaction | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [runtimeEnv, setRuntimeEnv] = useState<'tauri' | 'capacitor' | 'browser'>('browser');
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Load products & settings from Dexie.js IndexedDB
-  const refreshProducts = useCallback(async () => {
+  // Load products & settings from Dexie.js IndexedDB for offline resilience
+  const refreshProductsLocal = useCallback(async () => {
     try {
       const list = await db.products.toArray();
-      setProducts(list);
+      if (list.length > 0) {
+        setProducts(list);
+      }
     } catch (err) {
       console.error('Failed to load products from Dexie:', err);
     }
   }, []);
 
-  const loadSettings = useCallback(async () => {
+  const loadSettingsLocal = useCallback(async () => {
     try {
       const s = await db.settings.get('main');
       if (s) {
@@ -40,12 +57,13 @@ export default function App() {
     }
   }, []);
 
+  // 1. Initial boot: local database, hardware detection, connection test
   useEffect(() => {
     async function boot() {
       setIsLoading(true);
       await initializeDatabase();
-      await refreshProducts();
-      await loadSettings();
+      await refreshProductsLocal();
+      await loadSettingsLocal();
 
       const env = printerService.getRuntimeEnv();
       setRuntimeEnv(env);
@@ -64,10 +82,69 @@ export default function App() {
         setPrinterStatus(printerService.getStatus());
       }
 
+      // Test firestore connection
+      await validateFirestoreConnection();
+
       setIsLoading(false);
     }
     boot();
-  }, [refreshProducts, loadSettings, settings.linuxDevicePath]);
+  }, [refreshProductsLocal, loadSettingsLocal, settings.linuxDevicePath]);
+
+  // 2. Listen to Firebase Authentication State
+  useEffect(() => {
+    const unsubscribeAuth = subscribeToAuthState(async (user) => {
+      setCurrentUser(user);
+      if (user) {
+        // When authenticated, check if products in Firestore exist, otherwise seed
+        try {
+          await seedProductsIfEmpty();
+        } catch (e) {
+          // offline or permission
+        }
+      }
+    });
+
+    return () => unsubscribeAuth();
+  }, []);
+
+  // 3. Real-time sync with Firebase Firestore for Products & Settings
+  useEffect(() => {
+    // Sync products from Firestore
+    const unsubProducts = subscribeProducts(
+      (firestoreProducts) => {
+        setProducts(firestoreProducts || []);
+        // Mirror to Dexie for offline cache
+        db.products.clear().then(() => {
+          if (firestoreProducts && firestoreProducts.length > 0) {
+            db.products.bulkAdd(firestoreProducts);
+          }
+        }).catch(console.warn);
+      },
+      () => {
+        // Fallback to local Dexie
+        refreshProductsLocal();
+      }
+    );
+
+    // Sync store settings from Firestore
+    const unsubSettings = subscribeStoreSettings(
+      (firestoreSettings) => {
+        if (firestoreSettings) {
+          setSettings(firestoreSettings);
+          printerService.setDevicePath(firestoreSettings.linuxDevicePath || '/dev/usb/lp0');
+          db.settings.put({ ...firestoreSettings, id: 'main' }).catch(console.warn);
+        }
+      },
+      () => {
+        loadSettingsLocal();
+      }
+    );
+
+    return () => {
+      unsubProducts();
+      unsubSettings();
+    };
+  }, [refreshProductsLocal, loadSettingsLocal]);
 
   // When cashier completes a transaction
   const handleTransactionComplete = (tx: Transaction) => {
@@ -81,6 +158,12 @@ export default function App() {
     setIsReceiptModalOpen(true);
   };
 
+  // Refresh data callback when import completes
+  const handleDataImported = () => {
+    refreshProductsLocal();
+    loadSettingsLocal();
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* Top Navbar */}
@@ -89,6 +172,10 @@ export default function App() {
         setActiveTab={setActiveTab}
         printerStatus={printerStatus}
         onOpenPrinterModal={() => setActiveTab('printer')}
+        onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onOpenBackupModal={() => setIsBackupModalOpen(true)}
+        currentUser={currentUser}
         runtimeEnv={runtimeEnv}
       />
 
@@ -97,7 +184,7 @@ export default function App() {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="w-10 h-10 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mb-4" />
-            <p className="text-sm text-slate-400 font-mono">Memuat Database Offline (Dexie.js)...</p>
+            <p className="text-sm text-slate-400 font-mono">Memuat KasirPro & Firebase Firestore...</p>
           </div>
         ) : (
           <>
@@ -106,14 +193,15 @@ export default function App() {
                 products={products}
                 settings={settings}
                 onTransactionComplete={handleTransactionComplete}
-                onRefreshProducts={refreshProducts}
+                onRefreshProducts={refreshProductsLocal}
               />
             )}
 
             {activeTab === 'products' && (
               <ProductManagement
                 products={products}
-                onRefreshProducts={refreshProducts}
+                onRefreshProducts={refreshProductsLocal}
+                onOpenBackupModal={() => setIsBackupModalOpen(true)}
               />
             )}
 
@@ -121,6 +209,7 @@ export default function App() {
               <TransactionHistory
                 settings={settings}
                 onSelectTransactionToPrint={handleSelectTransactionToPrint}
+                onOpenBackupModal={() => setIsBackupModalOpen(true)}
               />
             )}
 
@@ -148,6 +237,31 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Authentication / Login Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={currentUser}
+      />
+
+      {/* Store and Printer Settings Modal */}
+      <SettingsModal
+        settings={settings}
+        onUpdateSettings={(newSettings) => setSettings(newSettings)}
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        onOpenBackupModal={() => setIsBackupModalOpen(true)}
+      />
+
+      {/* Comprehensive Export & Import Modal */}
+      <DataBackupModal
+        isOpen={isBackupModalOpen}
+        onClose={() => setIsBackupModalOpen(false)}
+        products={products}
+        settings={settings}
+        onDataImported={handleDataImported}
+      />
     </div>
   );
 }
