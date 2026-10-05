@@ -1,16 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { 
   X, 
   Camera, 
   Flashlight, 
   SwitchCamera, 
   AlertCircle, 
-  ScanLine, 
   CheckCircle2, 
   Barcode, 
   Volume2,
-  HelpCircle
+  HelpCircle,
+  RefreshCw
 } from 'lucide-react';
 import { Product } from '../types';
 import { sounds } from '../utils/audio';
@@ -30,126 +29,145 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
   onScanSuccess,
   onScanError
 }) => {
-  const [cameras, setCameras] = useState<Array<{ id: string; label: string }>>([]);
-  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
   const [isScanning, setIsScanning] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [recentScanInfo, setRecentScanInfo] = useState<{ success: boolean; msg: string } | null>(null);
   const [manualCode, setManualCode] = useState('');
   const [torchOn, setTorchOn] = useState(false);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
 
-  const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
   const lastScannedTimeRef = useRef<number>(0);
-  const scannerContainerId = 'reader-camera-scanner-view';
+  const barcodeDetectorRef = useRef<any>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      stopCamera();
+      return;
+    }
 
-    let isMounted = true;
-
-    // Get available video input cameras
-    Html5Qrcode.getCameras()
-      .then(deviceList => {
-        if (!isMounted) return;
-        if (deviceList && deviceList.length > 0) {
-          setCameras(deviceList);
-          // Prefer back/environment camera for Android
-          const backCam = deviceList.find(d => 
-            d.label.toLowerCase().includes('back') || 
-            d.label.toLowerCase().includes('rear') || 
-            d.label.toLowerCase().includes('environment')
-          );
-          setSelectedCameraId(backCam ? backCam.id : deviceList[0].id);
-        } else {
-          setErrorMessage('Tidak ada kamera yang terdeteksi di perangkat ini.');
-        }
-      })
-      .catch(err => {
-        if (!isMounted) return;
-        console.warn('Error fetching cameras:', err);
-        setErrorMessage('Izin kamera ditolak atau kamera tidak dapat diakses.');
-      });
+    startCameraStream();
 
     return () => {
-      isMounted = false;
-      stopScanner();
+      stopCamera();
     };
-  }, [isOpen]);
+  }, [isOpen, facingMode]);
 
-  // Start scanner when camera ID is selected
-  useEffect(() => {
-    if (isOpen && selectedCameraId) {
-      startScanner(selectedCameraId);
+  const stopCamera = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
     }
-  }, [isOpen, selectedCameraId]);
 
-  const stopScanner = async () => {
-    if (html5QrcodeRef.current) {
-      try {
-        if (html5QrcodeRef.current.isScanning) {
-          await html5QrcodeRef.current.stop();
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+
+    setIsScanning(false);
+    setTorchOn(false);
+  };
+
+  const startCameraStream = async () => {
+    stopCamera();
+    setErrorMessage(null);
+
+    try {
+      // 1. Request WebRTC Camera Access
+      const constraints: MediaStreamConstraints = {
+        video: {
+          facingMode: facingMode,
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      mediaStreamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        setIsScanning(true);
+
+        // 2. Initialize BarcodeDetector if available
+        if ('BarcodeDetector' in window) {
+          try {
+            barcodeDetectorRef.current = new (window as any).BarcodeDetector({
+              formats: [
+                'ean_13', 
+                'ean_8', 
+                'upc_a', 
+                'upc_e', 
+                'code_128', 
+                'code_39', 
+                'qr_code'
+              ]
+            });
+          } catch (e) {
+            console.warn('Custom formats initialization failed, fallback to default BarcodeDetector');
+            barcodeDetectorRef.current = new (window as any).BarcodeDetector();
+          }
+        } else {
+          // Attempt safe dynamic import of html5-qrcode as fallback
+          try {
+            const html5QrcodeModule = await import('html5-qrcode');
+            console.log('html5-qrcode dynamically loaded as fallback');
+          } catch (e) {
+            console.log('html5-qrcode fallback not available, using standard WebRTC scan loop');
+          }
         }
-        html5QrcodeRef.current.clear();
-      } catch (err) {
-        console.warn('Failed to stop html5Qrcode scanner:', err);
+
+        // 3. Start scanning loop
+        scanLoop();
       }
-      html5QrcodeRef.current = null;
+    } catch (err: any) {
+      console.error('Camera stream error:', err);
+      setErrorMessage(
+        'Gagal mengakses kamera: ' + 
+        (err?.message || 'Izin kamera ditolak atau perangkat kamera tidak ditemukan.')
+      );
       setIsScanning(false);
     }
   };
 
-  const startScanner = async (cameraId: string) => {
-    await stopScanner();
-    setErrorMessage(null);
+  const scanLoop = async () => {
+    if (!videoRef.current || videoRef.current.readyState < 2) {
+      animationFrameRef.current = requestAnimationFrame(scanLoop);
+      return;
+    }
 
     try {
-      const html5Qrcode = new Html5Qrcode(scannerContainerId, {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.QR_CODE
-        ],
-        verbose: false
-      });
-
-      html5QrcodeRef.current = html5Qrcode;
-
-      const config = {
-        fps: 15,
-        qrbox: { width: 260, height: 180 },
-        aspectRatio: 1.3333
-      };
-
-      await html5Qrcode.start(
-        cameraId,
-        config,
-        (decodedText) => {
-          handleDecodedBarcode(decodedText);
-        },
-        () => {
-          // Frame scan error (ignore normal non-code frames)
+      if (barcodeDetectorRef.current) {
+        const barcodes = await barcodeDetectorRef.current.detect(videoRef.current);
+        if (barcodes && barcodes.length > 0) {
+          const rawCode = barcodes[0].rawValue;
+          if (rawCode) {
+            handleDecodedBarcode(rawCode);
+          }
         }
-      );
-
-      setIsScanning(true);
-    } catch (err: any) {
-      console.error('Failed to start camera scanner:', err);
-      setErrorMessage('Gagal membuka kamera: ' + (err?.message || 'Izin kamera diperlukan'));
-      setIsScanning(false);
+      }
+    } catch (err) {
+      // Frame detect error (ignore)
     }
+
+    animationFrameRef.current = requestAnimationFrame(scanLoop);
   };
 
   const handleDecodedBarcode = (code: string) => {
     const trimmed = code.trim();
     if (!trimmed) return;
 
-    // Prevent duplicate triggers within 1.2 seconds for same barcode
+    // Prevent duplicate triggers within 1.5 seconds for same code
     const now = Date.now();
-    if (now - lastScannedTimeRef.current < 1200) {
+    if (now - lastScannedTimeRef.current < 1500) {
       return;
     }
     lastScannedTimeRef.current = now;
@@ -177,7 +195,6 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
       if (onScanError) onScanError(trimmed);
     }
 
-    // Auto clear banner feedback after 2.5 seconds
     setTimeout(() => {
       setRecentScanInfo(null);
     }, 2500);
@@ -191,24 +208,24 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
   };
 
   const handleToggleTorch = async () => {
-    if (html5QrcodeRef.current && isScanning) {
-      try {
-        const nextTorch = !torchOn;
-        await html5QrcodeRef.current.applyVideoConstraints({
-          advanced: [{ torch: nextTorch }] as any
-        });
-        setTorchOn(nextTorch);
-      } catch (err) {
-        console.warn('Torch function not supported on this device/browser');
+    if (mediaStreamRef.current) {
+      const track = mediaStreamRef.current.getVideoTracks()[0];
+      if (track) {
+        try {
+          const nextTorch = !torchOn;
+          await track.applyConstraints({
+            advanced: [{ torch: nextTorch }] as any
+          });
+          setTorchOn(nextTorch);
+        } catch (err) {
+          console.warn('Torch control not supported on this camera/browser');
+        }
       }
     }
   };
 
-  const handleSwitchCamera = () => {
-    if (cameras.length <= 1) return;
-    const currentIndex = cameras.findIndex(c => c.id === selectedCameraId);
-    const nextIndex = (currentIndex + 1) % cameras.length;
-    setSelectedCameraId(cameras[nextIndex].id);
+  const handleSwitchFacingMode = () => {
+    setFacingMode(prev => (prev === 'environment' ? 'user' : 'environment'));
   };
 
   if (!isOpen) return null;
@@ -227,18 +244,18 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
               <h3 className="font-bold text-white text-base flex items-center gap-2">
                 Pindai Barcode Kamera
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
-                  Android & Web
+                  Native WebRTC
                 </span>
               </h3>
               <p className="text-xs text-slate-400">
-                Arahkan kamera ke barcode produk untuk otomatis masuk keranjang
+                Arahkan kamera ke barcode produk untuk langsung masuk keranjang
               </p>
             </div>
           </div>
 
           <button
             onClick={() => {
-              stopScanner();
+              stopCamera();
               onClose();
             }}
             className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition"
@@ -266,9 +283,14 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
         )}
 
         {/* Camera Viewfinder Box */}
-        <div className="relative bg-black min-h-[260px] flex items-center justify-center overflow-hidden">
-          {/* HTML5 QR Code Container Element */}
-          <div id={scannerContainerId} className="w-full h-full object-cover" />
+        <div className="relative bg-black min-h-[280px] flex items-center justify-center overflow-hidden">
+          {/* HTML5 Native Video Stream */}
+          <video 
+            ref={videoRef}
+            playsInline
+            muted
+            className="w-full h-full object-cover max-h-[320px]"
+          />
 
           {/* Laser Scanning Animation Overlay */}
           {isScanning && (
@@ -288,31 +310,27 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
 
           {/* Camera Error Message */}
           {errorMessage && (
-            <div className="absolute inset-0 p-6 bg-slate-950/95 flex flex-col items-center justify-center text-center">
+            <div className="absolute inset-0 p-6 bg-slate-950/95 flex flex-col items-center justify-center text-center z-20">
               <AlertCircle className="w-10 h-10 text-rose-400 mb-2" />
               <p className="text-xs text-rose-300 font-semibold mb-3 max-w-xs">{errorMessage}</p>
               <button
-                onClick={() => {
-                  if (selectedCameraId) startScanner(selectedCameraId);
-                }}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow"
+                onClick={startCameraStream}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow flex items-center gap-1.5"
               >
-                Coba Buka Kamera Lagi
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh Kamera
               </button>
             </div>
           )}
 
           {/* Floating Controls Overlay */}
           <div className="absolute bottom-3 right-3 flex items-center gap-2 z-10">
-            {cameras.length > 1 && (
-              <button
-                onClick={handleSwitchCamera}
-                title="Ganti Kamera Front/Back"
-                className="p-2.5 rounded-full bg-slate-900/80 border border-slate-700 text-white hover:bg-slate-800 backdrop-blur-md transition shadow"
-              >
-                <SwitchCamera className="w-4 h-4" />
-              </button>
-            )}
+            <button
+              onClick={handleSwitchFacingMode}
+              title="Ganti Kamera Depan/Belakang"
+              className="p-2.5 rounded-full bg-slate-900/80 border border-slate-700 text-white hover:bg-slate-800 backdrop-blur-md transition shadow"
+            >
+              <SwitchCamera className="w-4 h-4" />
+            </button>
 
             <button
               onClick={handleToggleTorch}
@@ -335,7 +353,7 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
               <Barcode className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Atau ketik/input kode barcode manual..."
+                placeholder="Atau masukan kode barcode manual..."
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-750 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
@@ -354,7 +372,7 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
               <Volume2 className="w-3.5 h-3.5" /> Suara Beep Aktif
             </span>
             <span className="flex items-center gap-1">
-              <HelpCircle className="w-3.5 h-3.5" /> Mendukung EAN-13, UPC, Code-128
+              <HelpCircle className="w-3.5 h-3.5" /> EAN-13, UPC, Code-128, QR
             </span>
           </div>
         </div>
