@@ -146,30 +146,31 @@ export default function App() {
 
   // 2. Listen to Firebase Authentication State
   useEffect(() => {
-    const unsubscribeAuth = subscribeToAuthState(async (user) => {
+    const unsubscribeAuth = subscribeToAuthState((user) => {
       setCurrentUser(user);
       if (user) {
-        // When authenticated, check if products in Firestore exist, otherwise seed
-        try {
-          await seedProductsIfEmpty();
-        } catch (e) {
-          // offline or permission
-        }
-
-        // Also ensure current local store settings are saved to Firestore
-        try {
-          const currentSettings = await db.settings.get('main');
-          if (currentSettings) {
-            await saveStoreSettingsToFirestore(currentSettings);
-          } else {
-            const local = localStorage.getItem('kasirpro_settings');
-            if (local) {
-              await saveStoreSettingsToFirestore(JSON.parse(local));
-            }
+        // Run database seeding & settings sync in background (non-blocking)
+        (async () => {
+          try {
+            await seedProductsIfEmpty();
+          } catch (e) {
+            console.warn('Seeding products skipped/offline:', e);
           }
-        } catch (e) {
-          // ignore
-        }
+
+          try {
+            const currentSettings = await db.settings.get('main');
+            if (currentSettings) {
+              await saveStoreSettingsToFirestore(currentSettings);
+            } else {
+              const local = localStorage.getItem('kasirpro_settings');
+              if (local) {
+                await saveStoreSettingsToFirestore(JSON.parse(local));
+              }
+            }
+          } catch (e) {
+            console.warn('Syncing settings skipped/offline:', e);
+          }
+        })();
       }
     });
 

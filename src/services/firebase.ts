@@ -12,7 +12,7 @@ import {
   User as FirebaseUser
 } from 'firebase/auth';
 import { 
-  getFirestore, 
+  initializeFirestore, 
   collection, 
   doc, 
   getDoc, 
@@ -37,9 +37,12 @@ import { INITIAL_PRODUCTS, DEFAULT_SETTINGS } from '../db/db';
 const app = initializeApp(firebaseConfig);
 
 // Connect to configured firestoreDatabaseId (or default database for custom personal Firebase project)
-export const db = (firebaseConfig as any).firestoreDatabaseId && (firebaseConfig as any).firestoreDatabaseId !== '(default)'
-  ? getFirestore(app, (firebaseConfig as any).firestoreDatabaseId)
-  : getFirestore(app);
+// Force HTTP Long Polling to completely bypass Tauri/WebKitGTK WebSocket sandbox restrictions on Linux/Android
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true
+}, (firebaseConfig as any).firestoreDatabaseId && (firebaseConfig as any).firestoreDatabaseId !== '(default)'
+  ? (firebaseConfig as any).firestoreDatabaseId
+  : undefined);
 
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
@@ -146,16 +149,26 @@ export async function registerWithEmailPassword(
     if (displayName.trim()) {
       await updateProfile(res.user, { displayName: displayName.trim() });
     }
-    // Sync to Firestore /users/{uid}
+    // Sync to Firestore /users/{uid} with 1.8s timeout protection
     const userRef = doc(db, 'users', res.user.uid);
-    await setDoc(userRef, {
-      uid: res.user.uid,
-      email: res.user.email,
-      displayName: displayName.trim() || 'Kasir',
-      photoURL: '',
-      role: 'cashier',
-      createdAt: new Date().toISOString()
-    }, { merge: true });
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout writing user doc')), 1800)
+      );
+      await Promise.race([
+        setDoc(userRef, {
+          uid: res.user.uid,
+          email: res.user.email,
+          displayName: displayName.trim() || 'Kasir',
+          photoURL: '',
+          role: 'cashier',
+          createdAt: new Date().toISOString()
+        }, { merge: true }),
+        timeoutPromise
+      ]);
+    } catch (e) {
+      console.warn('Syncing user profile to Firestore timed out or was offline:', e);
+    }
 
     return res.user;
   } catch (error: any) {
