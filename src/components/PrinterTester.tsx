@@ -328,7 +328,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
               Laboratorium & Format Struk 58mm
             </h2>
             <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-mono px-2 py-0.5 rounded-md font-bold">
-              Linux CachyOS
+              Linux OS
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
@@ -360,7 +360,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              Jalur device printer thermal di Linux CachyOS pada <code className="text-cyan-300 font-mono">/dev/usb/lp0</code>.
+              Jalur device printer thermal di Linux pada <code className="text-cyan-300 font-mono">/dev/usb/lp0</code>.
             </p>
           </div>
 
@@ -459,32 +459,40 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
         </div>
 
         <div className={`border p-5 rounded-2xl flex flex-col justify-between transition ${
-          selectedMethod === 'web_bluetooth' 
-            ? 'bg-slate-900 border-blue-500' 
+          selectedMethod === 'android_thermer' 
+            ? 'bg-slate-900 border-amber-500 shadow-md shadow-amber-500/10' 
             : 'bg-slate-900 border-slate-800'
         }`}>
           <div>
             <div className="flex items-center justify-between mb-3">
-              <span className="p-2.5 bg-blue-500/10 text-blue-400 rounded-xl">
-                <Bluetooth className="w-5 h-5" />
+              <span className="p-2.5 bg-amber-500/10 text-amber-400 rounded-xl">
+                <Printer className="w-5 h-5" />
               </span>
-              <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">
-                Android / BLE
+              <span className="text-[10px] font-mono bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-bold">
+                Rekomendasi Android
               </span>
             </div>
-            <h4 className="font-bold text-white text-sm">Bluetooth Wireless</h4>
+            <h4 className="font-bold text-white text-sm">Thermer App (Android)</h4>
             <p className="text-xs text-slate-400 mt-1">
-              Untuk printer thermal saku portabel Bluetooth di Android / Tablet Kasir.
+              Mengirim struk langsung ke printer Bluetooth/USB via aplikasi printer "Thermer" (Bluetooth Print) di Play Store.
             </p>
           </div>
 
           <button
-            onClick={handleConnectBluetooth}
-            disabled={loading}
-            className="mt-4 w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/20"
+            onClick={() => {
+              setSelectedMethod('android_thermer');
+              setTestResult({
+                success: true,
+                msg: 'Beralih ke cetak Thermer Android. Pastikan aplikasi Thermer terpasang dari Play Store di HP Anda!'
+              });
+            }}
+            className={`mt-4 w-full py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+              selectedMethod === 'android_thermer'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'bg-slate-800 hover:bg-slate-750 text-slate-300'
+            }`}
           >
-            <Bluetooth className="w-3.5 h-3.5" />
-            Cari Printer Bluetooth
+            {selectedMethod === 'android_thermer' ? '✓ Mode Aktif' : 'Pilih Thermer Android'}
           </button>
         </div>
 

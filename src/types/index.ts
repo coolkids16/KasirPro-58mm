@@ -58,6 +58,7 @@ export type PrinterConnectionType =
   | 'tauri_raw' 
   | 'web_bluetooth' 
   | 'web_serial' 
+  | 'android_thermer'
   | 'capacitor_bluetooth' 
   | 'browser_print';
 

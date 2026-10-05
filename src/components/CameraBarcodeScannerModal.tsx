@@ -124,9 +124,13 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
       }
     } catch (err: any) {
       console.error('Camera stream error:', err);
+      const isAndroid = /Android/i.test(navigator.userAgent);
       setErrorMessage(
         'Gagal mengakses kamera: ' + 
-        (err?.message || 'Izin kamera ditolak atau perangkat kamera tidak ditemukan.')
+        (err?.message || 'Izin kamera ditolak atau perangkat kamera tidak ditemukan.') +
+        (isAndroid 
+          ? '\n\n💡 Untuk Android App: Pastikan izin kamera telah diaktifkan di Pengaturan HP -> Aplikasi -> KasirPro -> Izin -> Kamera -> Izinkan.' 
+          : '')
       );
       setIsScanning(false);
     }

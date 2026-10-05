@@ -54,7 +54,7 @@ export async function invokeTauri<T>(cmd: string, args?: Record<string, any>): P
 }
 
 /**
- * Deteksi apakah runtime sedang berjalan di dalam desktop Tauri Linux / CachyOS
+ * Deteksi apakah runtime sedang berjalan di dalam desktop Tauri Linux
  */
 export function isTauriEnvironment(): boolean {
   if (typeof window === 'undefined') return false;
@@ -93,7 +93,7 @@ class ThermalPrinterService {
           writable: true,
           vendorId: '28e9',
           productId: '0289',
-          details: 'Printer Thermal 58mm di CachyOS (/dev/usb/lp0)'
+          details: 'Printer Thermal 58mm di Linux (/dev/usb/lp0)'
         }
       };
     }
@@ -151,7 +151,7 @@ class ThermalPrinterService {
       writable: true,
       vendorId: '28e9',
       productId: '0289',
-      details: 'Mode Simulasi Linux CachyOS: /dev/usb/lp0 siap (Vendor: 28e9, PID: 0289)'
+      details: 'Mode Simulasi Linux: /dev/usb/lp0 siap (Vendor: 28e9, PID: 0289)'
     };
     this.lastStatus.linuxInfo = simulatedInfo;
     return simulatedInfo;
@@ -313,6 +313,28 @@ class ThermalPrinterService {
   }
 
   /**
+   * 2.5 Cetak via Thermer / Bluetooth Print Android App (Deep Link / No Plugins)
+   */
+  async printViaThermer(data: Uint8Array): Promise<PrintResult> {
+    try {
+      let binaryString = '';
+      const len = data.byteLength;
+      for (let i = 0; i < len; i++) {
+        binaryString += String.fromCharCode(data[i]);
+      }
+      const base64Data = window.btoa(binaryString);
+      // Thermer / Bluetooth Print app custom URL scheme
+      window.location.href = `bluetoothprint://base64/${base64Data}`;
+      return {
+        success: true,
+        message: 'Dikirim ke aplikasi printer Thermer Android.'
+      };
+    } catch (err: any) {
+      throw new Error(err?.message || 'Gagal memproses cetak Thermer.');
+    }
+  }
+
+  /**
    * 3. Cetak via Web Serial API
    */
   async connectWebSerial(): Promise<PrinterDeviceStatus> {
@@ -427,6 +449,11 @@ class ThermalPrinterService {
     // 2. Web Bluetooth jika dipilih secara spesifik
     if (preferredMethod === 'web_bluetooth') {
       return await this.printViaWebBluetooth(binaryData);
+    }
+
+    // 2.5 Thermer Android App Link jika dipilih secara spesifik
+    if (preferredMethod === 'android_thermer') {
+      return await this.printViaThermer(binaryData);
     }
 
     // 3. Web Serial jika dipilih secara spesifik

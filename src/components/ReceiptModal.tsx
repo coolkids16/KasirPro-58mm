@@ -238,23 +238,15 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="w-full text-xs">
                 <button
-                  onClick={() => handlePrint('web_bluetooth')}
+                  onClick={() => handlePrint('android_thermer')}
                   disabled={isPrinting}
-                  className="p-2 bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl flex items-center justify-center gap-1.5 text-[11px] font-medium transition"
+                  className="w-full p-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl flex items-center justify-center gap-1.5 text-[11px] font-semibold transition"
+                  title="Cetak via aplikasi Thermer Android (Rekomendasi Utama untuk HP Android)"
                 >
-                  <Bluetooth className="w-3 h-3 text-blue-400" />
-                  Bluetooth (Android)
-                </button>
-
-                <button
-                  onClick={() => handlePrint('web_serial')}
-                  disabled={isPrinting}
-                  className="p-2 bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl flex items-center justify-center gap-1.5 text-[11px] font-medium transition"
-                >
-                  <Usb className="w-3 h-3 text-amber-400" />
-                  Web Serial (Browser)
+                  <Printer className="w-3.5 h-3.5 text-amber-400" />
+                  Thermer App (Android)
                 </button>
               </div>
             </div>
