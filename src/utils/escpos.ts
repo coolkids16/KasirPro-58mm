@@ -38,20 +38,64 @@ export function padSeparator(char = '-', width = 32): string {
 
 /**
  * Converts an image element or canvas into ESC/POS GS v 0 raster byte commands
- * for 58mm thermal printers (e.g. 240 dots max width, centered).
+ * for 58mm thermal printers with automatic bounding-box auto-crop (trimming empty top/bottom padding).
  */
 export function convertImageToEscPosRaster(
   imgElementOrCanvas: HTMLCanvasElement | HTMLImageElement,
   maxWidthDots = 240
 ): Uint8Array {
   try {
-    const canvas = document.createElement('canvas');
-    let width = imgElementOrCanvas.width || (imgElementOrCanvas as HTMLImageElement).naturalWidth || 200;
-    let height = imgElementOrCanvas.height || (imgElementOrCanvas as HTMLImageElement).naturalHeight || 200;
+    let origWidth = imgElementOrCanvas.width || (imgElementOrCanvas as HTMLImageElement).naturalWidth || 200;
+    let origHeight = imgElementOrCanvas.height || (imgElementOrCanvas as HTMLImageElement).naturalHeight || 200;
 
-    if (width <= 0 || height <= 0) return new Uint8Array(0);
+    if (origWidth <= 0 || origHeight <= 0) return new Uint8Array(0);
 
-    // Scale down if width exceeds maxWidthDots
+    // 1. Draw to temporary canvas to find non-white / non-transparent bounding box (Auto-Crop Top Space)
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = origWidth;
+    tempCanvas.height = origHeight;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return new Uint8Array(0);
+
+    tempCtx.drawImage(imgElementOrCanvas, 0, 0, origWidth, origHeight);
+    const rawData = tempCtx.getImageData(0, 0, origWidth, origHeight).data;
+
+    let minY = origHeight, maxY = 0, minX = origWidth, maxX = 0;
+    let foundPixel = false;
+
+    for (let y = 0; y < origHeight; y++) {
+      for (let x = 0; x < origWidth; x++) {
+        const idx = (y * origWidth + x) * 4;
+        const alpha = rawData[idx + 3];
+        const r = rawData[idx];
+        const g = rawData[idx + 1];
+        const b = rawData[idx + 2];
+        const luminance = alpha < 128 ? 255 : (0.299 * r + 0.587 * g + 0.114 * b);
+
+        // Non-white pixel threshold
+        if (luminance < 230) {
+          foundPixel = true;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+        }
+      }
+    }
+
+    // Determine crop dimensions
+    let cropX = 0, cropY = 0, cropW = origWidth, cropH = origHeight;
+    if (foundPixel && minY <= maxY && minX <= maxX) {
+      cropX = minX;
+      cropY = minY;
+      cropW = maxX - minX + 1;
+      cropH = maxY - minY + 1;
+    }
+
+    // Scale cropped image down to maxWidthDots
+    let width = cropW;
+    let height = cropH;
+
     if (width > maxWidthDots) {
       height = Math.round((height * maxWidthDots) / width);
       width = maxWidthDots;
@@ -61,6 +105,7 @@ export function convertImageToEscPosRaster(
     width = Math.floor(width / 8) * 8;
     if (width < 8) width = 8;
 
+    const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
 
@@ -71,8 +116,8 @@ export function convertImageToEscPosRaster(
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, width, height);
 
-    // Draw image
-    ctx.drawImage(imgElementOrCanvas, 0, 0, width, height);
+    // Draw tightly cropped artwork
+    ctx.drawImage(tempCanvas, cropX, cropY, cropW, cropH, 0, 0, width, height);
 
     const imgData = ctx.getImageData(0, 0, width, height);
     const pixels = imgData.data;
@@ -109,9 +154,6 @@ export function convertImageToEscPosRaster(
         rasterBytes.push(byteVal);
       }
     }
-
-    // Add trailing newline to advance paper past image
-    rasterBytes.push(LF);
 
     return new Uint8Array(rasterBytes);
   } catch (err) {
@@ -263,6 +305,20 @@ export class EscPosEncoder {
     return this;
   }
 
+  setLineSpacing(dots = 0): this {
+    if (dots === 0) {
+      this.buffer.push(ESC, 0x33, 0x00); // ESC 3 0
+    } else {
+      this.buffer.push(ESC, 0x33, dots);
+    }
+    return this;
+  }
+
+  resetLineSpacing(): this {
+    this.buffer.push(ESC, 0x32); // ESC 2 : Reset default line spacing (~30 dots)
+    return this;
+  }
+
   align(alignment: 'left' | 'center' | 'right'): this {
     const code = alignment === 'center' ? 1 : alignment === 'right' ? 2 : 0;
     this.buffer.push(ESC, 0x61, code); // ESC a n
@@ -275,20 +331,19 @@ export class EscPosEncoder {
   }
 
   doubleSize(enable: boolean): this {
-    this.buffer.push(GS, 0x21, enable ? 0x11 : 0x00); // GS ! n (0x11 = 2x height & 2x width)
+    this.buffer.push(GS, 0x21, enable ? 0x11 : 0x00); // GS ! n
     return this;
   }
 
   doubleHeight(enable: boolean): this {
-    this.buffer.push(GS, 0x21, enable ? 0x01 : 0x00); // GS ! n (0x01 = 2x height)
+    this.buffer.push(GS, 0x21, enable ? 0x01 : 0x00); // GS ! n
     return this;
   }
 
   text(str: string): this {
-    // Encode string to ASCII / CP437 bytes
     for (let i = 0; i < str.length; i++) {
       const code = str.charCodeAt(i);
-      this.buffer.push(code <= 255 ? code : 63); // Fallback to '?' for unsupported unicode
+      this.buffer.push(code <= 255 ? code : 63);
     }
     return this;
   }
@@ -322,7 +377,6 @@ export class EscPosEncoder {
 
   /**
    * Cash drawer kick-out pulse (Pins 2 & 5)
-   * Standard ESC p command: ESC p m t1 t2
    */
   kickDrawer(): this {
     this.buffer.push(ESC, 0x70, 0x00, 0x19, 0xfa);
@@ -330,20 +384,22 @@ export class EscPosEncoder {
   }
 
   /**
-   * Appends raw raster image bytes (GS v 0) to printer stream
+   * Appends raw raster image bytes (GS v 0) to printer stream with zero-gap line spacing
    */
   rasterImage(rasterBytes: Uint8Array): this {
     if (rasterBytes && rasterBytes.length > 0) {
+      this.setLineSpacing(0);
       for (let i = 0; i < rasterBytes.length; i++) {
         this.buffer.push(rasterBytes[i]);
       }
+      this.resetLineSpacing();
+      this.newline(1);
     }
     return this;
   }
 
   /**
    * Cut paper command (Full/Partial cut)
-   * GS V m n
    */
   cut(fullCut = false, feedCount = 1): this {
     if (feedCount > 0) {
@@ -364,7 +420,7 @@ export class EscPosEncoder {
 
 /**
  * Generate binary ESC/POS buffer for complete transaction receipt asynchronously
- * including custom store logo rasterization if logoUrl is provided!
+ * tight top margin & custom logo auto-crop.
  */
 export async function generateEscPosBinaryAsync(
   transaction: Transaction,
@@ -374,10 +430,10 @@ export async function generateEscPosBinaryAsync(
   const feedCount = settings.feedLines !== undefined ? settings.feedLines : 1;
   const encoder = new EscPosEncoder();
 
-  // 1. Buka Laci Kasir
+  // 1. Kick Cash Drawer
   encoder.kickDrawer();
 
-  // 2. Cetak Logo Kustom jika ada
+  // 2. Custom Logo (Tight zero-gap)
   if (settings.logoUrl) {
     try {
       const logoRasterBytes = await loadLogoRasterBytes(settings.logoUrl, 240);
@@ -493,7 +549,7 @@ export async function generateEscPosBinaryAsync(
 }
 
 /**
- * Synchronous wrapper for backwards compatibility
+ * Synchronous fallback
  */
 export function generateEscPosBinary(
   transaction: Transaction,
