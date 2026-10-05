@@ -151,22 +151,89 @@ Ganti file gambar di dalam folder `src-tauri/icons/`:
 
 ## 📱 BAGIAN 2: Panduan Setup & Build untuk Android (Capacitor APK)
 
+Capacitor digunakan untuk mengonversi kode React Vite KasirPro menjadi aplikasi Android (.APK) mandiri yang cepat dan andal.
+
+### 1. Inisialisasi Proyek Android dari Nol
+Jalankan langkah-langkah berikut di terminal proyek Anda:
+
 ```bash
-# 1. Pasang Capacitor Core & CLI
+# A. Instalasi Core & Platform Android Capacitor
 bun install @capacitor/core
 bun install -d @capacitor/cli @capacitor/android
 
-# 2. Inisialisasi konfigurasi Capacitor (cukup sekali di awal)
-bunx cap init "KasirPro 58mm" "com.kasirpro.pos" --web-dir "dist"
+# B. Inisialisasi konfigurasi Capacitor (cukup sekali di awal)
+bunx cap init "KasirPro" "com.kasirpro.pos" --web-dir "dist"
 
-# 3. Tambahkan platform Android
+# C. Tambahkan platform Android native
 bunx cap add android
+```
 
-# 4. Build web & sync ke Android
+---
+
+### 2. Atur Izin Kamera untuk Scanner Barcode (Sangat Penting!)
+Agar pemindai barcode kamera WebRTC dapat bekerja secara native di dalam WebView Android:
+
+1. Buka file: `android/app/src/main/AndroidManifest.xml`
+2. Tambahkan baris izin berikut di dalam tag `<manifest>` (letakkan sebelum tag `<application>`):
+   ```xml
+   <!-- Izin Kamera untuk Scanner Barcode -->
+   <uses-permission android:name="android.permission.CAMERA" />
+   <uses-feature android:name="android.hardware.camera" android:required="false" />
+   <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+   ```
+3. Simpan file tersebut.
+
+---
+
+### 3. Cara Mengganti Logo / Ikon Aplikasi Android
+
+Untuk mengubah logo aplikasi bawaan Capacitor menjadi logo kustom toko Anda, gunakan salah satu cara berikut:
+
+#### Cara A: Menggunakan Android Studio Image Asset Studio (Sangat Direkomendasikan)
+Cara ini adalah standar resmi Google untuk menghasilkan ikon adaptif (*adaptive icons*) yang rapi di semua versi Android (kotak, lingkaran, squircle).
+
+1. Buka proyek Android di Android Studio:
+   ```bash
+   bunx cap open android
+   ```
+2. Tunggu proses singkronisasi Gradle selesai.
+3. Di panel sebelah kiri (Project Navigation), klik kanan pada folder **`app`**, lalu pilih **`New` > `Image Asset`**.
+4. Pada jendela **Asset Studio**:
+   - **Icon Type**: Pilih `Launcher Icons (Adaptive and Legacy)`.
+   - **Name**: Biarkan tetap `ic_launcher`.
+   - **Source Asset (Foreground Layer)**: Pada kolom *Path*, klik ikon folder dan pilih file logo kustom Anda (format PNG/SVG, disarankan resolusi 512x512 px).
+   - **Resize**: Atur persentase ukuran gambar agar pas di dalam lingkaran zona aman (biasanya ~65%-70%).
+   - **Background Layer**: Anda bisa memilih warna latar belakang (*Color*) atau gambar latar (*Image*) untuk ikon Anda.
+5. Klik **`Next`**, lalu klik **`Finish`**. Google Android Studio akan otomatis me-generate seluruh ukuran ikon dan menyimpannya ke folder resource.
+
+#### Cara B: Mengganti File Gambar Secara Manual
+Jika Anda tidak menggunakan Android Studio, Anda dapat menimpa file gambar ikon di folder berikut secara langsung:
+Letakkan logo kustom Anda ke dalam folder:
+`android/app/src/main/res/` di subfolder berikut:
+- `mipmap-mdpi/ic_launcher.png` (48x48 px)
+- `mipmap-hdpi/ic_launcher.png` (72x72 px)
+- `mipmap-xhdpi/ic_launcher.png` (96x96 px)
+- `mipmap-xxhdpi/ic_launcher.png` (144x144 px)
+- `mipmap-xxxhdpi/ic_launcher.png` (192x192 px)
+*(Lakukan hal yang sama untuk file `ic_launcher_round.png` jika ingin mendukung versi ikon membulat).*
+
+---
+
+### 4. Alur Build & Sinkronisasi Berkala (Setiap Kali Ada Perubahan Kode)
+Jalankan langkah-langkah ini setiap kali Anda memperbarui kode aplikasi KasirPro Anda agar disinkronkan ke Android:
+
+```bash
+# 1. Kompilasi kode React
 bun run build
+
+# 2. Sinkronisasikan hasil build (dist) ke platform Android native
 bunx cap sync android
+
+# 3. Buka Android Studio untuk build APK
 bunx cap open android
 ```
+
+Di dalam Android Studio, pilih menu **Build > Build Bundle(s) / APK(s) > Build APK(s)** untuk menghasilkan file **`app-debug.apk`** siap pasang!
 
 ---
 
