@@ -22,7 +22,7 @@ import {
   LinuxPrinterInfo,
   StoreSettings 
 } from '../types';
-import { EscPosEncoder, padRow, padCenter, padSeparator } from '../utils/escpos';
+import { EscPosEncoder, padRow, padCenter, padSeparator, loadLogoRasterBytes } from '../utils/escpos';
 import { printerService } from '../services/printerService';
 import { saveStoreSettingsToFirestore, auth } from '../services/firebase';
 import { db } from '../db/db';
@@ -177,6 +177,19 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
     const encoder = new EscPosEncoder();
     encoder.init();
     encoder.kickDrawer();
+
+    if (formData.logoUrl) {
+      try {
+        const logoRasterBytes = await loadLogoRasterBytes(formData.logoUrl, 240);
+        if (logoRasterBytes && logoRasterBytes.length > 0) {
+          encoder.align('center');
+          encoder.rasterImage(logoRasterBytes);
+        }
+      } catch (e) {
+        console.warn('Failed to load logo raster in test print:', e);
+      }
+    }
+
     encoder.align('center');
     encoder.bold(true);
     encoder.doubleHeight(true);

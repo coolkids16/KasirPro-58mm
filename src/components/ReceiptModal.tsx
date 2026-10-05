@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Printer, 
   X, 
@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Transaction, StoreSettings, PrinterConnectionType } from '../types';
-import { generateReceiptText, generateEscPosBinary } from '../utils/escpos';
+import { generateReceiptText, generateEscPosBinary, generateEscPosBinaryAsync } from '../utils/escpos';
 import { printerService } from '../services/printerService';
 
 export interface ReceiptModalProps {
@@ -37,6 +37,20 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const [isPrinting, setIsPrinting] = useState(false);
   const [printSuccessMessage, setPrintSuccessMessage] = useState<string | null>(null);
   const [printErrorMessage, setPrintErrorMessage] = useState<string | null>(null);
+  const [escPosBinary, setEscPosBinary] = useState<Uint8Array>(() => generateEscPosBinary(transaction, settings));
+
+  // Asynchronously generate rasterized binary containing custom logo if available
+  useEffect(() => {
+    let isMounted = true;
+    generateEscPosBinaryAsync(transaction, settings).then((binary) => {
+      if (isMounted) {
+        setEscPosBinary(binary);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [transaction, settings]);
 
   if (!isOpen) return null;
 
@@ -44,7 +58,6 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const linuxPath = settings.linuxDevicePath || '/dev/usb/lp0';
 
   const receiptPlainText = generateReceiptText(transaction, settings);
-  const escPosBinary = generateEscPosBinary(transaction, settings);
   const hexDump = Array.from(escPosBinary)
     .map(b => b.toString(16).padStart(2, '0').toUpperCase())
     .join(' ');

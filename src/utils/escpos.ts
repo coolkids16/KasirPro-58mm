@@ -37,6 +37,116 @@ export function padSeparator(char = '-', width = 32): string {
 }
 
 /**
+ * Converts an image element or canvas into ESC/POS GS v 0 raster byte commands
+ * for 58mm thermal printers (e.g. 240 dots max width, centered).
+ */
+export function convertImageToEscPosRaster(
+  imgElementOrCanvas: HTMLCanvasElement | HTMLImageElement,
+  maxWidthDots = 240
+): Uint8Array {
+  try {
+    const canvas = document.createElement('canvas');
+    let width = imgElementOrCanvas.width || (imgElementOrCanvas as HTMLImageElement).naturalWidth || 200;
+    let height = imgElementOrCanvas.height || (imgElementOrCanvas as HTMLImageElement).naturalHeight || 200;
+
+    if (width <= 0 || height <= 0) return new Uint8Array(0);
+
+    // Scale down if width exceeds maxWidthDots
+    if (width > maxWidthDots) {
+      height = Math.round((height * maxWidthDots) / width);
+      width = maxWidthDots;
+    }
+
+    // Width must be a multiple of 8 for ESC/POS raster byte packing
+    width = Math.floor(width / 8) * 8;
+    if (width < 8) width = 8;
+
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return new Uint8Array(0);
+
+    // Fill white background
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw image
+    ctx.drawImage(imgElementOrCanvas, 0, 0, width, height);
+
+    const imgData = ctx.getImageData(0, 0, width, height);
+    const pixels = imgData.data;
+
+    // ESC/POS GS v 0 Command Header: 0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH
+    const bytesPerWidth = width / 8;
+    const xL = bytesPerWidth % 256;
+    const xH = Math.floor(bytesPerWidth / 256);
+    const yL = height % 256;
+    const yH = Math.floor(height / 256);
+
+    const header = [GS, 0x76, 0x30, 0x00, xL, xH, yL, yH];
+    const rasterBytes: number[] = [...header];
+
+    // Convert RGBA pixels to monochrome 1-bit raster data (1 = black dot, 0 = white dot)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < bytesPerWidth; x++) {
+        let byteVal = 0;
+        for (let b = 0; b < 8; b++) {
+          const pxIndex = (y * width + (x * 8 + b)) * 4;
+          const r = pixels[pxIndex];
+          const g = pixels[pxIndex + 1];
+          const bCol = pixels[pxIndex + 2];
+          const alpha = pixels[pxIndex + 3];
+
+          // Luminance calculation
+          const luminance = alpha < 128 ? 255 : (0.299 * r + 0.587 * g + 0.114 * bCol);
+
+          // Threshold for black thermal dot
+          if (luminance < 160) {
+            byteVal |= (1 << (7 - b));
+          }
+        }
+        rasterBytes.push(byteVal);
+      }
+    }
+
+    // Add trailing newline to advance paper past image
+    rasterBytes.push(LF);
+
+    return new Uint8Array(rasterBytes);
+  } catch (err) {
+    console.warn('Failed to convert image to ESC/POS raster:', err);
+    return new Uint8Array(0);
+  }
+}
+
+/**
+ * Loads Base64/Data URL or Image URL and converts it asynchronously into ESC/POS GS v 0 raster bytes
+ */
+export async function loadLogoRasterBytes(logoUrl: string, maxWidthDots = 240): Promise<Uint8Array> {
+  if (!logoUrl || typeof window === 'undefined') return new Uint8Array(0);
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const rasterBytes = convertImageToEscPosRaster(img, maxWidthDots);
+        resolve(rasterBytes);
+      } catch (e) {
+        console.warn('Raster conversion error:', e);
+        resolve(new Uint8Array(0));
+      }
+    };
+    img.onerror = (err) => {
+      console.warn('Logo image loading failed for printer rasterization:', err);
+      resolve(new Uint8Array(0));
+    };
+    img.src = logoUrl;
+  });
+}
+
+/**
  * Builds standard plain-text representation (32-character monospace)
  * Used for live on-screen thermal paper simulator and fallback printer.
  */
@@ -220,6 +330,18 @@ export class EscPosEncoder {
   }
 
   /**
+   * Appends raw raster image bytes (GS v 0) to printer stream
+   */
+  rasterImage(rasterBytes: Uint8Array): this {
+    if (rasterBytes && rasterBytes.length > 0) {
+      for (let i = 0; i < rasterBytes.length; i++) {
+        this.buffer.push(rasterBytes[i]);
+      }
+    }
+    return this;
+  }
+
+  /**
    * Cut paper command (Full/Partial cut)
    * GS V m n
    */
@@ -241,20 +363,34 @@ export class EscPosEncoder {
 }
 
 /**
- * Generate binary ESC/POS buffer for complete transaction receipt
+ * Generate binary ESC/POS buffer for complete transaction receipt asynchronously
+ * including custom store logo rasterization if logoUrl is provided!
  */
-export function generateEscPosBinary(
+export async function generateEscPosBinaryAsync(
   transaction: Transaction,
   settings: StoreSettings
-): Uint8Array {
+): Promise<Uint8Array> {
   const W = settings.paperWidthChars || 32;
   const feedCount = settings.feedLines !== undefined ? settings.feedLines : 1;
   const encoder = new EscPosEncoder();
 
-  // Buka Laci Kasir otomatis saat struk dicetak jika diaktifkan
+  // 1. Buka Laci Kasir
   encoder.kickDrawer();
 
-  // Header Toko
+  // 2. Cetak Logo Kustom jika ada
+  if (settings.logoUrl) {
+    try {
+      const logoRasterBytes = await loadLogoRasterBytes(settings.logoUrl, 240);
+      if (logoRasterBytes && logoRasterBytes.length > 0) {
+        encoder.align('center');
+        encoder.rasterImage(logoRasterBytes);
+      }
+    } catch (e) {
+      console.warn('Failed to append logo raster to receipt:', e);
+    }
+  }
+
+  // 3. Header Toko
   encoder.align('center');
   encoder.bold(true);
   encoder.doubleHeight(true);
@@ -282,7 +418,7 @@ export function generateEscPosBinary(
 
   encoder.separator('=', W);
 
-  // Info Transaksi
+  // 4. Info Transaksi
   encoder.align('left');
   const dateObj = new Date(transaction.timestamp);
   const dateStr = dateObj.toLocaleDateString('id-ID', {
@@ -299,7 +435,7 @@ export function generateEscPosBinary(
   encoder.twoColumn(`Kasir: ${transaction.cashierName}`, `Metode: ${transaction.paymentMethod.toUpperCase()}`, W);
   encoder.separator('-', W);
 
-  // Daftar Item
+  // 5. Daftar Item
   for (const item of transaction.items) {
     encoder.textLine(item.product.name.substring(0, W));
     const leftText = `  ${item.quantity} x ${formatRupiah(item.product.price)}`;
@@ -313,7 +449,7 @@ export function generateEscPosBinary(
 
   encoder.separator('-', W);
 
-  // Subtotal, Diskon, Pajak
+  // 6. Subtotal, Diskon, Pajak
   encoder.twoColumn('Subtotal', `${settings.currencyPrefix} ${formatRupiah(transaction.subtotal)}`, W);
   if (transaction.discount > 0) {
     encoder.twoColumn('Diskon', `-${settings.currencyPrefix} ${formatRupiah(transaction.discount)}`, W);
@@ -324,7 +460,7 @@ export function generateEscPosBinary(
 
   encoder.separator('=', W);
 
-  // Total Tebal
+  // 7. Total Tebal
   encoder.bold(true);
   encoder.doubleHeight(true);
   encoder.twoColumn('TOTAL', `${settings.currencyPrefix} ${formatRupiah(transaction.total)}`, W);
@@ -336,7 +472,7 @@ export function generateEscPosBinary(
 
   encoder.separator('=', W);
 
-  // Footer Message
+  // 8. Footer Message
   encoder.align('center');
   if (settings.footerMessage) {
     const footerLines = settings.footerMessage.split('\n');
@@ -346,9 +482,112 @@ export function generateEscPosBinary(
   }
   encoder.textLine('*** KASIRPRO 58MM ***');
 
-  // Akhir Struk:
-  // Hanya kirim perintah cut jika hardware mendukung auto-cutter aktif.
-  // Untuk printer sobek manual (mayoritas 58mm), cukup feed 1 baris agar teks keluar dari kepala cetak tanpa buang kertas!
+  // Akhir Struk: Auto Cut atau Feed
+  if (settings.enableAutoCut) {
+    encoder.cut(false, feedCount);
+  } else {
+    encoder.feed(feedCount);
+  }
+
+  return encoder.encode();
+}
+
+/**
+ * Synchronous wrapper for backwards compatibility
+ */
+export function generateEscPosBinary(
+  transaction: Transaction,
+  settings: StoreSettings
+): Uint8Array {
+  const W = settings.paperWidthChars || 32;
+  const feedCount = settings.feedLines !== undefined ? settings.feedLines : 1;
+  const encoder = new EscPosEncoder();
+
+  encoder.kickDrawer();
+  encoder.align('center');
+  encoder.bold(true);
+  encoder.doubleHeight(true);
+  encoder.textLine(settings.storeName.toUpperCase());
+  encoder.doubleHeight(false);
+  encoder.bold(false);
+
+  if (settings.address) {
+    const words = settings.address.split(' ');
+    let currentLine = '';
+    for (const w of words) {
+      if ((currentLine + ' ' + w).trim().length <= W) {
+        currentLine = (currentLine + ' ' + w).trim();
+      } else {
+        encoder.textLine(currentLine);
+        currentLine = w;
+      }
+    }
+    if (currentLine) encoder.textLine(currentLine);
+  }
+
+  if (settings.phone) {
+    encoder.textLine('Telp: ' + settings.phone);
+  }
+
+  encoder.separator('=', W);
+  encoder.align('left');
+
+  const dateObj = new Date(transaction.timestamp);
+  const dateStr = dateObj.toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  });
+  const timeStr = dateObj.toLocaleTimeString('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  encoder.twoColumn(`No: ${transaction.invoiceNumber}`, `${dateStr} ${timeStr}`, W);
+  encoder.twoColumn(`Kasir: ${transaction.cashierName}`, `Metode: ${transaction.paymentMethod.toUpperCase()}`, W);
+  encoder.separator('-', W);
+
+  for (const item of transaction.items) {
+    encoder.textLine(item.product.name.substring(0, W));
+    const leftText = `  ${item.quantity} x ${formatRupiah(item.product.price)}`;
+    const rightText = formatRupiah(item.quantity * item.product.price);
+    encoder.twoColumn(leftText, rightText, W);
+
+    if (item.notes) {
+      encoder.textLine(`   *(${item.notes.substring(0, W - 6)})`);
+    }
+  }
+
+  encoder.separator('-', W);
+  encoder.twoColumn('Subtotal', `${settings.currencyPrefix} ${formatRupiah(transaction.subtotal)}`, W);
+  if (transaction.discount > 0) {
+    encoder.twoColumn('Diskon', `-${settings.currencyPrefix} ${formatRupiah(transaction.discount)}`, W);
+  }
+  if (transaction.tax > 0) {
+    encoder.twoColumn(`PPN (${settings.taxRate}%)`, `${settings.currencyPrefix} ${formatRupiah(transaction.tax)}`, W);
+  }
+
+  encoder.separator('=', W);
+  encoder.bold(true);
+  encoder.doubleHeight(true);
+  encoder.twoColumn('TOTAL', `${settings.currencyPrefix} ${formatRupiah(transaction.total)}`, W);
+  encoder.doubleHeight(false);
+  encoder.bold(false);
+
+  encoder.twoColumn('BAYAR', `${settings.currencyPrefix} ${formatRupiah(transaction.paidAmount)}`, W);
+  encoder.twoColumn('KEMBALI', `${settings.currencyPrefix} ${formatRupiah(transaction.changeAmount)}`, W);
+
+  encoder.separator('=', W);
+  encoder.align('center');
+
+  if (settings.footerMessage) {
+    const footerLines = settings.footerMessage.split('\n');
+    for (const fLine of footerLines) {
+      encoder.textLine(fLine);
+    }
+  }
+  encoder.textLine('*** KASIRPRO 58MM ***');
+
   if (settings.enableAutoCut) {
     encoder.cut(false, feedCount);
   } else {
