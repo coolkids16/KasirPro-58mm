@@ -25,6 +25,7 @@ Aplikasi Point of Sale (POS) kasir *offline-first* berkinerja tinggi yang diranc
 ### 1. Pasang Dependensi Sistem
 
 #### A. Untuk Distro Berbasis Arch Linux (CachyOS, EndeavourOS, Manjaro, Arch):
+Buka terminal dan jalankan:
 ```bash
 # 1. Update sistem
 sudo pacman -Syu
@@ -82,7 +83,7 @@ git clone https://github.com/USERNAME/kasirpro-58mm.git
 # 2. Masuk ke folder project
 cd kasirpro-58mm
 
-# 3. Instal paket dependensi
+# 3. Instal semua paket dependensi
 bun install
 # (Alternatif ke-2: npm install)
 ```
@@ -91,16 +92,26 @@ bun install
 
 ### 4. Menjalankan di Linux Desktop
 
-#### Mode Desktop Native Tauri (Rekomendasi untuk Kasir):
+#### ⚡ A. Mode Desktop Native Tauri (Rekomendasi Utama):
+Jalankan perintah script yang sudah disiapkan:
 ```bash
-bunx tauri dev
-# (Alternatif ke-2: npx @tauri-apps/cli dev)
+# Menggunakan Bun (Utama & Tercepat):
+bun run tauri:dev
+
+# Atau menggunakan Bunx CLI:
+bunx @tauri-apps/cli dev
+
+# (Alternatif ke-2 via npm: npm run tauri:dev atau npx @tauri-apps/cli dev)
 ```
 
-#### Mode Web Browser Lokal (PWA):
+> 💡 **Catatan untuk Bunx:** Nama paket resmi CLI Tauri adalah `@tauri-apps/cli` (bukan `tauri`). Gunakan `bun run tauri:dev` atau `bunx @tauri-apps/cli dev`.
+
+#### 🌐 B. Mode Web Browser Lokal (PWA / Chrome):
 ```bash
+# Menggunakan Bun (Utama):
 bun run dev
-# (Alternatif ke-2: npm run dev)
+
+# (Alternatif ke-2 via npm: npm run dev)
 ```
 Akses di browser: **`http://localhost:3000`**
 
@@ -109,12 +120,18 @@ Akses di browser: **`http://localhost:3000`**
 ### 5. Build File Aplikasi Siap Pakai Linux (`.AppImage`)
 
 ```bash
-bunx tauri build
-# (Alternatif ke-2: npx @tauri-apps/cli build)
+# Menggunakan Bun (Utama):
+bun run tauri:build
+# (atau: bunx @tauri-apps/cli build)
+
+# (Alternatif ke-2 via npm: npm run tauri:build)
 ```
-Hasil file biner rilis:
+
+Hasil file biner rilis siap pakai akan dibuat di:
 - **AppImage**: `src-tauri/target/release/bundle/appimage/KasirPro 58mm POS_0.1.0_amd64.AppImage`
 - **Biner Executable**: `src-tauri/target/release/kasirpro-58mm-pos`
+
+Cukup beri izin eksekusi (`chmod +x *.AppImage`) dan jalankan aplikasi secara langsung!
 
 ---
 
@@ -145,7 +162,7 @@ Buka berkas `android/app/src/main/AndroidManifest.xml` dan tambahkan izin Blueto
 
 ```xml
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Izin Bluetooth Printer Thermal Thermal 58mm -->
+    <!-- Izin Bluetooth Printer Thermal 58mm -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
