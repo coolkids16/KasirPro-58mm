@@ -1,0 +1,6 @@
+{
+  "name": "KasirPro 58mm - Cross-Platform POS",
+  "description": "Aplikasi Kasir (POS) Offline-First Lintas Platform untuk Linux Desktop (Tauri) & Android (Capacitor) dengan dukungan Printer Thermal 58mm ESC/POS.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
