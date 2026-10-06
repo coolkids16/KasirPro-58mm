@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { 
   Package, 
   Plus, 
@@ -13,7 +13,10 @@ import {
   Layers,
   CheckCircle2,
   AlertOctagon,
-  Tag
+  Tag,
+  Barcode,
+  Camera,
+  Sparkles
 } from 'lucide-react';
 import { Product } from '../types';
 import { db } from '../db/db';
@@ -24,6 +27,8 @@ import {
   deleteAllProductsFromFirestore
 } from '../services/firebase';
 import { formatRupiah } from '../utils/escpos';
+import { CameraBarcodeScannerModal } from './CameraBarcodeScannerModal';
+import { sounds } from '../utils/audio';
 
 interface ProductManagementProps {
   products: Product[];
@@ -83,9 +88,11 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [isClearAllStockModalOpen, setIsClearAllStockModalOpen] = useState(false);
   const [isNewCategoryModalOpen, setIsNewCategoryModalOpen] = useState(false);
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const [newCategoryModalInput, setNewCategoryModalInput] = useState('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   // Form States for Add/Edit Product
   const [formName, setFormName] = useState('');
@@ -97,6 +104,23 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   const [customCategoryInput, setCustomCategoryInput] = useState('');
   const [formBarcode, setFormBarcode] = useState('');
   const [formColor, setFormColor] = useState('#10B981');
+
+  const handleBarcodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (formBarcode.trim()) {
+        sounds.playScanBeep();
+        showNotification(`✓ Barcode "${formBarcode.trim()}" terdeteksi dari pemindai fisik!`);
+      }
+    }
+  };
+
+  const handleGenerateRandomBarcode = () => {
+    const randomEan = '899' + Math.floor(100000000 + Math.random() * 900000000).toString();
+    setFormBarcode(randomEan);
+    sounds.playScanBeep();
+    showNotification(`Kode barcode EAN-13 acak dibuat: ${randomEan}`);
+  };
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = 
@@ -847,15 +871,66 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                 </div>
               </div>
 
+              {/* BARCODE INPUT DENGAN FISIK & KAMERA SCANNER */}
               <div>
-                <label className="block text-slate-400 mb-1 font-medium">Barcode (Opsional)</label>
-                <input
-                  type="text"
-                  value={formBarcode}
-                  onChange={e => setFormBarcode(e.target.value)}
-                  placeholder="8991234567890"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-slate-400 font-medium flex items-center gap-1.5">
+                    <Barcode className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Kode Barcode Produk</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    Mendukung Scanner USB/BT & Kamera
+                  </span>
+                </div>
+
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      ref={barcodeInputRef}
+                      type="text"
+                      value={formBarcode}
+                      onChange={e => setFormBarcode(e.target.value)}
+                      onKeyDown={handleBarcodeKeyDown}
+                      placeholder="Pindai dengan alat fisik / kamera..."
+                      className="w-full pl-3 pr-8 py-2 bg-slate-950 border border-slate-750 focus:border-emerald-500 rounded-xl text-white font-mono text-xs focus:outline-none"
+                    />
+                    {formBarcode && (
+                      <button
+                        type="button"
+                        onClick={() => setFormBarcode('')}
+                        title="Hapus Barcode"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-rose-400 p-0.5 rounded"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Tombol Scan Kamera */}
+                  <button
+                    type="button"
+                    onClick={() => setIsCameraScannerOpen(true)}
+                    className="px-3 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 hover:border-emerald-400 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shrink-0 shadow-sm"
+                    title="Buka Kamera Android / HP untuk Pindai Barcode"
+                  >
+                    <Camera className="w-4 h-4 text-emerald-400" />
+                    <span className="hidden sm:inline">Scan</span> Kamera
+                  </button>
+
+                  {/* Tombol Acak EAN-13 */}
+                  <button
+                    type="button"
+                    onClick={handleGenerateRandomBarcode}
+                    className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl text-xs font-medium flex items-center gap-1 transition shrink-0"
+                    title="Buat Kode Barcode Acak (EAN-13)"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="sr-only sm:not-sr-only sm:inline-block text-[11px]">Acak</span>
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  💡 Arahkan pemindai barcode USB/Bluetooth ke kolom di atas atau klik <strong>"Scan Kamera"</strong>.
+                </p>
               </div>
 
               <div>
@@ -894,6 +969,21 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
           </div>
         </div>
       )}
+      {/* CAMERA BARCODE SCANNER MODAL UNTUK FORM PRODUK */}
+      <CameraBarcodeScannerModal
+        isOpen={isCameraScannerOpen}
+        onClose={() => setIsCameraScannerOpen(false)}
+        title="Pemindai Barcode Kamera"
+        description="Arahkan kamera HP/Android ke barcode fisik produk untuk mengisi kolom secara otomatis"
+        onScanCode={(scannedCode) => {
+          setFormBarcode(scannedCode);
+          showNotification(`✓ Barcode "${scannedCode}" berhasil dipindai dari kamera!`);
+          setIsCameraScannerOpen(false);
+          if (barcodeInputRef.current) {
+            barcodeInputRef.current.focus();
+          }
+        }}
+      />
     </div>
   );
 };

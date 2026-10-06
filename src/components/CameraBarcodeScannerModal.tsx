@@ -17,17 +17,23 @@ import { sounds } from '../utils/audio';
 export interface CameraBarcodeScannerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  products: Product[];
-  onScanSuccess: (product: Product, scannedCode: string) => void;
+  products?: Product[];
+  onScanSuccess?: (product: Product, scannedCode: string) => void;
   onScanError?: (scannedCode: string) => void;
+  onScanCode?: (scannedCode: string) => void;
+  title?: string;
+  description?: string;
 }
 
 export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps> = ({
   isOpen,
   onClose,
-  products,
+  products = [],
   onScanSuccess,
-  onScanError
+  onScanError,
+  onScanCode,
+  title,
+  description
 }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -170,7 +176,22 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
     }
     lastScannedTimeRef.current = now;
 
-    // Search product in inventory
+    // Direct raw code capture callback (e.g. Add/Edit Product form)
+    if (onScanCode) {
+      sounds.playScanBeep();
+      setRecentScanInfo({
+        success: true,
+        msg: `✓ Barcode Terdeteksi: "${trimmed}"`
+      });
+      onScanCode(trimmed);
+      setTimeout(() => {
+        stopCamera();
+        onClose();
+      }, 350);
+      return;
+    }
+
+    // Search product in inventory (POS screen)
     const matched = products.find(p => 
       (p.barcode && p.barcode.trim() === trimmed) ||
       (p.sku && p.sku.trim().toLowerCase() === trimmed.toLowerCase()) ||
@@ -183,7 +204,7 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
         success: true,
         msg: `✓ ${matched.name} ditambahkan!`
       });
-      onScanSuccess(matched, trimmed);
+      if (onScanSuccess) onScanSuccess(matched, trimmed);
     } else {
       sounds.playErrorBeep();
       setRecentScanInfo({
@@ -240,13 +261,13 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
             </div>
             <div>
               <h3 className="font-bold text-white text-base flex items-center gap-2">
-                Pindai Barcode Kamera
+                {title || 'Pindai Barcode Kamera'}
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
                   Native WebRTC
                 </span>
               </h3>
               <p className="text-xs text-slate-400">
-                Arahkan kamera ke barcode produk untuk langsung masuk keranjang
+                {description || 'Arahkan kamera ke barcode produk untuk dipindai secara cepat'}
               </p>
             </div>
           </div>
