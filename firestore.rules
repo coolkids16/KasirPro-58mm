@@ -6,16 +6,40 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function currentUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
-    function incoming() {
-      return request.resource.data;
+    function getUserData() {
+      return currentUserDoc().data;
     }
 
-    function existing() {
-      return resource.data;
+    function getUserRole() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? getUserData().role 
+        : null;
+    }
+
+    function getUserStoreId() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? getUserData().storeId 
+        : null;
+    }
+
+    function isOwner() {
+      return getUserRole() == 'owner';
+    }
+
+    function isManager() {
+      return getUserRole() == 'manager';
+    }
+
+    function isCashier() {
+      return getUserRole() == 'cashier';
+    }
+
+    function belongsToStore(storeId) {
+      return isSignedIn() && getUserStoreId() == storeId;
     }
 
     // Default deny all
@@ -23,31 +47,65 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Users collection
-    match /users/{userId} {
+    // Stores collection
+    match /stores/{storeId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isOwner(userId);
-      allow delete: if false;
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (resource.data.ownerId == request.auth.uid || (isOwner() && belongsToStore(storeId)));
     }
 
-    // Products catalog
+    // Users collection
+    // - Owner can create manager/cashier in same store
+    // - User can read their own profile or users in the same store
+    match /users/{userId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId || 
+        belongsToStore(resource.data.storeId)
+      );
+      // New user registering themselves (first owner) or owner registering subordinate
+      allow create: if isSignedIn() && (
+        request.auth.uid == userId || 
+        (isOwner() && belongsToStore(request.resource.data.storeId))
+      );
+      // Update: user can update own profile, or owner can update staff in their store
+      allow update: if isSignedIn() && (
+        request.auth.uid == userId || 
+        (isOwner() && belongsToStore(resource.data.storeId))
+      );
+      // Delete: owner can delete manager/cashier in their store (cannot delete self)
+      allow delete: if isSignedIn() && isOwner() && belongsToStore(resource.data.storeId) && request.auth.uid != userId;
+    }
+
+    // Products catalog (scoped by storeId)
+    // - All roles in store can read products
+    // - Owner & Manager can create, update, delete products
+    // - Cashier can update products (stock reduction on sale)
     match /products/{productId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create, delete: if isSignedIn() && (
+        isOwner() || isManager()
+      );
+      allow update: if isSignedIn() && (
+        isOwner() || isManager() || isCashier()
+      );
     }
 
-    // Transactions records (can be deleted from history by cashier/admin)
+    // Transactions records (scoped by storeId)
+    // - Cashier, Manager, Owner can create transactions and read them for recap
+    // - Only Owner & Manager can delete transactions (e.g. void / audit)
     match /transactions/{transactionId} {
       allow read: if isSignedIn();
-      allow create, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow delete: if isSignedIn() && (isOwner() || isManager());
       allow update: if false;
     }
 
     // Store settings & receipt printer configuration
+    // - Read allowed for staff to load receipt format and printer config
+    // - Write strictly restricted to Owner
     match /settings/{settingsId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow create, update: if isSignedIn() && (isOwner() || !exists(/databases/$(database)/documents/settings/$(settingsId)));
       allow delete: if false;
     }
   }

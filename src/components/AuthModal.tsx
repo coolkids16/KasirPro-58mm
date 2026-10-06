@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   LogIn, 
@@ -12,37 +12,78 @@ import {
   Mail,
   Lock,
   CheckCircle2,
-  KeyRound
+  KeyRound,
+  Crown,
+  Briefcase,
+  Users,
+  Store,
+  Copy,
+  Check
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
+import { UserProfile, UserRole } from '../types';
 import { 
   registerWithEmailPassword, 
   loginWithEmailPassword, 
   resetUserPassword,
-  logoutUser 
+  logoutUser,
+  subscribeUserProfile
 } from '../services/firebase';
 
 export interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUser: FirebaseUser | null;
+  userProfile?: UserProfile | null;
+  onOpenUsersModal?: () => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
-  currentUser
+  currentUser,
+  userProfile,
+  onOpenUsersModal
 }) => {
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [internalProfile, setInternalProfile] = useState<UserProfile | null>(userProfile || null);
+  const [copiedStoreId, setCopiedStoreId] = useState<boolean>(false);
 
   // Form states for Email/Password
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Keep internal profile synced in real time
+  useEffect(() => {
+    if (userProfile) {
+      setInternalProfile(userProfile);
+      return;
+    }
+    if (currentUser?.uid) {
+      const unsub = subscribeUserProfile(currentUser.uid, (p) => {
+        setInternalProfile(p);
+      });
+      return () => {
+        if (unsub) unsub();
+      };
+    }
+  }, [currentUser, userProfile]);
+
+  const activeProfile = userProfile || internalProfile;
+  const role: UserRole | undefined = activeProfile?.role;
+
+  const handleCopyStoreId = () => {
+    if (activeProfile?.storeId) {
+      navigator.clipboard.writeText(activeProfile.storeId);
+      setCopiedStoreId(true);
+      setTimeout(() => setCopiedStoreId(false), 2000);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -164,16 +205,46 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Modal Header */}
         <div className="text-center mb-5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-500 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/25 text-white mb-2.5">
-            <UserIcon className="w-6 h-6" />
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mx-auto shadow-lg text-white mb-2.5 ${
+            !currentUser
+              ? 'bg-gradient-to-tr from-emerald-500 to-teal-500 shadow-emerald-500/25'
+              : role === 'owner'
+              ? 'bg-gradient-to-tr from-amber-500 to-amber-600 shadow-amber-500/30'
+              : role === 'manager'
+              ? 'bg-gradient-to-tr from-cyan-500 to-blue-600 shadow-cyan-500/30'
+              : 'bg-gradient-to-tr from-emerald-500 to-teal-500 shadow-emerald-500/25'
+          }`}>
+            {!currentUser ? (
+              <UserIcon className="w-6 h-6" />
+            ) : role === 'owner' ? (
+              <Crown className="w-6 h-6 text-white" />
+            ) : role === 'manager' ? (
+              <ShieldCheck className="w-6 h-6 text-white" />
+            ) : (
+              <Briefcase className="w-6 h-6 text-white" />
+            )}
           </div>
           <h3 className="text-lg font-bold text-white">
-            {currentUser ? 'Profil Kasir & Akun' : 'Akun Kasir & Cloud Sync'}
+            {!currentUser
+              ? 'Akun Kasir & Cloud Sync'
+              : role === 'owner'
+              ? 'Profil Pemilik Toko (Owner)'
+              : role === 'manager'
+              ? 'Profil Manager Operasional'
+              : role === 'cashier'
+              ? 'Profil Kasir (Cashier)'
+              : 'Profil Pengguna & Akun'}
           </h3>
           <p className="text-xs text-slate-400 mt-1">
-            {currentUser 
-              ? 'Terhubung dengan Firebase Firestore untuk sinkronisasi inventaris & transaksi.' 
-              : 'Masuk atau daftarkan akun kasir Anda untuk sinkronisasi cloud.'}
+            {!currentUser 
+              ? 'Masuk atau daftarkan akun kasir Anda untuk sinkronisasi cloud.'
+              : role === 'owner'
+              ? 'Akun Utama • Hak Akses Penuh Sistem & Pengelolaan Staf Toko'
+              : role === 'manager'
+              ? 'Pengelola Operasional • Inventaris, Produk & Analitik Penjualan'
+              : role === 'cashier'
+              ? 'Operator Transaksi Kasir • POS & Cetak Struk Thermal 58mm'
+              : 'Terhubung dengan Firebase Firestore untuk sinkronisasi cloud.'}
           </p>
         </div>
 
@@ -195,31 +266,68 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* View when user is already logged in */}
         {currentUser ? (
           <div className="space-y-4">
-            <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl flex items-center gap-3.5">
+            <div className={`p-4 bg-slate-950 border rounded-2xl flex items-center gap-3.5 transition-all ${
+              role === 'owner'
+                ? 'border-amber-500/40 shadow-md shadow-amber-500/5'
+                : role === 'manager'
+                ? 'border-cyan-500/40 shadow-md shadow-cyan-500/5'
+                : 'border-emerald-500/40 shadow-md shadow-emerald-500/5'
+            }`}>
               {currentUser.photoURL ? (
                 <img
                   src={currentUser.photoURL}
-                  alt={currentUser.displayName || 'Kasir'}
-                  className="w-12 h-12 rounded-full border border-slate-700 object-cover"
+                  alt={activeProfile?.displayName || currentUser.displayName || 'Kasir'}
+                  className={`w-13 h-13 rounded-2xl object-cover border-2 shadow-sm ${
+                    role === 'owner'
+                      ? 'border-amber-400'
+                      : role === 'manager'
+                      ? 'border-cyan-400'
+                      : 'border-emerald-400'
+                  }`}
                 />
               ) : (
-                <div className="w-12 h-12 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold text-lg">
-                  {(currentUser.displayName || currentUser.email || 'K')[0].toUpperCase()}
+                <div className={`w-13 h-13 rounded-2xl flex items-center justify-center font-black text-lg shadow-inner ${
+                  role === 'owner'
+                    ? 'bg-amber-500/20 text-amber-300 border-2 border-amber-500/40'
+                    : role === 'manager'
+                    ? 'bg-cyan-500/20 text-cyan-300 border-2 border-cyan-500/40'
+                    : 'bg-emerald-500/20 text-emerald-300 border-2 border-emerald-500/40'
+                }`}>
+                  {(activeProfile?.displayName || currentUser.displayName || currentUser.email || 'K')[0].toUpperCase()}
                 </div>
               )}
 
               <div className="flex-1 min-w-0">
                 <div className="font-bold text-white text-sm truncate">
-                  {currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : 'Kasir Aktif')}
+                  {activeProfile?.displayName || currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : 'Kasir Aktif')}
                 </div>
                 <div className="text-xs text-slate-400 truncate font-mono">
                   {currentUser.email}
                 </div>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                    <ShieldCheck className="w-3 h-3" />
-                    Kasir / Manager
-                  </span>
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  {/* Dynamic Role Badge */}
+                  {role === 'owner' ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full shadow-sm">
+                      <Crown className="w-3 h-3 text-amber-400" />
+                      👑 OWNER (PEMILIK TOKO)
+                    </span>
+                  ) : role === 'manager' ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-2.5 py-0.5 rounded-full shadow-sm">
+                      <ShieldCheck className="w-3 h-3 text-cyan-400" />
+                      🛡️ MANAGER OPERASIONAL
+                    </span>
+                  ) : role === 'cashier' ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full shadow-sm">
+                      <Briefcase className="w-3 h-3 text-emerald-400" />
+                      💼 KASIR (CASHIER)
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-750 px-2.5 py-0.5 rounded-full">
+                      <UserIcon className="w-3 h-3" />
+                      {activeProfile?.role ? String(activeProfile.role).toUpperCase() : 'MEMUAT PERAN...'}
+                    </span>
+                  )}
+
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded-full">
                     <CloudCheck className="w-3 h-3" />
                     Firestore Aktif
@@ -227,6 +335,133 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Store & Role Details Box */}
+            <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl space-y-2.5 text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-850">
+                <span className="text-slate-400 flex items-center gap-1.5 font-medium">
+                  <Store className="w-3.5 h-3.5 text-slate-500" />
+                  ID Toko (Store ID)
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-bold text-slate-200 bg-slate-900 px-2 py-0.5 rounded border border-slate-750 text-[11px]">
+                    {activeProfile?.storeId || '-'}
+                  </span>
+                  {activeProfile?.storeId && (
+                    <button
+                      type="button"
+                      onClick={handleCopyStoreId}
+                      title="Salin Store ID"
+                      className="p-1 rounded bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white transition"
+                    >
+                      {copiedStoreId ? (
+                        <Check className="w-3 h-3 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Ringkasan Hak Akses Berdasarkan Role */}
+              <div className="pt-0.5">
+                <span className="text-[11px] font-semibold text-slate-300 block mb-1.5">
+                  Hak Akses Akun:
+                </span>
+                {role === 'owner' ? (
+                  <div className="bg-amber-950/25 border border-amber-500/20 rounded-xl p-3 text-[11px] text-amber-200/90 space-y-1.5">
+                    <div className="font-bold text-amber-300 flex items-center gap-1.5">
+                      <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span>Akses Penuh Seluruh Sistem (Owner)</span>
+                    </div>
+                    <ul className="space-y-1 text-slate-300 text-[11px] pl-1">
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>Akses penuh POS kasir & cetak struk thermal 58mm</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>Manajemen master produk, harga & stok barang</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>Pengaturan profil toko, logo, dan tarif pajak PPN</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>Daftarkan akun staf baru (Manager & Kasir)</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>Riwayat lengkap & grafik penjualan harian</span>
+                      </li>
+                    </ul>
+                  </div>
+                ) : role === 'manager' ? (
+                  <div className="bg-cyan-950/25 border border-cyan-500/20 rounded-xl p-3 text-[11px] text-cyan-200/90 space-y-1.5">
+                    <div className="font-bold text-cyan-300 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                      <span>Akses Operasional Toko (Manager)</span>
+                    </div>
+                    <ul className="space-y-1 text-slate-300 text-[11px] pl-1">
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>Manajemen master produk, kategori & update stok</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>Riwayat & analitik grafik penjualan harian</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>Akses POS penjualan kasir & cetak struk thermal</span>
+                      </li>
+                    </ul>
+                  </div>
+                ) : role === 'cashier' ? (
+                  <div className="bg-emerald-950/25 border border-emerald-500/20 rounded-xl p-3 text-[11px] text-emerald-200/90 space-y-1.5">
+                    <div className="font-bold text-emerald-300 flex items-center gap-1.5">
+                      <Briefcase className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Akses Transaksi Kasir (Cashier)</span>
+                    </div>
+                    <ul className="space-y-1 text-slate-300 text-[11px] pl-1">
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>Halaman POS kasir, keranjang & pembayaran</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>Cetak struk thermal 58mm (Bluetooth SPP / USB)</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>Riwayat penjualan untuk rekap shift kasir</span>
+                      </li>
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="text-slate-400 text-[11px] py-1">
+                    Memuat data perizinan akun...
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Action for Owner to Manage Staff */}
+            {role === 'owner' && onOpenUsersModal && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenUsersModal();
+                }}
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-indigo-600/30 to-purple-600/30 hover:from-indigo-600/40 hover:to-purple-600/40 text-indigo-200 hover:text-white border border-indigo-500/40 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition shadow-sm"
+              >
+                <Users className="w-4 h-4 text-indigo-400" />
+                Kelola Akun Manager & Kasir Toko
+              </button>
+            )}
 
             <button
               onClick={handleLogout}

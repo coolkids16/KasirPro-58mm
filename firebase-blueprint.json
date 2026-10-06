@@ -2,23 +2,39 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "User account and profile for cashier and store manager",
+      "description": "User account and profile with store-based role hierarchy",
       "type": "object",
       "properties": {
         "uid": { "type": "string", "description": "Firebase Auth UID" },
         "email": { "type": "string", "format": "email", "description": "Email address" },
         "displayName": { "type": "string", "description": "Display name of user" },
         "photoURL": { "type": "string", "description": "Profile avatar URL" },
-        "role": { "type": "string", "enum": ["cashier", "admin"], "description": "User permission role" },
-        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" }
+        "role": { "type": "string", "enum": ["owner", "manager", "cashier"], "description": "User permission role" },
+        "storeId": { "type": "string", "description": "ID of the store this user belongs to" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" },
+        "createdById": { "type": "string", "description": "UID of the owner who created this account" }
       },
-      "required": ["uid", "email"]
+      "required": ["uid", "email", "role", "storeId"]
+    },
+    "Store": {
+      "title": "Store",
+      "description": "Store entity created by owner",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100, "description": "Store name" },
+        "ownerId": { "type": "string", "description": "Firebase Auth UID of the store owner" },
+        "address": { "type": "string", "maxLength": 200, "description": "Store physical address" },
+        "phone": { "type": "string", "maxLength": 30, "description": "Store phone number" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Store creation timestamp" }
+      },
+      "required": ["name", "ownerId"]
     },
     "Product": {
       "title": "Product",
-      "description": "Store inventory product item",
+      "description": "Store inventory product item scoped by storeId",
       "type": "object",
       "properties": {
+        "storeId": { "type": "string", "description": "Owner store identifier" },
         "name": { "type": "string", "maxLength": 100, "description": "Product title" },
         "sku": { "type": "string", "maxLength": 30, "description": "Stock keeping unit" },
         "price": { "type": "number", "description": "Product selling price" },
@@ -29,13 +45,14 @@
         "description": { "type": "string", "maxLength": 250, "description": "Product details" },
         "updatedAt": { "type": "string", "format": "date-time", "description": "Last updated timestamp" }
       },
-      "required": ["name", "sku", "price", "stock", "category"]
+      "required": ["storeId", "name", "sku", "price", "stock", "category"]
     },
     "Transaction": {
       "title": "Transaction",
-      "description": "Recorded POS sales transaction receipt",
+      "description": "Recorded POS sales transaction receipt scoped by storeId",
       "type": "object",
       "properties": {
+        "storeId": { "type": "string", "description": "Owner store identifier" },
         "invoiceNumber": { "type": "string", "maxLength": 50, "description": "Unique receipt invoice number" },
         "timestamp": { "type": "number", "description": "Epoch timestamp of checkout" },
         "items": { "type": "array", "description": "Purchased items with quantity and unit price" },
@@ -50,13 +67,14 @@
         "cashierId": { "type": "string", "description": "Cashier UID" },
         "notes": { "type": "string", "maxLength": 200, "description": "Optional transaction notes" }
       },
-      "required": ["invoiceNumber", "timestamp", "items", "total", "paidAmount", "paymentMethod"]
+      "required": ["storeId", "invoiceNumber", "timestamp", "items", "total", "paidAmount", "paymentMethod"]
     },
     "StoreSettings": {
       "title": "StoreSettings",
       "description": "Store profile and 58mm thermal receipt printer configuration",
       "type": "object",
       "properties": {
+        "storeId": { "type": "string", "description": "Owner store identifier" },
         "storeName": { "type": "string", "maxLength": 50, "description": "Store name printed on receipt header" },
         "address": { "type": "string", "maxLength": 120, "description": "Store street address" },
         "phone": { "type": "string", "maxLength": 30, "description": "Customer service telephone number" },
@@ -75,9 +93,13 @@
     }
   },
   "firestore": {
+    "/stores/{storeId}": {
+      "schema": { "$ref": "Store" },
+      "description": "Store profiles"
+    },
     "/users/{userId}": {
       "schema": { "$ref": "User" },
-      "description": "User profiles and permission records"
+      "description": "User profiles and store role hierarchy"
     },
     "/products/{productId}": {
       "schema": { "$ref": "Product" },

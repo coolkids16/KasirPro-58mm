@@ -20,7 +20,8 @@ import {
   PrinterDeviceStatus, 
   PrinterConnectionType, 
   LinuxPrinterInfo,
-  StoreSettings 
+  StoreSettings,
+  BluetoothDeviceOption
 } from '../types';
 import { EscPosEncoder, padRow, padCenter, padSeparator, loadLogoRasterBytes } from '../utils/escpos';
 import { printerService } from '../services/printerService';
@@ -52,8 +53,13 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
 
   // Set default method based on runtime
   const [selectedMethod, setSelectedMethod] = useState<PrinterConnectionType>(
-    runtimeEnv === 'tauri' ? 'tauri_raw' : 'tauri_raw'
+    runtimeEnv === 'tauri' ? 'tauri_raw' : 'capacitor_bluetooth'
   );
+
+  const [savedBtPrinter, setSavedBtPrinter] = useState<BluetoothDeviceOption | null>(() => printerService.getSavedBluetoothPrinter());
+  const [pairedBtDevices, setPairedBtDevices] = useState<BluetoothDeviceOption[]>([]);
+  const [isScanningBt, setIsScanningBt] = useState(false);
+  const [showBtDeviceList, setShowBtDeviceList] = useState(false);
 
   // Sync formData whenever settings prop changes
   useEffect(() => {
@@ -84,6 +90,77 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
     } catch (err: any) {
       console.warn('Gagal cek device port:', err);
     }
+  };
+
+  const handleScanBtDevices = async () => {
+    setIsScanningBt(true);
+    setShowBtDeviceList(true);
+    setTestResult(null);
+    try {
+      if (printerService.isBluetoothSerialAvailable()) {
+        const devices = await printerService.listPairedBluetoothDevices();
+        setPairedBtDevices(devices);
+        if (devices.length === 0) {
+          setTestResult({
+            success: false,
+            msg: 'Tidak ada printer Bluetooth yang terpasang (paired). Silakan buka Pengaturan Bluetooth HP Anda, cari & pasangkan printer Anda terlebih dahulu (PIN: 0000 atau 1234).'
+          });
+        }
+      } else if (printerService.isWebBluetoothAvailable()) {
+        await handleConnectBluetooth();
+      } else {
+        setTestResult({
+          success: false,
+          msg: 'Bluetooth belum aktif di runtime ini. Pastikan Anda menjalankan aplikasi di HP Android (APK).'
+        });
+      }
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        msg: err.message || 'Gagal memindai perangkat Bluetooth.'
+      });
+    } finally {
+      setIsScanningBt(false);
+    }
+  };
+
+  const handleSelectBtDevice = async (device: BluetoothDeviceOption) => {
+    setLoading(true);
+    setTestResult(null);
+    try {
+      const status = await printerService.connectBluetoothSerial(device.address, device.name);
+      setPrinterStatus(status);
+      setSavedBtPrinter(device);
+      setSelectedMethod('capacitor_bluetooth');
+      setShowBtDeviceList(false);
+      setTestResult({
+        success: true,
+        msg: `Berhasil terhubung ke ${device.name} (${device.address}) via Bluetooth Langsung (Mode PPOB)!`
+      });
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        msg: err.message || `Gagal menyambung ke ${device.name}`
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisconnectBtDevice = async () => {
+    await printerService.disconnectBluetooth();
+    printerService.clearSavedBluetoothPrinter();
+    setSavedBtPrinter(null);
+    setPrinterStatus({
+      connected: false,
+      type: 'simulator',
+      deviceName: 'Simulator Thermal 58mm',
+      devicePath: '/dev/usb/lp0'
+    });
+    setTestResult({
+      success: true,
+      msg: 'Koneksi printer Bluetooth telah diputus.'
+    });
   };
 
   const handleConnectBluetooth = async () => {
@@ -459,41 +536,98 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
         </div>
 
         <div className={`border p-5 rounded-2xl flex flex-col justify-between transition ${
-          selectedMethod === 'android_thermer' 
-            ? 'bg-slate-900 border-amber-500 shadow-md shadow-amber-500/10' 
+          selectedMethod === 'capacitor_bluetooth' || selectedMethod === 'web_bluetooth'
+            ? 'bg-slate-900 border-blue-500 shadow-md shadow-blue-500/10' 
             : 'bg-slate-900 border-slate-800'
         }`}>
           <div>
             <div className="flex items-center justify-between mb-3">
-              <span className="p-2.5 bg-amber-500/10 text-amber-400 rounded-xl">
-                <Printer className="w-5 h-5" />
+              <span className="p-2.5 bg-blue-500/10 text-blue-400 rounded-xl">
+                <Bluetooth className="w-5 h-5" />
               </span>
-              <span className="text-[10px] font-mono bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-bold">
-                Rekomendasi Android
+              <span className="text-[10px] font-mono bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded font-bold">
+                Rekomendasi Android (PPOB)
               </span>
             </div>
-            <h4 className="font-bold text-white text-sm">Thermer App (Android)</h4>
+            <h4 className="font-bold text-white text-sm">Bluetooth Thermal (PPOB)</h4>
             <p className="text-xs text-slate-400 mt-1">
-              Mengirim struk langsung ke printer Bluetooth/USB via aplikasi printer "Thermer" (Bluetooth Print) di Play Store.
+              Mencetak langsung via Bluetooth ke printer thermal 58mm persis seperti aplikasi PPOB tanpa aplikasi pihak ketiga!
             </p>
+
+            {/* Saved / Connected Device Badge */}
+            {savedBtPrinter ? (
+              <div className="mt-3 p-2.5 bg-slate-950 border border-blue-500/30 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span className="text-xs font-bold text-white truncate max-w-[130px]">{savedBtPrinter.name}</span>
+                  </div>
+                  <button
+                    onClick={handleDisconnectBtDevice}
+                    className="text-[10px] text-rose-400 hover:text-rose-300 font-medium"
+                    title="Putuskan printer"
+                  >
+                    Putus
+                  </button>
+                </div>
+                <div className="text-[10px] font-mono text-slate-400 mt-0.5">{savedBtPrinter.address}</div>
+              </div>
+            ) : (
+              <div className="mt-3 p-2 bg-slate-950/60 border border-slate-800 rounded-xl text-[11px] text-slate-400 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-slate-600"></span>
+                Belum ada printer Bluetooth terhubung
+              </div>
+            )}
+
+            {/* Paired Device List Selector */}
+            {showBtDeviceList && pairedBtDevices.length > 0 && (
+              <div className="mt-3 p-2 bg-slate-950 border border-slate-750 rounded-xl space-y-1.5 max-h-36 overflow-y-auto">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Pilih Printer Paired di HP:
+                </div>
+                {pairedBtDevices.map((dev) => (
+                  <button
+                    key={dev.address}
+                    onClick={() => handleSelectBtDevice(dev)}
+                    className="w-full text-left p-1.5 hover:bg-blue-600/20 rounded-lg text-xs font-mono text-cyan-300 flex items-center justify-between transition"
+                  >
+                    <span className="font-bold truncate">{dev.name}</span>
+                    <span className="text-[10px] text-slate-500 shrink-0 ml-1">{dev.address}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <button
-            onClick={() => {
-              setSelectedMethod('android_thermer');
-              setTestResult({
-                success: true,
-                msg: 'Beralih ke cetak Thermer Android. Pastikan aplikasi Thermer terpasang dari Play Store di HP Anda!'
-              });
-            }}
-            className={`mt-4 w-full py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-              selectedMethod === 'android_thermer'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'bg-slate-800 hover:bg-slate-750 text-slate-300'
-            }`}
-          >
-            {selectedMethod === 'android_thermer' ? '✓ Mode Aktif' : 'Pilih Thermer Android'}
-          </button>
+          <div className="mt-4 space-y-2">
+            <button
+              onClick={handleScanBtDevices}
+              disabled={isScanningBt || loading}
+              className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/20"
+            >
+              <Bluetooth className="w-3.5 h-3.5" />
+              {isScanningBt ? 'Memindai Perangkat...' : savedBtPrinter ? 'Ganti Printer Bluetooth' : 'Pilih Printer Bluetooth (PPOB)'}
+            </button>
+
+            <button
+              onClick={() => {
+                setSelectedMethod('capacitor_bluetooth');
+                setTestResult({
+                  success: true,
+                  msg: savedBtPrinter 
+                    ? `Mode aktif: Bluetooth PPOB -> ${savedBtPrinter.name}`
+                    : 'Pilih printer Bluetooth Anda terlebih dahulu untuk mencetak langsung mode PPOB.'
+                });
+              }}
+              className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                selectedMethod === 'capacitor_bluetooth' || selectedMethod === 'web_bluetooth'
+                  ? 'bg-blue-500 text-white shadow-md shadow-blue-500/20'
+                  : 'bg-slate-800 hover:bg-slate-750 text-slate-300'
+              }`}
+            >
+              {selectedMethod === 'capacitor_bluetooth' || selectedMethod === 'web_bluetooth' ? '✓ Mode PPOB Aktif' : 'Pilih Mode Ini'}
+            </button>
+          </div>
         </div>
 
         <div className={`border p-5 rounded-2xl flex flex-col justify-between transition ${

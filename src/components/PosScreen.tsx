@@ -27,13 +27,15 @@ interface PosScreenProps {
   settings: StoreSettings;
   onTransactionComplete: (transaction: Transaction) => void;
   onRefreshProducts: () => void;
+  storeId?: string | null;
 }
 
 export const PosScreen: React.FC<PosScreenProps> = ({
   products,
   settings,
   onTransactionComplete,
-  onRefreshProducts
+  onRefreshProducts,
+  storeId
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -196,6 +198,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       const change = paymentMethod === 'cash' ? Math.max(0, cashGiven - grandTotal) : 0;
 
       const newTransaction: Transaction = {
+        storeId: storeId || undefined,
         invoiceNumber,
         timestamp: Date.now(),
         items: [...cart],
@@ -221,8 +224,9 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           try {
             await saveProductToFirestore({
               ...item.product,
+              storeId: storeId || item.product.storeId,
               stock: newStock
-            });
+            }, storeId || item.product.storeId);
           } catch (e) {
             // Offline fallback
           }
@@ -231,7 +235,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
 
       // 3. Sync transaction to Firebase Firestore
       try {
-        await saveTransactionToFirestore(newTransaction);
+        await saveTransactionToFirestore(newTransaction, storeId || undefined);
       } catch (e) {
         console.warn('Saved transaction offline only:', e);
       }

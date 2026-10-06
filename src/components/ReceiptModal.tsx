@@ -9,10 +9,12 @@ import {
   Copy, 
   Check, 
   FileText,
-  Cpu
+  Cpu,
+  Share2,
+  RefreshCw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Transaction, StoreSettings, PrinterConnectionType } from '../types';
+import { Transaction, StoreSettings, PrinterConnectionType, BluetoothDeviceOption } from '../types';
 import { generateReceiptText, generateEscPosBinary, generateEscPosBinaryAsync } from '../utils/escpos';
 import { printerService } from '../services/printerService';
 
@@ -56,6 +58,86 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   const isTauri = printerService.getRuntimeEnv() === 'tauri';
   const linuxPath = settings.linuxDevicePath || '/dev/usb/lp0';
+
+  const [savedBtPrinter, setSavedBtPrinter] = useState<BluetoothDeviceOption | null>(() => printerService.getSavedBluetoothPrinter());
+  const [showBtPicker, setShowBtPicker] = useState(false);
+  const [pairedBtDevices, setPairedBtDevices] = useState<BluetoothDeviceOption[]>([]);
+  const [isLoadingBt, setIsLoadingBt] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSavedBtPrinter(printerService.getSavedBluetoothPrinter());
+      setShowBtPicker(false);
+    }
+  }, [isOpen]);
+
+  const handleOpenBtPicker = async () => {
+    setShowBtPicker(true);
+    setIsLoadingBt(true);
+    setPrintErrorMessage(null);
+    try {
+      if (printerService.isBluetoothSerialAvailable()) {
+        const devices = await printerService.listPairedBluetoothDevices();
+        setPairedBtDevices(devices);
+        if (devices.length === 0) {
+          setPrintErrorMessage('Tidak ada printer Bluetooth terpasang. Buka Pengaturan Bluetooth HP, cari & pasangkan printer Anda terlebih dahulu (PIN: 0000 / 1234).');
+        }
+      } else if (printerService.isWebBluetoothAvailable()) {
+        await handlePrint('web_bluetooth');
+        setShowBtPicker(false);
+      } else {
+        setPrintErrorMessage('Bluetooth tidak aktif di runtime ini. Jalankan di HP Android APK untuk mode PPOB.');
+      }
+    } catch (err: any) {
+      setPrintErrorMessage(err.message || 'Gagal memuat printer Bluetooth.');
+    } finally {
+      setIsLoadingBt(false);
+    }
+  };
+
+  const handleSelectBtDevice = async (device: BluetoothDeviceOption) => {
+    setIsPrinting(true);
+    setPrintErrorMessage(null);
+    setPrintSuccessMessage(null);
+    try {
+      await printerService.connectBluetoothSerial(device.address, device.name);
+      setSavedBtPrinter(device);
+      setShowBtPicker(false);
+      // Langsung cetak struk seketika
+      const result = await printerService.printViaDirectBluetooth(escPosBinary);
+      setPrintSuccessMessage(result.message);
+      confetti({
+        particleCount: 40,
+        spread: 50,
+        origin: { y: 0.8 }
+      });
+    } catch (err: any) {
+      setPrintErrorMessage(err?.message || `Gagal mencetak ke ${device.name}`);
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
+  const handleDirectPrintBluetooth = async () => {
+    if (!savedBtPrinter && printerService.isBluetoothSerialAvailable()) {
+      await handleOpenBtPicker();
+      return;
+    }
+    await handlePrint('capacitor_bluetooth');
+  };
+
+  const handleShareReceipt = async () => {
+    setIsPrinting(true);
+    setPrintErrorMessage(null);
+    try {
+      const res = await printerService.shareReceiptViaSystem(receiptPlainText, `Struk ${transaction.invoiceNumber}`);
+      setPrintSuccessMessage(res.message);
+    } catch (err: any) {
+      setPrintErrorMessage(err.message || 'Gagal membagikan struk.');
+    } finally {
+      setIsPrinting(false);
+    }
+  };
 
   const receiptPlainText = generateReceiptText(transaction, settings);
   const hexDump = Array.from(escPosBinary)
@@ -207,17 +289,100 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               </div>
             )}
 
-            {/* Primary Print Button */}
+            {/* Primary Print Action Area */}
             <div className="mt-4 space-y-2.5">
-              <button
-                onClick={() => handlePrint('tauri_raw')}
-                disabled={isPrinting}
-                className="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-50"
-              >
-                <Cpu className="w-4 h-4" />
-                {isPrinting ? 'Mengirim Data ke Printer...' : `Cetak ke ${linuxPath} (Tauri Linux)`}
-              </button>
+              {isTauri ? (
+                /* Desktop Linux Primary Button */
+                <>
+                  <button
+                    onClick={() => handlePrint('tauri_raw')}
+                    disabled={isPrinting}
+                    className="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-50"
+                  >
+                    <Cpu className="w-4 h-4" />
+                    {isPrinting ? 'Mengirim Data ke Printer...' : `Cetak ke ${linuxPath} (Tauri Linux)`}
+                  </button>
 
+                  <button
+                    onClick={handleDirectPrintBluetooth}
+                    disabled={isPrinting}
+                    className="w-full py-2.5 px-3 bg-blue-600/10 hover:bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                  >
+                    <Bluetooth className="w-3.5 h-3.5 text-blue-400" />
+                    Cetak Bluetooth (Mode PPOB)
+                  </button>
+                </>
+              ) : (
+                /* Mobile Android Primary Button (Direct Bluetooth PPOB) */
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleDirectPrintBluetooth}
+                      disabled={isPrinting}
+                      className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-50"
+                    >
+                      <Bluetooth className="w-4 h-4 text-cyan-300" />
+                      {isPrinting
+                        ? 'Mengirim ke Printer...'
+                        : savedBtPrinter
+                        ? `⚡ Cetak Langsung: ${savedBtPrinter.name}`
+                        : '⚡ Hubungkan & Cetak Bluetooth (PPOB)'}
+                    </button>
+
+                    <button
+                      onClick={handleOpenBtPicker}
+                      disabled={isPrinting}
+                      className="p-3 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-750 rounded-xl transition shrink-0"
+                      title="Pilih atau ganti printer Bluetooth yang dipasangkan di HP"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isLoadingBt ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
+
+                  {/* Inline Paired Devices Selector */}
+                  {showBtPicker && (
+                    <div className="p-3 bg-slate-950 border border-blue-500/30 rounded-xl space-y-2 animate-in fade-in">
+                      <div className="flex items-center justify-between text-xs font-bold text-white">
+                        <span className="flex items-center gap-1.5 text-cyan-300">
+                          <Bluetooth className="w-3.5 h-3.5" />
+                          Pilih Printer Paired di HP:
+                        </span>
+                        <button
+                          onClick={() => setShowBtPicker(false)}
+                          className="text-slate-400 hover:text-white text-xs"
+                        >
+                          ✕ Tutup
+                        </button>
+                      </div>
+
+                      {isLoadingBt ? (
+                        <div className="text-center py-2.5 text-xs text-slate-400">
+                          Membaca daftar printer Bluetooth di HP...
+                        </div>
+                      ) : pairedBtDevices.length > 0 ? (
+                        <div className="space-y-1 max-h-36 overflow-y-auto">
+                          {pairedBtDevices.map((dev) => (
+                            <button
+                              key={dev.address}
+                              onClick={() => handleSelectBtDevice(dev)}
+                              className="w-full text-left p-2 hover:bg-blue-600/20 border border-slate-800 hover:border-blue-500/40 rounded-lg text-xs font-mono text-cyan-300 flex items-center justify-between transition"
+                            >
+                              <span className="font-bold truncate">{dev.name}</span>
+                              <span className="text-[10px] text-slate-500 ml-2">{dev.address}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-400 text-center py-2">
+                          Tidak ada printer Bluetooth terpasang. Silakan pair printer di Pengaturan Bluetooth HP (PIN: 0000 / 1234).
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Secondary Options */}
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <button
                   onClick={() => handlePrint('simulator')}
@@ -238,15 +403,16 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 </button>
               </div>
 
+              {/* Universal Share / External App Option */}
               <div className="w-full text-xs">
                 <button
-                  onClick={() => handlePrint('android_thermer')}
+                  onClick={handleShareReceipt}
                   disabled={isPrinting}
-                  className="w-full p-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl flex items-center justify-center gap-1.5 text-[11px] font-semibold transition"
-                  title="Cetak via aplikasi Thermer Android (Rekomendasi Utama untuk HP Android)"
+                  className="w-full p-2 bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl flex items-center justify-center gap-1.5 text-[11px] font-medium transition"
+                  title="Bagikan struk via WhatsApp, Thermer, atau aplikasi lain"
                 >
-                  <Printer className="w-3.5 h-3.5 text-amber-400" />
-                  Thermer App (Android)
+                  <Share2 className="w-3.5 h-3.5 text-slate-400" />
+                  Bagikan Struk / Aplikasi Lain
                 </button>
               </div>
             </div>

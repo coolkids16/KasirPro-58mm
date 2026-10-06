@@ -1,6 +1,29 @@
+export type UserRole = 'owner' | 'manager' | 'cashier';
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  storeId: string;
+  photoURL?: string;
+  createdAt: string;
+  createdById?: string;
+}
+
+export interface Store {
+  id: string;
+  name: string;
+  ownerId: string;
+  address?: string;
+  phone?: string;
+  createdAt: string;
+}
+
 export interface Product {
   id?: number | string;
   firestoreId?: string;
+  storeId?: string;
   name: string;
   sku: string;
   price: number;
@@ -22,6 +45,7 @@ export type PaymentMethod = 'cash' | 'qris' | 'transfer';
 export interface Transaction {
   id?: number | string;
   firestoreId?: string;
+  storeId?: string;
   invoiceNumber: string;
   timestamp: number;
   items: CartItem[];
@@ -33,10 +57,12 @@ export interface Transaction {
   changeAmount: number;
   paymentMethod: PaymentMethod;
   cashierName: string;
+  cashierId?: string;
   notes?: string;
 }
 
 export interface StoreSettings {
+  storeId?: string;
   storeName: string;
   logoUrl?: string; // Custom Store Logo (Data URL / Base64 image)
   address: string;
@@ -71,6 +97,11 @@ export interface LinuxPrinterInfo {
   details?: string;
 }
 
+export interface BluetoothDeviceOption {
+  name: string;
+  address: string;
+}
+
 export interface PrinterDeviceStatus {
   connected: boolean;
   type: PrinterConnectionType;
@@ -78,4 +109,5 @@ export interface PrinterDeviceStatus {
   devicePath?: string;
   error?: string;
   linuxInfo?: LinuxPrinterInfo;
+  bluetoothDevice?: BluetoothDeviceOption;
 }

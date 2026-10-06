@@ -41,6 +41,7 @@ interface TransactionHistoryProps {
   settings: StoreSettings;
   onSelectTransactionToPrint: (tx: Transaction) => void;
   onOpenBackupModal?: () => void;
+  storeId?: string | null;
 }
 
 interface DailySalesData {
@@ -61,7 +62,8 @@ const MONTH_NAMES = [
 export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   settings,
   onSelectTransactionToPrint,
-  onOpenBackupModal
+  onOpenBackupModal,
+  storeId
 }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [search, setSearch] = useState('');
@@ -110,7 +112,8 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           },
           () => {
             loadTransactionsLocal();
-          }
+          },
+          storeId || undefined
         );
       } else {
         if (unsubFirestore) {
@@ -125,7 +128,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       unsubAuth();
       if (unsubFirestore) unsubFirestore();
     };
-  }, []);
+  }, [storeId]);
 
   const filtered = transactions.filter(t => 
     t.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||

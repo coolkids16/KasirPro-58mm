@@ -19,6 +19,7 @@
     "@tauri-apps/api": "^2.12.1",
     "@vitejs/plugin-react": "^6.1.1",
     "canvas-confetti": "^1.9.4",
+    "cordova-plugin-bluetooth-serial": "^0.4.7",
     "dexie": "^4.4.6",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",

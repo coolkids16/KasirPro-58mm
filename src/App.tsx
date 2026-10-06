@@ -10,7 +10,7 @@ import { AuthModal } from './components/AuthModal';
 import { SettingsModal } from './components/SettingsModal';
 import { DataBackupModal } from './components/DataBackupModal';
 import { Product, Transaction, StoreSettings, PrinterDeviceStatus } from './types';
-import { db, initializeDatabase, DEFAULT_SETTINGS } from './db/db';
+import { db, initializeDatabase, DEFAULT_SETTINGS, INITIAL_PRODUCTS } from './db/db';
 import { printerService } from './services/printerService';
 import { 
   subscribeToAuthState, 
@@ -18,10 +18,16 @@ import {
   subscribeStoreSettings, 
   saveStoreSettingsToFirestore,
   validateFirestoreConnection,
-  seedProductsIfEmpty 
+  seedProductsIfEmpty,
+  saveProductToFirestore,
+  setActiveStoreId 
 } from './services/firebase';
+import { useRole } from './hooks/useRole';
+import { RoleProtectedRoute } from './components/RoleGuard';
+import { UserManagementModal } from './components/UserManagementModal';
 
 export default function App() {
+  const { currentUser, userProfile, role, storeId, isOwner, isManager, isCashier } = useRole();
   const [activeTab, setActiveTab] = useState<'pos' | 'products' | 'transactions' | 'printer'>('pos');
   const [products, setProducts] = useState<Product[]>([]);
   
@@ -42,7 +48,7 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
-  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [isUsersModalOpen, setIsUsersModalOpen] = useState<boolean>(false);
   const [runtimeEnv, setRuntimeEnv] = useState<'tauri' | 'capacitor' | 'browser'>('browser');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -144,40 +150,7 @@ export default function App() {
     boot();
   }, [refreshProductsLocal, loadSettingsLocal, settings.linuxDevicePath]);
 
-  // 2. Listen to Firebase Authentication State
-  useEffect(() => {
-    const unsubscribeAuth = subscribeToAuthState((user) => {
-      setCurrentUser(user);
-      if (user) {
-        // Run database seeding & settings sync in background (non-blocking)
-        (async () => {
-          try {
-            await seedProductsIfEmpty();
-          } catch (e) {
-            console.warn('Seeding products skipped/offline:', e);
-          }
-
-          try {
-            const currentSettings = await db.settings.get('main');
-            if (currentSettings) {
-              await saveStoreSettingsToFirestore(currentSettings);
-            } else {
-              const local = localStorage.getItem('kasirpro_settings');
-              if (local) {
-                await saveStoreSettingsToFirestore(JSON.parse(local));
-              }
-            }
-          } catch (e) {
-            console.warn('Syncing settings skipped/offline:', e);
-          }
-        })();
-      }
-    });
-
-    return () => unsubscribeAuth();
-  }, []);
-
-  // 3. Real-time sync with Firebase Firestore for Products & Settings (active when authenticated)
+  // 2. Real-time sync with Firebase Firestore for Products & Settings (active when authenticated)
   useEffect(() => {
     if (!currentUser) {
       refreshProductsLocal();
@@ -185,21 +158,64 @@ export default function App() {
       return;
     }
 
-    // Sync products from Firestore
+    if (storeId) {
+      setActiveStoreId(storeId);
+    }
+
+    // Sync products from Firestore (scoped by storeId, with safe Dexie caching)
     const unsubProducts = subscribeProducts(
-      (firestoreProducts) => {
-        setProducts(firestoreProducts || []);
-        // Mirror to Dexie for offline cache
-        db.products.clear().then(() => {
-          if (firestoreProducts && firestoreProducts.length > 0) {
-            db.products.bulkAdd(firestoreProducts);
+      async (firestoreProducts) => {
+        if (firestoreProducts && firestoreProducts.length > 0) {
+          setProducts(firestoreProducts);
+          // Mirror to local Dexie for offline cache
+          try {
+            await db.products.clear();
+            await db.products.bulkAdd(firestoreProducts);
+          } catch (e) {
+            console.warn('Error mirroring products to Dexie:', e);
           }
-        }).catch(console.warn);
+        } else {
+          // If Firestore currently has 0 products for this store:
+          // Check local Dexie first (DO NOT wipe local Dexie!)
+          try {
+            const localProducts = await db.products.toArray();
+            if (localProducts && localProducts.length > 0) {
+              setProducts(localProducts);
+              // Auto-sync local products to Firestore under this storeId so all staff can see them
+              if (storeId && (isOwner || isManager)) {
+                for (const p of localProducts) {
+                  await saveProductToFirestore({ ...p, storeId }, storeId);
+                }
+              }
+            } else {
+              // If both Firestore and local Dexie are truly empty:
+              // For Owner, initialize INITIAL_PRODUCTS so the store has inventory!
+              if (isOwner && storeId) {
+                const seededList: Product[] = [];
+                for (const initP of INITIAL_PRODUCTS) {
+                  const pPayload: Product = {
+                    ...initP,
+                    storeId
+                  };
+                  const localId = await db.products.add(pPayload);
+                  const firestoreId = await saveProductToFirestore({ ...pPayload, id: localId }, storeId);
+                  seededList.push({ ...pPayload, id: localId, firestoreId });
+                }
+                setProducts(seededList);
+              } else {
+                setProducts([]);
+              }
+            }
+          } catch (err) {
+            console.warn('Error verifying local Dexie products:', err);
+          }
+        }
       },
       () => {
         // Fallback to local Dexie
         refreshProductsLocal();
-      }
+      },
+      storeId || undefined
     );
 
     // Sync store settings from Firestore
@@ -220,11 +236,16 @@ export default function App() {
       unsubProducts();
       unsubSettings();
     };
-  }, [currentUser, refreshProductsLocal, loadSettingsLocal]);
+  }, [currentUser, storeId, isOwner, isManager, refreshProductsLocal, loadSettingsLocal]);
 
   // When cashier completes a transaction
   const handleTransactionComplete = (tx: Transaction) => {
-    setCurrentReceiptTx(tx);
+    const finalTx: Transaction = {
+      ...tx,
+      storeId: storeId || undefined,
+      cashierId: currentUser?.uid || undefined
+    };
+    setCurrentReceiptTx(finalTx);
     setIsReceiptModalOpen(true);
   };
 
@@ -251,7 +272,9 @@ export default function App() {
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onOpenBackupModal={() => setIsBackupModalOpen(true)}
+        onOpenUsersModal={() => setIsUsersModalOpen(true)}
         currentUser={currentUser}
+        userProfile={userProfile}
         runtimeEnv={runtimeEnv}
         settings={settings}
         theme={theme}
@@ -273,15 +296,19 @@ export default function App() {
                 settings={settings}
                 onTransactionComplete={handleTransactionComplete}
                 onRefreshProducts={refreshProductsLocal}
+                storeId={storeId}
               />
             )}
 
             {activeTab === 'products' && (
-              <ProductManagement
-                products={products}
-                onRefreshProducts={refreshProductsLocal}
-                onOpenBackupModal={() => setIsBackupModalOpen(true)}
-              />
+              <RoleProtectedRoute allowedRoles={['owner', 'manager']} pageTitle="Manajemen Produk & Stok">
+                <ProductManagement
+                  products={products}
+                  onRefreshProducts={refreshProductsLocal}
+                  onOpenBackupModal={() => setIsBackupModalOpen(true)}
+                  storeId={storeId}
+                />
+              </RoleProtectedRoute>
             )}
 
             {activeTab === 'transactions' && (
@@ -289,6 +316,7 @@ export default function App() {
                 settings={settings}
                 onSelectTransactionToPrint={handleSelectTransactionToPrint}
                 onOpenBackupModal={() => setIsBackupModalOpen(true)}
+                storeId={storeId}
               />
             )}
 
@@ -324,6 +352,15 @@ export default function App() {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         currentUser={currentUser}
+        userProfile={userProfile}
+        onOpenUsersModal={() => setIsUsersModalOpen(true)}
+      />
+
+      {/* User Management Modal (Khusus Owner) */}
+      <UserManagementModal
+        isOpen={isUsersModalOpen}
+        onClose={() => setIsUsersModalOpen(false)}
+        currentUserProfile={userProfile}
       />
 
       {/* Store and Printer Settings Modal */}

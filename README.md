@@ -157,9 +157,9 @@ Capacitor digunakan untuk mengonversi kode React Vite KasirPro menjadi aplikasi 
 Jalankan langkah-langkah berikut di terminal proyek Anda:
 
 ```bash
-# A. Instalasi Core & Platform Android Capacitor
-bun install @capacitor/core
-bun install -d @capacitor/cli @capacitor/android
+# A. Instalasi Core, Platform Android, & Plugin Bluetooth Serial (Mode PPOB)
+bun add @capacitor/core cordova-plugin-bluetooth-serial
+bun add -d @capacitor/cli @capacitor/android
 
 # B. Inisialisasi konfigurasi Capacitor (cukup sekali di awal)
 bunx cap init "KasirPro" "com.kasirpro.pos" --web-dir "dist"
@@ -170,8 +170,8 @@ bunx cap add android
 
 ---
 
-### 2. Atur Izin Kamera untuk Scanner Barcode (Sangat Penting!)
-Agar pemindai barcode kamera WebRTC dapat bekerja secara native di dalam WebView Android:
+### 2. Atur Izin Kamera & Bluetooth di Android (Sangat Penting!)
+Agar pemindai barcode kamera dan pencetakan langsung Bluetooth (Mode PPOB) dapat bekerja secara native di Android:
 
 1. Buka file: `android/app/src/main/AndroidManifest.xml`
 2. Tambahkan baris izin berikut di dalam tag `<manifest>` (letakkan sebelum tag `<application>`):
@@ -180,12 +180,29 @@ Agar pemindai barcode kamera WebRTC dapat bekerja secara native di dalam WebView
    <uses-permission android:name="android.permission.CAMERA" />
    <uses-feature android:name="android.hardware.camera" android:required="false" />
    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+   <!-- Izin Bluetooth untuk Cetak Thermal Langsung (Mode PPOB) -->
+   <uses-permission android:name="android.permission.BLUETOOTH" />
+   <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+   <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+   <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
    ```
 3. Simpan file tersebut.
 
 ---
 
-### 3. Cara Mengganti Logo / Ikon Aplikasi Android
+### 3. Cara Menggunakan Cetak Bluetooth Langsung (Mode PPOB)
+Sistem cetak Bluetooth di KasirPro kini bekerja **langsung seperti aplikasi PPOB / kasir minimarket** tanpa perlu membuka aplikasi perantara seperti RawBT atau Thermer:
+
+1. **Nyalakan Printer**: Nyalakan printer thermal Bluetooth Anda.
+2. **Pairing di HP**: Buka menu **Pengaturan > Bluetooth** di HP Android Anda, cari nama printer thermal Anda (misalnya `RPP02N`, `POS-58`, `PT-210`, `MPT-II`, dll), lalu klik pasangkan / *Pair* (PIN default biasanya `0000` atau `1234`).
+3. **Pilih di KasirPro**: Buka KasirPro di HP Anda. Pada jendela cetak struk atau menu **Uji Printer**, klik **`Pilih Printer Bluetooth (PPOB)`**, lalu pilih printer yang baru saja Anda pasangkan.
+4. **Cetak Instan**: Printer Anda akan tersimpan otomatis. Setiap kali transaksi selesai, kasir tinggal klik **`⚡ Cetak Langsung: [Nama Printer]`** — struk langsung keluar dari printer seketika!
+
+---
+
+### 4. Cara Mengganti Logo / Ikon Aplikasi Android
 
 Untuk mengubah logo aplikasi bawaan Capacitor menjadi logo kustom toko Anda, gunakan salah satu cara berikut:
 
@@ -219,7 +236,7 @@ Letakkan logo kustom Anda ke dalam folder:
 
 ---
 
-### 4. Alur Build & Sinkronisasi Berkala (Setiap Kali Ada Perubahan Kode)
+### 5. Alur Build & Sinkronisasi Berkala (Setiap Kali Ada Perubahan Kode)
 Jalankan langkah-langkah ini setiap kali Anda memperbarui kode aplikasi KasirPro Anda agar disinkronkan ke Android:
 
 ```bash

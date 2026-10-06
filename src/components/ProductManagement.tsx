@@ -29,12 +29,14 @@ interface ProductManagementProps {
   products: Product[];
   onRefreshProducts: () => void;
   onOpenBackupModal?: () => void;
+  storeId?: string | null;
 }
 
 export const ProductManagement: React.FC<ProductManagementProps> = ({
   products,
   onRefreshProducts,
-  onOpenBackupModal
+  onOpenBackupModal,
+  storeId
 }) => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
@@ -147,6 +149,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     saveCustomCategory(finalCategory);
 
     const productPayload: Product = {
+      storeId: storeId || undefined,
       name: formName.trim(),
       sku: formSku.trim(),
       category: finalCategory,
@@ -168,13 +171,23 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
           }
         }
         // 2. Update Firestore
-        await saveProductToFirestore({ ...productPayload, id: editingProduct.id });
+        await saveProductToFirestore({ 
+          ...productPayload, 
+          id: editingProduct.id,
+          firestoreId: editingProduct.firestoreId 
+        }, storeId || undefined);
         showNotification(`Produk "${productPayload.name}" berhasil diperbarui di kategori "${finalCategory}"!`);
       } else {
         // 1. Add Dexie
         const newLocalId = await db.products.add(productPayload);
         // 2. Add Firestore
-        await saveProductToFirestore({ ...productPayload, id: newLocalId });
+        const firestoreId = await saveProductToFirestore({ 
+          ...productPayload, 
+          id: newLocalId 
+        }, storeId || undefined);
+        if (firestoreId) {
+          await db.products.update(newLocalId, { firestoreId });
+        }
         showNotification(`Produk baru "${productPayload.name}" berhasil ditambahkan di kategori "${finalCategory}"!`);
       }
     } catch (err) {
@@ -218,9 +231,10 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
 
       // 2. Delete from Firebase Firestore (guaranteed by ID, SKU, and Name)
       await deleteProductFromFirestore(
-        productToDelete.id, 
+        productToDelete.firestoreId || productToDelete.id, 
         productToDelete.sku, 
-        productToDelete.name
+        productToDelete.name,
+        storeId || productToDelete.storeId
       );
 
       showNotification(`Produk "${productToDelete.name}" telah dihapus permanen dari sistem & Cloud Firestore.`);
@@ -247,7 +261,11 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
           await db.products.update(match.id, { stock: newStock });
         }
       }
-      await saveProductToFirestore({ ...p, stock: newStock });
+      await saveProductToFirestore({ 
+        ...p, 
+        stock: newStock, 
+        storeId: storeId || p.storeId 
+      }, storeId || p.storeId);
     } catch (err) {
       // offline fallback
     }
@@ -266,7 +284,11 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
           await db.products.update(match.id, { stock: 0 });
         }
       }
-      await saveProductToFirestore({ ...p, stock: 0 });
+      await saveProductToFirestore({ 
+        ...p, 
+        stock: 0, 
+        storeId: storeId || p.storeId 
+      }, storeId || p.storeId);
       showNotification(`Stok produk "${p.name}" telah dikosongkan (0) di sistem & Firestore.`);
     } catch (err) {
       // offline fallback
@@ -285,7 +307,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
         }
       }
       // 2. Update Firestore
-      await clearAllStockInFirestore();
+      await clearAllStockInFirestore(storeId || undefined);
 
       showNotification('Semua stok produk telah dikosongkan (0) di sistem & Cloud Firestore.');
     } catch (err: any) {
@@ -306,7 +328,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
       await db.products.clear();
 
       // 2. Clear Firestore
-      await deleteAllProductsFromFirestore();
+      await deleteAllProductsFromFirestore(storeId || undefined);
 
       showNotification('Seluruh produk dan stok telah dihapus bersih dari sistem & Cloud Firestore.');
     } catch (err: any) {

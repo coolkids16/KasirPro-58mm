@@ -1,7 +1,8 @@
 import { 
   PrinterConnectionType, 
   PrinterDeviceStatus, 
-  LinuxPrinterInfo 
+  LinuxPrinterInfo,
+  BluetoothDeviceOption
 } from '../types';
 
 export interface PrintResult {
@@ -96,6 +97,17 @@ class ThermalPrinterService {
           details: 'Printer Thermal 58mm di Linux (/dev/usb/lp0)'
         }
       };
+    } else {
+      const savedBt = this.getSavedBluetoothPrinter();
+      if (savedBt) {
+        this.lastStatus = {
+          connected: false,
+          type: 'capacitor_bluetooth',
+          deviceName: savedBt.name,
+          devicePath: savedBt.address,
+          bluetoothDevice: savedBt
+        };
+      }
     }
   }
 
@@ -199,6 +211,228 @@ class ThermalPrinterService {
       hexDump: hex + (data.length > 16 ? ' ...' : ''),
       devicePath
     };
+  }
+
+  /**
+   * Helper Bluetooth & PPOB Direct Printing
+   */
+  isBluetoothSerialAvailable(): boolean {
+    return typeof window !== 'undefined' && Boolean((window as any).bluetoothSerial);
+  }
+
+  isWebBluetoothAvailable(): boolean {
+    return typeof navigator !== 'undefined' && Boolean((navigator as any).bluetooth);
+  }
+
+  getSavedBluetoothPrinter(): BluetoothDeviceOption | null {
+    try {
+      const saved = localStorage.getItem('kasirpro_bt_printer');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
+  saveBluetoothPrinter(device: BluetoothDeviceOption) {
+    try {
+      localStorage.setItem('kasirpro_bt_printer', JSON.stringify(device));
+      this.lastStatus = {
+        connected: true,
+        type: 'capacitor_bluetooth',
+        deviceName: device.name,
+        devicePath: device.address,
+        bluetoothDevice: device
+      };
+    } catch {
+      // ignore
+    }
+  }
+
+  clearSavedBluetoothPrinter() {
+    try {
+      localStorage.removeItem('kasirpro_bt_printer');
+      if (this.lastStatus.type === 'capacitor_bluetooth') {
+        this.lastStatus = {
+          connected: false,
+          type: 'simulator',
+          deviceName: 'Simulator Thermal 58mm',
+          devicePath: this.defaultLinuxPath
+        };
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
+   * Mengambil daftar printer Bluetooth yang sudah dipasangkan (paired) di HP Android
+   */
+  async listPairedBluetoothDevices(): Promise<BluetoothDeviceOption[]> {
+    if (this.isBluetoothSerialAvailable()) {
+      const bt = (window as any).bluetoothSerial;
+      return new Promise((resolve, reject) => {
+        bt.list(
+          (devices: any[]) => {
+            const mapped: BluetoothDeviceOption[] = (devices || []).map((d: any) => ({
+              name: d.name || 'Printer Bluetooth 58mm',
+              address: d.address || d.id || ''
+            }));
+            resolve(mapped);
+          },
+          (err: any) => {
+            reject(new Error(err || 'Gagal membaca daftar perangkat Bluetooth yang terpasang di HP.'));
+          }
+        );
+      });
+    }
+
+    return [];
+  }
+
+  /**
+   * Sambungkan ke Printer Bluetooth Serial (SPP) secara langsung (Mode PPOB)
+   */
+  async connectBluetoothSerial(address: string, name = 'Printer Thermal 58mm'): Promise<PrinterDeviceStatus> {
+    if (!this.isBluetoothSerialAvailable()) {
+      throw new Error(
+        'Plugin Bluetooth Serial belum aktif di runtime ini. Di Android Studio/Capacitor, pastikan plugin terpasang.'
+      );
+    }
+
+    const bt = (window as any).bluetoothSerial;
+
+    return new Promise((resolve, reject) => {
+      // Putuskan koneksi sebelumnya agar fresh
+      bt.disconnect(() => {}, () => {});
+
+      // Sambungkan via RFCOMM / Insecure SPP (standar printer thermal PPOB)
+      bt.connectInsecure(
+        address,
+        () => {
+          this.saveBluetoothPrinter({ name, address });
+          resolve(this.lastStatus);
+        },
+        (err: any) => {
+          // Fallback ke connect biasa
+          bt.connect(
+            address,
+            () => {
+              this.saveBluetoothPrinter({ name, address });
+              resolve(this.lastStatus);
+            },
+            (err2: any) => {
+              reject(new Error(err2 || err || `Gagal menyambungkan ke ${name} (${address}). Pastikan printer menyala dan Bluetooth aktif.`));
+            }
+          );
+        }
+      );
+    });
+  }
+
+  /**
+   * Putuskan koneksi Bluetooth
+   */
+  async disconnectBluetooth(): Promise<void> {
+    if (this.isBluetoothSerialAvailable()) {
+      try {
+        (window as any).bluetoothSerial.disconnect();
+      } catch {
+        // ignore
+      }
+    }
+    if (this.bluetoothDevice?.gatt?.connected) {
+      this.bluetoothDevice.gatt.disconnect();
+    }
+    this.lastStatus.connected = false;
+  }
+
+  /**
+   * Cetak Langsung via Bluetooth (Mode PPOB)
+   * Mengirim biner ESC/POS langsung ke printer Bluetooth tanpa aplikasi perantara
+   */
+  async printViaDirectBluetooth(data: Uint8Array): Promise<PrintResult> {
+    // 1. Prioritas Utama: Bluetooth Serial SPP (Capacitor Android APK)
+    if (this.isBluetoothSerialAvailable()) {
+      const bt = (window as any).bluetoothSerial;
+      const saved = this.getSavedBluetoothPrinter();
+
+      // Cek apakah sudah terhubung
+      const isConnected = await new Promise<boolean>((resolve) => {
+        bt.isConnected(
+          () => resolve(true),
+          () => resolve(false)
+        );
+      });
+
+      if (!isConnected) {
+        if (!saved?.address) {
+          throw new Error('Belum ada printer Bluetooth yang dipilih. Silakan pilih printer Bluetooth Anda terlebih dahulu.');
+        }
+        await this.connectBluetoothSerial(saved.address, saved.name);
+      }
+
+      // Kirim biner ESC/POS langsung ke printer thermal
+      return new Promise<PrintResult>((resolve, reject) => {
+        bt.write(
+          data.buffer,
+          () => {
+            resolve({
+              success: true,
+              message: `Berhasil mencetak ke ${saved?.name || 'Printer Bluetooth'} via Bluetooth Langsung (Mode PPOB)!`,
+              bytesCount: data.length
+            });
+          },
+          (err: any) => {
+            reject(new Error(err || 'Gagal mengirim data cetak ke printer Bluetooth.'));
+          }
+        );
+      });
+    }
+
+    // 2. Web Bluetooth API (Google Chrome di Android / Desktop)
+    if (this.isWebBluetoothAvailable()) {
+      return await this.printViaWebBluetooth(data);
+    }
+
+    // 3. Mode Simulasi / Preview
+    return {
+      success: true,
+      message: `Simulasi Bluetooth PPOB: Berhasil mengirim ${data.length} bytes ke printer thermal.`,
+      bytesCount: data.length
+    };
+  }
+
+  /**
+   * Bagikan Struk ke Sistem Android / Aplikasi Lain (Thermer, WhatsApp, RawBT, dll)
+   */
+  async shareReceiptViaSystem(textData: string, title = 'Struk KasirPro'): Promise<PrintResult> {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({
+          title,
+          text: textData
+        });
+        return {
+          success: true,
+          message: 'Dialog bagikan struk berhasil dibuka.'
+        };
+      } else {
+        await navigator.clipboard.writeText(textData);
+        return {
+          success: true,
+          message: 'Teks struk disalin ke clipboard.'
+        };
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        return {
+          success: false,
+          message: 'Berbagi struk dibatalkan.'
+        };
+      }
+      throw new Error(err?.message || 'Gagal membagikan struk.');
+    }
   }
 
   /**
@@ -446,14 +680,22 @@ class ThermalPrinterService {
       return await this.printViaTauri(binaryData, devicePath);
     }
 
-    // 2. Web Bluetooth jika dipilih secara spesifik
-    if (preferredMethod === 'web_bluetooth') {
-      return await this.printViaWebBluetooth(binaryData);
+    // 2. Direct Bluetooth Thermal (Mode PPOB Langsung)
+    if (
+      preferredMethod === 'capacitor_bluetooth' || 
+      preferredMethod === 'web_bluetooth' ||
+      (env === 'capacitor' && preferredMethod !== 'browser_print' && preferredMethod !== 'simulator' && preferredMethod !== 'android_thermer')
+    ) {
+      return await this.printViaDirectBluetooth(binaryData);
     }
 
     // 2.5 Thermer Android App Link jika dipilih secara spesifik
     if (preferredMethod === 'android_thermer') {
-      return await this.printViaThermer(binaryData);
+      try {
+        return await this.printViaThermer(binaryData);
+      } catch {
+        return await this.shareReceiptViaSystem(textData, 'Struk KasirPro');
+      }
     }
 
     // 3. Web Serial jika dipilih secara spesifik

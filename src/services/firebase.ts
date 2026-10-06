@@ -1,6 +1,7 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, deleteApp } from 'firebase/app';
 import { 
   initializeAuth,
+  getAuth,
   indexedDBLocalPersistence,
   browserLocalPersistence,
   signInWithPopup, 
@@ -32,7 +33,7 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { Product, Transaction, StoreSettings } from '../types';
+import { Product, Transaction, StoreSettings, UserRole, UserProfile, Store } from '../types';
 import { INITIAL_PRODUCTS, DEFAULT_SETTINGS } from '../db/db';
 
 // Initialize Firebase App
@@ -121,22 +122,68 @@ export async function validateFirestoreConnection(): Promise<boolean> {
   }
 }
 
-// ----------------- AUTHENTICATION HELPERS -----------------
+// ----------------- USER PROFILE & RBAC HELPERS -----------------
+
+export async function getUserProfile(uid: string): Promise<UserProfile | null> {
+  try {
+    const userSnap = await getDoc(doc(db, 'users', uid));
+    if (userSnap.exists()) {
+      return userSnap.data() as UserProfile;
+    }
+    return null;
+  } catch (error) {
+    console.warn('getUserProfile error:', error);
+    return null;
+  }
+}
+
+export function subscribeUserProfile(uid: string, callback: (profile: UserProfile | null) => void) {
+  return onSnapshot(
+    doc(db, 'users', uid),
+    (snap) => {
+      if (snap.exists()) {
+        callback(snap.data() as UserProfile);
+      } else {
+        callback(null);
+      }
+    },
+    (err) => {
+      console.warn('subscribeUserProfile error:', err);
+      callback(null);
+    }
+  );
+}
 
 export async function loginWithGoogle(): Promise<FirebaseUser> {
   try {
     const result = await signInWithPopup(auth, googleProvider);
-    // Sync user record to /users/{uid}
     if (result.user) {
       const userRef = doc(db, 'users', result.user.uid);
-      await setDoc(userRef, {
-        uid: result.user.uid,
-        email: result.user.email,
-        displayName: result.user.displayName || 'Kasir',
-        photoURL: result.user.photoURL || '',
-        role: 'cashier',
-        createdAt: new Date().toISOString()
-      }, { merge: true });
+      const existingDoc = await getDoc(userRef);
+      
+      if (!existingDoc.exists()) {
+        // Akun pertama kali login via Google otomatis dijadikan "owner"
+        const storeId = `store_${result.user.uid.slice(0, 12)}`;
+        const initialProfile: UserProfile = {
+          uid: result.user.uid,
+          email: result.user.email || '',
+          displayName: result.user.displayName || 'Owner Toko',
+          photoURL: result.user.photoURL || '',
+          role: 'owner',
+          storeId,
+          createdAt: new Date().toISOString()
+        };
+
+        // Buat store dan profil user
+        await setDoc(doc(db, 'stores', storeId), {
+          id: storeId,
+          name: `${result.user.displayName || 'Toko'} Store`,
+          ownerId: result.user.uid,
+          createdAt: new Date().toISOString()
+        }, { merge: true });
+
+        await setDoc(userRef, initialProfile, { merge: true });
+      }
     }
     return result.user;
   } catch (error: any) {
@@ -148,39 +195,136 @@ export async function loginWithGoogle(): Promise<FirebaseUser> {
 export async function registerWithEmailPassword(
   email: string, 
   pass: string, 
-  displayName: string
+  displayName: string,
+  storeName?: string
 ): Promise<FirebaseUser> {
   try {
     const res = await createUserWithEmailAndPassword(auth, email, pass);
     if (displayName.trim()) {
       await updateProfile(res.user, { displayName: displayName.trim() });
     }
-    // Sync to Firestore /users/{uid} with 1.8s timeout protection
-    const userRef = doc(db, 'users', res.user.uid);
-    try {
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout writing user doc')), 1800)
-      );
-      await Promise.race([
-        setDoc(userRef, {
-          uid: res.user.uid,
-          email: res.user.email,
-          displayName: displayName.trim() || 'Kasir',
-          photoURL: '',
-          role: 'cashier',
-          createdAt: new Date().toISOString()
-        }, { merge: true }),
-        timeoutPromise
-      ]);
-    } catch (e) {
-      console.warn('Syncing user profile to Firestore timed out or was offline:', e);
-    }
+
+    // Owner mendaftarkan toko pertama kali
+    const storeId = `store_${res.user.uid.slice(0, 12)}`;
+    const effectiveStoreName = storeName?.trim() || `${displayName.trim() || 'KasirPro'} Store`;
+
+    // 1. Buat data toko di /stores/{storeId}
+    await setDoc(doc(db, 'stores', storeId), {
+      id: storeId,
+      name: effectiveStoreName,
+      ownerId: res.user.uid,
+      createdAt: new Date().toISOString()
+    }, { merge: true });
+
+    // 2. Buat profil pengguna di /users/{uid} sebagai "owner"
+    const userProfile: UserProfile = {
+      uid: res.user.uid,
+      email: res.user.email || email,
+      displayName: displayName.trim() || 'Owner',
+      photoURL: '',
+      role: 'owner',
+      storeId,
+      createdAt: new Date().toISOString()
+    };
+
+    await setDoc(doc(db, 'users', res.user.uid), userProfile, { merge: true });
 
     return res.user;
   } catch (error: any) {
     console.error('Register error:', error);
     throw error;
   }
+}
+
+/**
+ * FUNGSI UTAMA BAGI "OWNER":
+ * Mendaftarkan akun "manager" atau "cashier" baru ke Firebase Auth & Firestore
+ * dengan storeId yang sama, TANPA membuat sesi Owner saat ini ter-logout!
+ */
+export async function registerStaffAccount(
+  ownerProfile: UserProfile,
+  staffEmail: string,
+  staffPass: string,
+  staffDisplayName: string,
+  staffRole: 'manager' | 'cashier'
+): Promise<UserProfile> {
+  if (ownerProfile.role !== 'owner') {
+    throw new Error('Hanya akun dengan peran "owner" yang berhak mendaftarkan akun manager atau kasir.');
+  }
+
+  if (!ownerProfile.storeId) {
+    throw new Error('ID Toko (storeId) pemilik belum terkonfigurasi.');
+  }
+
+  // Gunakan Secondary Firebase App instance agar sesi Owner yang sedang aktif tidak tertimpa
+  const secondaryAppName = `SecondaryAuth_${Date.now()}`;
+  const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+  const secondaryAuth = getAuth(secondaryApp);
+
+  try {
+    const cred = await createUserWithEmailAndPassword(secondaryAuth, staffEmail, staffPass);
+    if (staffDisplayName.trim()) {
+      await updateProfile(cred.user, { displayName: staffDisplayName.trim() });
+    }
+
+    const newStaffProfile: UserProfile = {
+      uid: cred.user.uid,
+      email: staffEmail,
+      displayName: staffDisplayName.trim(),
+      role: staffRole,
+      storeId: ownerProfile.storeId,
+      createdAt: new Date().toISOString(),
+      createdById: ownerProfile.uid
+    };
+
+    // Tulis dokumen staf ke Firestore menggunakan database utama
+    await setDoc(doc(db, 'users', cred.user.uid), newStaffProfile);
+
+    // Logout secondary auth instance
+    await signOut(secondaryAuth);
+    return newStaffProfile;
+  } catch (err: any) {
+    console.error('Error saat mendaftarkan staf:', err);
+    throw new Error(err.message || 'Gagal membuat akun staf baru.');
+  } finally {
+    // Bersihkan secondary app instance dari memory
+    await deleteApp(secondaryApp).catch(console.warn);
+  }
+}
+
+/**
+ * Hapus akun staf dari Firestore oleh Owner
+ */
+export async function deleteStaffAccount(staffUid: string): Promise<void> {
+  if (!auth.currentUser) throw new Error('Tidak terotentikasi');
+  await deleteDoc(doc(db, 'users', staffUid));
+}
+
+/**
+ * Berlangganan (listen) daftar staf di toko yang sama (untuk Owner)
+ */
+export function subscribeStoreStaff(
+  storeId: string,
+  callback: (staff: UserProfile[]) => void,
+  onError?: (err: any) => void
+) {
+  const usersCol = collection(db, 'users');
+  const q = query(usersCol, where('storeId', '==', storeId));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: UserProfile[] = [];
+      snapshot.forEach((d) => {
+        list.push(d.data() as UserProfile);
+      });
+      callback(list);
+    },
+    (err) => {
+      console.warn('subscribeStoreStaff error:', err);
+      if (onError) onError(err);
+    }
+  );
 }
 
 export async function loginWithEmailPassword(email: string, pass: string): Promise<FirebaseUser> {
@@ -217,25 +361,53 @@ export function subscribeToAuthState(callback: (user: FirebaseUser | null) => vo
 
 // ----------------- FIRESTORE PRODUCTS SERVICE -----------------
 
+let activeStoreId: string | null = null;
+
+export function setActiveStoreId(id: string | null): void {
+  activeStoreId = id;
+}
+
+export function getActiveStoreId(): string | null {
+  return activeStoreId;
+}
+
 export function subscribeProducts(
   onProductsUpdate: (products: Product[]) => void,
-  onError?: (err: any) => void
+  onError?: (err: any) => void,
+  storeId?: string
 ) {
   if (!auth.currentUser) {
     if (onError) onError(new Error('User not authenticated'));
     return () => {};
   }
 
+  const effectiveStoreId = storeId || activeStoreId;
   const productsCol = collection(db, 'products');
+  
+  // Scoped to effectiveStoreId or adoption of legacy/unassigned 'default_store' products
+  const q = effectiveStoreId 
+    ? query(productsCol, where('storeId', 'in', [effectiveStoreId, 'default_store']))
+    : productsCol;
+
   return onSnapshot(
-    productsCol,
+    q,
     (snapshot) => {
       const list: Product[] = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
+        
+        // Auto-migrate legacy products saved as 'default_store' to the actual active store
+        if (data.storeId === 'default_store' && effectiveStoreId) {
+          updateDoc(docSnap.ref, { 
+            storeId: effectiveStoreId,
+            updatedAt: new Date().toISOString()
+          }).catch(console.warn);
+        }
+
         list.push({
           id: docSnap.id,
           firestoreId: docSnap.id,
+          storeId: data.storeId || effectiveStoreId || undefined,
           name: data.name || '',
           sku: data.sku || '',
           price: Number(data.price) || 0,
@@ -258,14 +430,29 @@ export function subscribeProducts(
   );
 }
 
-export async function saveProductToFirestore(product: Product): Promise<string> {
+export async function saveProductToFirestore(product: Product, storeId?: string): Promise<string> {
   if (!auth.currentUser) {
     // In local offline mode, return local id without attempting cloud sync
     return String(product.id || '');
   }
   const path = 'products';
   try {
+    let targetStoreId = storeId || product.storeId || activeStoreId;
+    if (!targetStoreId && auth.currentUser) {
+      try {
+        const profile = await getUserProfile(auth.currentUser.uid);
+        if (profile?.storeId) {
+          targetStoreId = profile.storeId;
+          activeStoreId = profile.storeId;
+        }
+      } catch (e) {}
+    }
+    if (!targetStoreId) {
+      targetStoreId = 'default_store';
+    }
+
     const productData = {
+      storeId: targetStoreId,
       name: product.name,
       sku: product.sku,
       price: Number(product.price) || 0,
@@ -277,9 +464,21 @@ export async function saveProductToFirestore(product: Product): Promise<string> 
       updatedAt: new Date().toISOString()
     };
 
-    // 1. Search if a document with this SKU exists in Firestore to update it in-place
+    // 1. If product has a string firestoreId or id, update it directly
+    const targetDocId = product.firestoreId || (typeof product.id === 'string' && isNaN(Number(product.id)) ? product.id : null);
+    if (targetDocId) {
+      const docRef = doc(db, path, targetDocId);
+      await setDoc(docRef, productData, { merge: true });
+      return targetDocId;
+    }
+
+    // 2. Search if a document with this SKU exists in this store or default_store to update in-place
     if (product.sku) {
-      const q = query(collection(db, path), where('sku', '==', product.sku));
+      const q = query(
+        collection(db, path), 
+        where('sku', '==', product.sku),
+        where('storeId', 'in', [targetStoreId, 'default_store'])
+      );
       const snaps = await getDocs(q);
       if (!snaps.empty) {
         for (const docSnap of snaps.docs) {
@@ -289,15 +488,9 @@ export async function saveProductToFirestore(product: Product): Promise<string> 
       }
     }
 
-    // 2. If product.id is a string (e.g. Firestore doc ID), use it
-    if (product.id && typeof product.id === 'string' && isNaN(Number(product.id))) {
-      const docRef = doc(db, path, product.id);
-      await setDoc(docRef, productData, { merge: true });
-      return product.id;
-    } else {
-      const newDocRef = await addDoc(collection(db, path), productData);
-      return newDocRef.id;
-    }
+    // 3. Otherwise add new product doc
+    const newDocRef = await addDoc(collection(db, path), productData);
+    return newDocRef.id;
   } catch (error) {
     console.error('saveProductToFirestore error:', error);
     handleFirestoreError(error, OperationType.WRITE, path);
@@ -308,10 +501,12 @@ export async function saveProductToFirestore(product: Product): Promise<string> 
 export async function deleteProductFromFirestore(
   id?: number | string, 
   sku?: string, 
-  name?: string
+  name?: string,
+  storeId?: string
 ): Promise<void> {
   if (!auth.currentUser) return;
   const path = 'products';
+  const effectiveStoreId = storeId || activeStoreId;
   try {
     // 1. If we have a string ID, delete it
     if (id && typeof id === 'string' && isNaN(Number(id))) {
@@ -319,7 +514,9 @@ export async function deleteProductFromFirestore(
     }
     // 2. Query by SKU to delete any matching documents in Firestore
     if (sku) {
-      const q = query(collection(db, path), where('sku', '==', sku));
+      const q = effectiveStoreId
+        ? query(collection(db, path), where('sku', '==', sku), where('storeId', 'in', [effectiveStoreId, 'default_store']))
+        : query(collection(db, path), where('sku', '==', sku));
       const snaps = await getDocs(q);
       for (const d of snaps.docs) {
         await deleteDoc(d.ref);
@@ -327,7 +524,9 @@ export async function deleteProductFromFirestore(
     }
     // 3. Also query by name if provided
     if (name) {
-      const q = query(collection(db, path), where('name', '==', name));
+      const q = effectiveStoreId
+        ? query(collection(db, path), where('name', '==', name), where('storeId', 'in', [effectiveStoreId, 'default_store']))
+        : query(collection(db, path), where('name', '==', name));
       const snaps = await getDocs(q);
       for (const d of snaps.docs) {
         await deleteDoc(d.ref);
@@ -340,11 +539,15 @@ export async function deleteProductFromFirestore(
   }
 }
 
-export async function clearAllStockInFirestore(): Promise<void> {
+export async function clearAllStockInFirestore(storeId?: string): Promise<void> {
   if (!auth.currentUser) return;
   const path = 'products';
+  const effectiveStoreId = storeId || activeStoreId;
   try {
-    const snaps = await getDocs(collection(db, path));
+    const q = effectiveStoreId
+      ? query(collection(db, path), where('storeId', 'in', [effectiveStoreId, 'default_store']))
+      : collection(db, path);
+    const snaps = await getDocs(q);
     if (snaps.empty) return;
     const batch = writeBatch(db);
     snaps.forEach((d) => {
@@ -361,11 +564,15 @@ export async function clearAllStockInFirestore(): Promise<void> {
   }
 }
 
-export async function deleteAllProductsFromFirestore(): Promise<void> {
+export async function deleteAllProductsFromFirestore(storeId?: string): Promise<void> {
   if (!auth.currentUser) return;
   const path = 'products';
+  const effectiveStoreId = storeId || activeStoreId;
   try {
-    const snaps = await getDocs(collection(db, path));
+    const q = effectiveStoreId
+      ? query(collection(db, path), where('storeId', 'in', [effectiveStoreId, 'default_store']))
+      : collection(db, path);
+    const snaps = await getDocs(q);
     if (snaps.empty) return;
     const batch = writeBatch(db);
     snaps.forEach((d) => {
@@ -379,16 +586,18 @@ export async function deleteAllProductsFromFirestore(): Promise<void> {
   }
 }
 
-export async function batchSaveProductsToFirestore(products: Product[]): Promise<void> {
+export async function batchSaveProductsToFirestore(products: Product[], storeId?: string): Promise<void> {
   if (!auth.currentUser) return;
   const path = 'products';
+  const targetStoreId = storeId || activeStoreId || 'default_store';
   try {
     const batch = writeBatch(db);
     for (const p of products) {
-      const docRef = p.id && typeof p.id === 'string' && isNaN(Number(p.id)) 
-        ? doc(db, path, String(p.id)) 
+      const docRef = p.firestoreId || (p.id && typeof p.id === 'string' && isNaN(Number(p.id)))
+        ? doc(db, path, String(p.firestoreId || p.id)) 
         : doc(collection(db, path));
       batch.set(docRef, {
+        storeId: p.storeId || targetStoreId,
         name: p.name,
         sku: p.sku,
         price: Number(p.price) || 0,
@@ -405,7 +614,7 @@ export async function batchSaveProductsToFirestore(products: Product[]): Promise
     console.warn('Batch save products failed, fallback to individual saves:', error);
     for (const p of products) {
       try {
-        await saveProductToFirestore(p);
+        await saveProductToFirestore({ ...p, storeId: targetStoreId }, targetStoreId);
       } catch (e) {
         // ignore
       }
@@ -483,15 +692,19 @@ export async function seedProductsIfEmpty(): Promise<void> {
 
 export function subscribeTransactions(
   onTransactionsUpdate: (transactions: Transaction[]) => void,
-  onError?: (err: any) => void
+  onError?: (err: any) => void,
+  storeId?: string
 ) {
   if (!auth.currentUser) {
     if (onError) onError(new Error('User not authenticated'));
     return () => {};
   }
 
+  const effectiveStoreId = storeId || activeStoreId;
   const txCol = collection(db, 'transactions');
-  const q = query(txCol, orderBy('timestamp', 'desc'), limit(100));
+  const q = effectiveStoreId
+    ? query(txCol, where('storeId', 'in', [effectiveStoreId, 'default_store']), orderBy('timestamp', 'desc'), limit(150))
+    : query(txCol, orderBy('timestamp', 'desc'), limit(100));
 
   return onSnapshot(
     q,
@@ -499,9 +712,13 @@ export function subscribeTransactions(
       const list: Transaction[] = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
+        if (data.storeId === 'default_store' && effectiveStoreId) {
+          updateDoc(docSnap.ref, { storeId: effectiveStoreId }).catch(console.warn);
+        }
         list.push({
           id: docSnap.id,
           firestoreId: docSnap.id,
+          storeId: data.storeId || effectiveStoreId || undefined,
           invoiceNumber: data.invoiceNumber || docSnap.id,
           timestamp: data.timestamp || Date.now(),
           items: data.items || [],
@@ -513,6 +730,7 @@ export function subscribeTransactions(
           changeAmount: Number(data.changeAmount) || 0,
           paymentMethod: data.paymentMethod || 'cash',
           cashierName: data.cashierName || 'Kasir',
+          cashierId: data.cashierId || '',
           notes: data.notes || ''
         });
       });
@@ -549,13 +767,15 @@ export async function deleteTransactionFromFirestore(id: number | string, invoic
   }
 }
 
-export async function saveTransactionToFirestore(transaction: Transaction): Promise<string> {
+export async function saveTransactionToFirestore(transaction: Transaction, storeId?: string): Promise<string> {
   if (!auth.currentUser) {
     return String(transaction.id || '');
   }
   const path = 'transactions';
   try {
+    const targetStoreId = storeId || transaction.storeId || activeStoreId || 'default_store';
     const txData = {
+      storeId: targetStoreId,
       invoiceNumber: transaction.invoiceNumber,
       timestamp: transaction.timestamp,
       items: transaction.items,

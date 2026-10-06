@@ -15,10 +15,11 @@ import {
   WifiOff,
   CheckCircle2,
   Sun,
-  Moon
+  Moon,
+  Users
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
-import { PrinterDeviceStatus, StoreSettings } from '../types';
+import { PrinterDeviceStatus, StoreSettings, UserProfile } from '../types';
 
 export interface NavbarProps {
   activeTab: 'pos' | 'products' | 'transactions' | 'printer';
@@ -28,7 +29,9 @@ export interface NavbarProps {
   onOpenSettingsModal: () => void;
   onOpenAuthModal: () => void;
   onOpenBackupModal: () => void;
+  onOpenUsersModal?: () => void;
   currentUser: FirebaseUser | null;
+  userProfile?: UserProfile | null;
   runtimeEnv: 'tauri' | 'capacitor' | 'browser';
   settings?: StoreSettings;
   theme?: 'dark' | 'light';
@@ -43,7 +46,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSettingsModal,
   onOpenAuthModal,
   onOpenBackupModal,
+  onOpenUsersModal,
   currentUser,
+  userProfile,
   runtimeEnv,
   settings,
   theme = 'dark',
@@ -56,6 +61,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   // Helper to extract display label & initial for signed in user
   const getUserNameLabel = (user: FirebaseUser | null): string => {
     if (!user) return 'Masuk';
+    if (userProfile?.displayName && userProfile.displayName.trim().length > 0) {
+      return userProfile.displayName.split(' ')[0];
+    }
     if (user.displayName && user.displayName.trim().length > 0) {
       return user.displayName.split(' ')[0];
     }
@@ -63,7 +71,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       const emailPrefix = user.email.split('@')[0];
       return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
     }
-    return 'Kasir';
+    return userProfile?.role ? userProfile.role.toUpperCase() : 'Kasir';
   };
 
   const getUserInitial = (user: FirebaseUser): string => {
@@ -346,6 +354,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
+            {/* User Management Button for Owner */}
+            {userProfile?.role === 'owner' && onOpenUsersModal && (
+              <button
+                onClick={onOpenUsersModal}
+                title="Kelola Akun Manager & Kasir Toko (Khusus Owner)"
+                className="px-2.5 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 hover:text-white transition flex items-center gap-1.5 text-xs font-bold"
+              >
+                <Users className="w-4 h-4 text-indigo-400" />
+                <span className="hidden xl:inline">Staf</span>
+              </button>
+            )}
+
             {/* Settings Button */}
             <button
               onClick={onOpenSettingsModal}
@@ -358,10 +378,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* User Login Status Button */}
             <button
               onClick={onOpenAuthModal}
-              title={currentUser ? `Terhubung sebagai: ${currentUser.email || currentUser.displayName || 'Kasir'}` : 'Masuk ke Akun Kasir'}
+              title={currentUser ? `Terhubung sebagai: ${currentUser.displayName || currentUser.email || 'Pengguna'} (${userProfile?.role?.toUpperCase() || 'Guest'})` : 'Masuk ke Akun Kasir / Owner'}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition ${
                 currentUser
-                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 shadow-sm'
+                  ? userProfile?.role === 'owner'
+                    ? 'bg-amber-950/40 border-amber-500/40 text-amber-300 hover:bg-amber-900/50 shadow-sm'
+                    : userProfile?.role === 'manager'
+                    ? 'bg-cyan-950/40 border-cyan-500/40 text-cyan-300 hover:bg-cyan-900/50 shadow-sm'
+                    : 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 shadow-sm'
                   : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
               }`}
             >
@@ -369,18 +393,41 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <img
                   src={currentUser.photoURL}
                   alt={getUserNameLabel(currentUser)}
-                  className="w-4 h-4 rounded-full object-cover border border-emerald-400/50"
+                  className={`w-4 h-4 rounded-full object-cover border ${
+                    userProfile?.role === 'owner'
+                      ? 'border-amber-400/70'
+                      : userProfile?.role === 'manager'
+                      ? 'border-cyan-400/70'
+                      : 'border-emerald-400/70'
+                  }`}
                 />
               ) : currentUser ? (
-                <div className="w-4 h-4 rounded-full bg-emerald-500 text-slate-950 font-black text-[10px] flex items-center justify-center leading-none">
+                <div className={`w-4 h-4 rounded-full font-black text-[10px] flex items-center justify-center leading-none ${
+                  userProfile?.role === 'owner'
+                    ? 'bg-amber-400 text-slate-950'
+                    : userProfile?.role === 'manager'
+                    ? 'bg-cyan-400 text-slate-950'
+                    : 'bg-emerald-500 text-slate-950'
+                }`}>
                   {getUserInitial(currentUser)}
                 </div>
               ) : (
                 <LogIn className="w-3.5 h-3.5 text-emerald-400" />
               )}
-              <span className="max-w-[110px] truncate">
+              <span className="max-w-[100px] truncate">
                 {getUserNameLabel(currentUser)}
               </span>
+              {userProfile?.role && (
+                <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase ${
+                  userProfile.role === 'owner'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    : userProfile.role === 'manager'
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                }`}>
+                  {userProfile.role}
+                </span>
+              )}
             </button>
 
             <div className="hidden lg:block px-2.5 py-1 rounded-md text-[11px] font-mono uppercase bg-slate-800 text-cyan-400 border border-slate-700">
