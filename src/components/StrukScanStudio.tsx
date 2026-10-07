@@ -20,7 +20,6 @@ import {
   SlidersHorizontal,
   FileCheck
 } from 'lucide-react';
-import Tesseract from 'tesseract.js';
 import html2canvas from 'html2canvas';
 import { StoreSettings, PrinterDeviceStatus, MetadataItem, CustomTemplate } from '../types';
 import { printerService } from '../services/printerService';
@@ -587,18 +586,21 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
     showPrintStatus('✓ Item riwayat struk berhasil dihapus.');
   };
 
-  // PURE CLIENT-SIDE OCR ENGINE (Tesseract.js)
+  // PURE CLIENT-SIDE OCR ENGINE (Tesseract.js Dynamic Import)
   const processImageOCR = async (file: File) => {
     setIsProcessing(true);
     setOcrProgressMsg('Memuat engine OCR Tesseract...');
     sounds.playScanBeep();
 
     try {
+      const TesseractModule = await import('tesseract.js');
+      const Tesseract = TesseractModule.default || TesseractModule;
+
       const result = await Tesseract.recognize(
         file,
         'eng',
         {
-          logger: m => {
+          logger: (m: any) => {
             if (m.status === 'recognizing text') {
               const pct = Math.round(m.progress * 100);
               setOcrProgressMsg(`Memindai Teks OCR... (${pct}%)`);
