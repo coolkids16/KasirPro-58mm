@@ -32,6 +32,61 @@ export function padRow(left: string, right: string, width = 32): string {
   return left + ' '.repeat(spaces) + right;
 }
 
+export function wrapText(text: string, maxLength: number): string[] {
+  if (!text) return [];
+  // Split into words
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    if (!word) continue;
+    
+    // If a single word is wider than maxLength, we must slice it by characters
+    if (word.length > maxLength) {
+      if (currentLine) {
+        lines.push(currentLine);
+        currentLine = '';
+      }
+      let remaining = word;
+      while (remaining.length > maxLength) {
+        lines.push(remaining.substring(0, maxLength));
+        remaining = remaining.substring(maxLength);
+      }
+      currentLine = remaining;
+      continue;
+    }
+
+    if (currentLine.length + word.length + (currentLine ? 1 : 0) <= maxLength) {
+      currentLine += (currentLine ? ' ' : '') + word;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+  return lines;
+}
+
+export function padRowWrapped(left: string, right: string, width = 32): string {
+  const halfWidth = Math.floor(width / 2);
+  const leftLines = wrapText(left, halfWidth);
+  const rightLines = wrapText(right, halfWidth);
+
+  const maxLines = Math.max(leftLines.length, rightLines.length, 1);
+  const lines: string[] = [];
+
+  for (let i = 0; i < maxLines; i++) {
+    const lLine = (leftLines[i] || '').trim().padEnd(halfWidth, ' ');
+    const rLine = (rightLines[i] || '').trim().padStart(halfWidth, ' ');
+    lines.push(lLine + rLine);
+  }
+
+  return lines.join('\n');
+}
+
 export function padSeparator(char = '-', width = 32): string {
   return char.repeat(width);
 }
@@ -293,7 +348,7 @@ export function generateReceiptText(
  * Produces Uint8Array byte stream compliant with standard 58mm thermal printers.
  */
 export class EscPosEncoder {
-  private buffer: number[] = [];
+  public buffer: number[] = [];
 
   constructor() {
     this.init();

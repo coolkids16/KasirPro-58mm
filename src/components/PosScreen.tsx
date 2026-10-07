@@ -316,7 +316,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           </div>
 
           {/* Category Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <div className="flex items-center gap-2 overflow-x-auto pb-4 pt-1 elegant-scrollbar">
             {categories.map(cat => {
               const active = selectedCategory === cat;
               return (

@@ -3,6 +3,9 @@ export interface MetadataItem {
   key: string;
   value: string;
   isCentered?: boolean;
+  isBold?: boolean;
+  isUnderline?: boolean;
+  textSize?: 'S' | 'N' | 'DW' | 'DH' | 'M';
 }
 
 export interface CustomTemplate {

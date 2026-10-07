@@ -70,6 +70,72 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     }
   };
 
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+
+  const executeDeleteCategory = async (cat: string) => {
+    setIsProcessing(true);
+    try {
+      console.log('Starting delete category process for:', cat);
+      
+      // 1. Optimistic UI: remove from customCategories list immediately
+      const updated = customCategories.filter(c => c !== cat);
+      setCustomCategories(updated);
+      try {
+        localStorage.setItem('kasirpro_custom_categories', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Failed to save updated categories to localStorage:', e);
+      }
+
+      const productsWithThisCat = products.filter(p => p.category === cat);
+      const hasProducts = productsWithThisCat.length > 0;
+
+      // 2. Fast local update in Dexie first (instant local response)
+      try {
+        await db.products.where('category').equals(cat).modify({ category: 'Lainnya' });
+        console.log('Dexie products successfully modified to category "Lainnya"');
+      } catch (err) {
+        console.warn('Dexie modify query failed, falling back to individual local updates:', err);
+        if (hasProducts) {
+          for (const p of productsWithThisCat) {
+            if (p.id) {
+              await db.products.update(p.id as any, { category: 'Lainnya' }).catch(console.warn);
+            }
+          }
+        }
+      }
+
+      // 3. Parallelized Firestore updates so it doesn't get stuck or loop slowly
+      if (hasProducts) {
+        console.log(`Syncing ${productsWithThisCat.length} product category updates to Firestore in parallel...`);
+        const promises = productsWithThisCat.map(async (p) => {
+          const updatedProduct = { ...p, category: 'Lainnya' };
+          return saveProductToFirestore(updatedProduct, storeId || undefined).catch(e => {
+            console.warn(`Failed to update product ${p.name} in Firestore:`, e);
+          });
+        });
+        await Promise.all(promises);
+      }
+
+      // 4. Reset selected category filter if the deleted category was currently active
+      if (selectedCategory === cat) {
+        setSelectedCategory('Semua');
+      }
+
+      // 5. Success notification
+      showNotification(`Kategori "${cat}" berhasil dihapus!`);
+      
+      // Refresh parent state
+      if (onRefreshProducts) {
+        onRefreshProducts();
+      }
+    } catch (err: any) {
+      console.error('Failed to execute delete category:', err);
+      showNotification(`Gagal menghapus kategori: ${err.message || 'Terjadi kesalahan'}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   // Base + product-derived + custom categories
   const availableCategories = useMemo(() => {
     const set = new Set<string>(['Makanan', 'Minuman', 'Snack', 'Paket', 'Lainnya']);
@@ -367,11 +433,16 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-      {/* Action Notification Toast */}
+      {/* Action Notification Toast (Fixed floating for guaranteed visibility anywhere on screen) */}
       {actionSuccessMsg && (
-        <div className="p-3.5 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs flex items-center gap-2 shadow-lg">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{actionSuccessMsg}</span>
+        <div className="fixed top-6 right-6 z-[100] max-w-sm p-4 bg-slate-900 border border-emerald-500/30 text-emerald-300 rounded-2xl text-xs flex items-center gap-3 shadow-2xl animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0 animate-bounce">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <p className="font-bold text-white">Sukses</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">{actionSuccessMsg}</p>
+          </div>
         </div>
       )}
 
@@ -422,20 +493,44 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-          {categories.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition ${
-                selectedCategory === cat
-                  ? 'bg-emerald-500 text-white font-bold shadow-sm shadow-emerald-500/30'
-                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-4 pt-1 sm:pb-3 elegant-scrollbar">
+          {categories.map(cat => {
+            const isDeletable = cat !== 'Semua' && !['Makanan', 'Minuman', 'Snack', 'Paket', 'Lainnya'].includes(cat);
+            return (
+              <div 
+                key={cat} 
+                className={`flex items-center rounded-xl transition shrink-0 ${
+                  selectedCategory === cat
+                    ? 'bg-emerald-500 border border-emerald-500/20 shadow-sm shadow-emerald-500/30 text-white'
+                    : 'bg-slate-900 border border-slate-800 text-slate-400'
+                }`}
+              >
+                <button
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-3 py-1.5 rounded-l-xl rounded-r-xl text-xs font-semibold whitespace-nowrap transition ${
+                    isDeletable ? 'rounded-r-none pr-2.5' : ''
+                  } ${
+                    selectedCategory === cat ? 'text-white font-bold' : 'hover:text-white'
+                  }`}
+                >
+                  {cat}
+                </button>
+                {isDeletable && (
+                  <button
+                    onClick={() => setCategoryToDelete(cat)}
+                    title={`Hapus kategori "${cat}"`}
+                    className={`p-1.5 rounded-r-xl transition shrink-0 self-stretch flex items-center justify-center border-l ${
+                      selectedCategory === cat 
+                        ? 'hover:bg-rose-600 text-emerald-200 hover:text-white border-emerald-400/40' 
+                        : 'hover:bg-rose-950/60 text-slate-500 hover:text-rose-400 border-slate-800'
+                    }`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
 
           {/* Tombol Tambah Kategori Manual di Toolbar */}
           <button
@@ -657,6 +752,53 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 {isProcessing ? 'Menghapus...' : 'Hapus Sekarang'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM IN-APP MODAL: CONFIRM HAPUS KATEGORI */}
+      {categoryToDelete && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-500" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Hapus Kategori Produk</h3>
+                <p className="text-[11px] text-slate-400">Kategori: <span className="font-bold text-rose-400">"{categoryToDelete}"</span></p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Apakah Anda yakin ingin menghapus kategori ini? 
+              {products.filter(p => p.category === categoryToDelete).length > 0 && (
+                <span className="block mt-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 text-[11px] text-amber-300">
+                  ⚠️ Ada <span className="font-bold">{products.filter(p => p.category === categoryToDelete).length} produk</span> yang menggunakan kategori ini. Produk tersebut akan otomatis dialihkan ke kategori <span className="font-bold text-white">"Lainnya"</span>.
+                </span>
+              )}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setCategoryToDelete(null)}
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const cat = categoryToDelete;
+                  setCategoryToDelete(null);
+                  await executeDeleteCategory(cat);
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-rose-500/20"
+              >
+                Hapus Kategori
               </button>
             </div>
           </div>

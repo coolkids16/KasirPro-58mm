@@ -25,7 +25,7 @@ import {
 import html2canvas from 'html2canvas';
 import { StoreSettings, PrinterDeviceStatus, MetadataItem, CustomTemplate } from '../types';
 import { printerService } from '../services/printerService';
-import { padCenter, padRow, padSeparator, formatRupiah, ESC, GS, LF, EscPosEncoder, loadLogoRasterBytes } from '../utils/escpos';
+import { padCenter, padRow, padRowWrapped, padSeparator, formatRupiah, ESC, GS, LF, EscPosEncoder, loadLogoRasterBytes } from '../utils/escpos';
 import { sounds } from '../utils/audio';
 import { db } from '../db/db';
 import { 
@@ -470,7 +470,15 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
       updateData(prev => ({
         ...prev,
         badgeTitle: tpl.badgeTitle || prev.badgeTitle,
-        metadata: tpl.metadata.map(m => ({ id: 'm-' + Math.random(), key: m.key, value: m.value })),
+        metadata: tpl.metadata.map(m => ({ 
+          id: 'm-' + Math.random(), 
+          key: m.key, 
+          value: m.value,
+          isCentered: m.isCentered,
+          isBold: m.isBold,
+          isUnderline: m.isUnderline,
+          textSize: m.textSize
+        })),
         footerNote: tpl.footerNote || prev.footerNote
       }));
       sounds.playScanBeep();
@@ -690,7 +698,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
     if (storePh) text += padCenter(`Telp: ${storePh}`, width) + '\n';
     text += padSeparator('-', width) + '\n';
 
-    text += padRow(`No. Struk`, data.refNo.substring(0, width - 10), width) + '\n';
+    text += padRowWrapped(`No. Struk`, data.refNo, width) + '\n';
     text += padRow(`Tanggal/Waktu`, `${data.date} ${data.time}`, width) + '\n';
     text += padRow(`Kasir`, settings?.cashierName || 'Sistem', width) + '\n';
     text += padSeparator('-', width) + '\n';
@@ -700,20 +708,30 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
       text += padSeparator('-', width) + '\n';
     }
 
-    // Metadata List (omit colon if key or value is missing)
+    // Metadata List (omit colon if key or value is missing, wrapped dynamically to 50-50 width halves with no colons)
     data.metadata.forEach(m => {
-      const k = (m.key || '').trim();
-      const v = (m.value || '').trim();
+      // Strip any colons from the key and value as requested by the user
+      const k = (m.key || '').replace(/:/g, '').trim();
+      const v = (m.value || '').replace(/:/g, '').trim();
       if (!k && !v) return;
+
+      // Adjust column width dynamically according to the chosen text size
+      let W_curr = width;
+      if (m.textSize === 'S') {
+        W_curr = Math.floor(width * 1.3); // small font can fit more characters
+      } else if (m.textSize === 'DW' || m.textSize === 'M') {
+        W_curr = Math.floor(width / 2); // double width can fit half characters
+      }
+
       if (m.isCentered) {
         const mergedText = k && v ? `${k} ${v}` : (k || v);
-        text += padCenter(mergedText, width) + '\n';
+        text += padCenter(mergedText, W_curr) + '\n';
       } else if (k && v) {
-        text += padRow(`${k}:`, v, width) + '\n';
+        text += padRowWrapped(k, v, W_curr) + '\n';
       } else if (k) {
-        text += padCenter(k, width) + '\n';
+        text += padCenter(k, W_curr) + '\n';
       } else if (v) {
-        text += padCenter(v, width) + '\n';
+        text += padCenter(v, W_curr) + '\n';
       }
     });
 
@@ -797,7 +815,10 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
 
     // 3. Metadata Header
     encoder.align('left');
-    encoder.twoColumn('No. Struk', data.refNo.substring(0, width - 10), width);
+    const wrappedRefNo = padRowWrapped('No. Struk', data.refNo, width);
+    wrappedRefNo.split('\n').forEach(line => {
+      encoder.textLine(line);
+    });
     encoder.twoColumn('Tanggal/Waktu', `${data.date} ${data.time}`, width);
     encoder.twoColumn('Kasir', settings?.cashierName || 'Sistem', width);
     encoder.separator('-', width);
@@ -814,15 +835,58 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
     // 5. Metadata list
     if (data.metadata.length > 0) {
       data.metadata.forEach(m => {
-        const k = (m.key || '').trim();
-        const v = (m.value || '').trim();
+        // Strip any colons from the key and value as requested by the user
+        const k = (m.key || '').replace(/:/g, '').trim();
+        const v = (m.value || '').replace(/:/g, '').trim();
         if (!k && !v) return;
+
+        // Apply dynamic sizing to the binary stream
+        let W_curr = width;
+        if (m.textSize === 'S') {
+          W_curr = Math.floor(width * 1.3); // Font B (smaller size)
+        } else if (m.textSize === 'DW' || m.textSize === 'M') {
+          W_curr = Math.floor(width / 2); // Double-width columns
+        }
+
+        // 1. Enable Bold command natively
+        if (m.isBold) {
+          encoder.bold(true);
+        }
+
+        // 2. Enable Underline command natively
+        if (m.isUnderline) {
+          encoder.buffer.push(0x1B, 0x2D, 1); // ESC - 1
+        }
+
+        // 3. Set text size command natively
+        if (m.textSize === 'S') {
+          encoder.buffer.push(0x1B, 0x4D, 1); // select Font B
+        } else if (m.textSize === 'DW') {
+          encoder.buffer.push(0x1B, 0x4D, 0); // Font A
+          encoder.buffer.push(0x1D, 0x21, 0x10); // Double width
+        } else if (m.textSize === 'DH') {
+          encoder.buffer.push(0x1B, 0x4D, 0); // Font A
+          encoder.buffer.push(0x1D, 0x21, 0x01); // Double height
+        } else if (m.textSize === 'M') {
+          encoder.buffer.push(0x1B, 0x4D, 0); // Font A
+          encoder.buffer.push(0x1D, 0x21, 0x11); // Double width & height (Mixed)
+        } else {
+          // Standard Normal size (N)
+          encoder.buffer.push(0x1B, 0x4D, 0); // Font A
+          encoder.buffer.push(0x1D, 0x21, 0x00); // Normal size
+        }
+
+        // Print row
         if (m.isCentered) {
           const mergedText = k && v ? `${k} ${v}` : (k || v);
           encoder.align('center');
           encoder.textLine(mergedText);
         } else if (k && v) {
-          encoder.twoColumn(`${k}:`, v, width);
+          const wrappedRow = padRowWrapped(k, v, W_curr);
+          encoder.align('left');
+          wrappedRow.split('\n').forEach(line => {
+            encoder.textLine(line);
+          });
         } else if (k) {
           encoder.align('center');
           encoder.textLine(k);
@@ -830,6 +894,17 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
           encoder.align('center');
           encoder.textLine(v);
         }
+
+        // 4. Reset formatting so it doesn't leak into subsequent lines
+        if (m.isBold) {
+          encoder.bold(false);
+        }
+        if (m.isUnderline) {
+          encoder.buffer.push(0x1B, 0x2D, 0); // ESC - 0
+        }
+        encoder.buffer.push(0x1B, 0x4D, 0); // Restore Font A
+        encoder.buffer.push(0x1D, 0x21, 0x00); // Restore Normal size
+        encoder.align('left'); // Restore default alignment
       });
       encoder.separator('-', width);
     }
@@ -1325,9 +1400,9 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
 
                   {/* Receipt Meta */}
                   <div className="space-y-1 text-[10.5px]">
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">No. Struk</span>
-                      <span className="font-bold truncate max-w-[170px] text-right">{data.refNo}</span>
+                    <div className="flex justify-between gap-1 w-full items-start">
+                      <span className="text-slate-600 max-w-[50%] text-left break-all whitespace-pre-wrap shrink-0 leading-tight">No. Struk</span>
+                      <span className="font-bold max-w-[50%] text-right break-all whitespace-pre-wrap shrink-0 leading-tight">{data.refNo}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Tanggal/Waktu</span>
@@ -1357,21 +1432,45 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                           const k = (m.key || '').trim();
                           const v = (m.value || '').trim();
                           if (!k && !v) return null;
+
+                          // Helper for styling
+                          const textStyleClasses = `break-all whitespace-pre-wrap shrink-0 ${
+                            m.isBold ? 'font-black text-black' : 'font-medium text-slate-700'
+                          } ${
+                            m.isUnderline ? 'underline underline-offset-2' : ''
+                          } ${
+                            m.textSize === 'S' 
+                              ? 'text-[8.5px] leading-tight' 
+                              : m.textSize === 'DW'
+                              ? 'text-[12px] font-bold tracking-wider'
+                              : m.textSize === 'DH'
+                              ? 'text-[13px] font-bold leading-relaxed'
+                              : m.textSize === 'M'
+                              ? 'text-[14px] font-black tracking-wide leading-loose'
+                              : 'text-[10.5px] leading-tight'
+                          }`;
+
                           return (
-                            <div key={m.id || idx} className="flex justify-between gap-1 w-full">
+                            <div key={m.id || idx} className="flex justify-between gap-1 w-full items-start">
                               {m.isCentered ? (
-                                <span className="font-bold text-slate-800 text-center w-full break-all">
+                                <span className={`text-center w-full ${textStyleClasses}`}>
                                   {k && v ? `${k} ${v}` : (k || v)}
                                 </span>
                               ) : k && v ? (
                                 <>
-                                  <span className="text-slate-600 shrink-0">{k}:</span>
-                                  <span className="font-bold text-right break-all">{v}</span>
+                                  <span className={`max-w-[50%] text-left ${textStyleClasses}`}>
+                                    {k}
+                                  </span>
+                                  <span className={`max-w-[50%] text-right ${
+                                    m.isBold ? textStyleClasses : textStyleClasses.replace('font-medium text-slate-700', 'font-bold text-slate-900')
+                                  }`}>
+                                    {v}
+                                  </span>
                                 </>
                               ) : k ? (
-                                <span className="font-bold text-slate-800">{k}</span>
+                                <span className={`w-full ${textStyleClasses}`}>{k}</span>
                               ) : (
-                                <span className="font-bold text-right text-slate-800 w-full">{v}</span>
+                                <span className={`w-full text-right ${textStyleClasses}`}>{v}</span>
                               )}
                             </div>
                           );
@@ -1743,6 +1842,67 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                             : 'border-slate-750 focus:border-emerald-500 text-white'
                         }`}
                       />
+
+                      {/* Bold (B) Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateData(prev => ({
+                            ...prev,
+                            metadata: prev.metadata.map(item => item.id === m.id ? { ...item, isBold: !item.isBold } : item)
+                          }));
+                          sounds.playScanBeep();
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-black border transition ${
+                          m.isBold
+                            ? 'bg-amber-500/20 border-amber-500 text-amber-400'
+                            : 'bg-slate-900 border-slate-750 text-slate-400 hover:text-white'
+                        }`}
+                        title="Tebalkan Teks (B)"
+                      >
+                        B
+                      </button>
+
+                      {/* Underline (U) Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateData(prev => ({
+                            ...prev,
+                            metadata: prev.metadata.map(item => item.id === m.id ? { ...item, isUnderline: !item.isUnderline } : item)
+                          }));
+                          sounds.playScanBeep();
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs underline border font-bold transition ${
+                          m.isUnderline
+                            ? 'bg-blue-500/20 border-blue-500 text-blue-400'
+                            : 'bg-slate-900 border-slate-750 text-slate-400 hover:text-white'
+                        }`}
+                        title="Garis Bawah (U)"
+                      >
+                        U
+                      </button>
+
+                      {/* Font Size Select */}
+                      <select
+                        value={m.textSize || 'N'}
+                        onChange={e => {
+                          const size = e.target.value as 'S' | 'N' | 'DW' | 'DH' | 'M';
+                          updateData(prev => ({
+                            ...prev,
+                            metadata: prev.metadata.map(item => item.id === m.id ? { ...item, textSize: size } : item)
+                          }));
+                          sounds.playScanBeep();
+                        }}
+                        className="px-1.5 py-1 bg-slate-900 border border-slate-750 rounded-lg text-xs font-bold text-slate-300 focus:outline-none focus:border-emerald-500 shrink-0"
+                        title="Ukuran Huruf (S = Kecil, N = Normal, DW = Dobel Lebar, DH = Dobel Tinggi, M = Campuran)"
+                      >
+                        <option value="S">S</option>
+                        <option value="N">N</option>
+                        <option value="DW">DW</option>
+                        <option value="DH">DH</option>
+                        <option value="M">M</option>
+                      </select>
 
                       {/* Move Up/Down buttons (Keep as convenient fallback) */}
                       <div className="flex flex-col gap-0.5 shrink-0 pl-1 border-l border-slate-800">

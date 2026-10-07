@@ -59,6 +59,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showSyncInfo, setShowSyncInfo] = useState<boolean>(false);
   const syncPopoverRef = useRef<HTMLDivElement>(null);
 
+  const [showProfileMenu, setShowProfileMenu] = useState<boolean>(false);
+  const menuPopoverRef = useRef<HTMLDivElement>(null);
+
   // Helper to extract display label & initial for signed in user
   const getUserNameLabel = (user: FirebaseUser | null): string => {
     if (!user) return 'Masuk';
@@ -107,126 +110,147 @@ export const Navbar: React.FC<NavbarProps> = ({
     };
   }, [showSyncInfo]);
 
+  // Close profile menu popover when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuPopoverRef.current && !menuPopoverRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false);
+      }
+    };
+    if (showProfileMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showProfileMenu]);
+
   // Firestore sync is active when user is signed in AND device is online
   const isFirestoreActive = Boolean(currentUser && isOnline);
 
   return (
     <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo & Platform Info with Live Indicators */}
-          <div className="flex items-center gap-3 shrink-0">
-            {settings?.logoUrl ? (
-              <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-750 flex items-center justify-center p-1 shadow-md overflow-hidden shrink-0">
-                <img 
-                  src={settings.logoUrl} 
-                  alt={settings.storeName || 'Logo'} 
-                  className="w-full h-full object-contain"
-                />
-              </div>
-            ) : (
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-bold text-lg shrink-0">
-                KP
-              </div>
-            )}
-            <div className="shrink-0">
-              <h1 className="font-extrabold text-base sm:text-lg tracking-tight text-white leading-tight whitespace-nowrap">
-                {settings?.storeName ? settings.storeName : 'KasirPro'}
-              </h1>
-              <div className="text-[10px] text-slate-400 font-mono hidden sm:flex flex-col leading-tight mt-0.5 whitespace-nowrap">
-                <span>Cross-Platform POS</span>
-                <span className="text-slate-500">• Linux & Android</span>
+          {/* Left: Brand + Nav Tabs group sitting closely together */}
+          <div className="flex items-center gap-4 lg:gap-5">
+            {/* Logo & Platform Info with Live Indicators */}
+            <div className="flex items-center gap-3 shrink-0">
+              {settings?.logoUrl ? (
+                <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-750 flex items-center justify-center p-1 shadow-md overflow-hidden shrink-0">
+                  <img 
+                    src={settings.logoUrl} 
+                    alt={settings.storeName || 'Logo'} 
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-bold text-lg shrink-0">
+                  KP
+                </div>
+              )}
+              <div className="shrink-0">
+                <h1 className="font-extrabold text-base sm:text-lg tracking-tight text-white leading-tight whitespace-nowrap">
+                  {settings?.storeName ? settings.storeName : 'KasirPro'}
+                </h1>
+                <div className="text-[10px] text-slate-400 font-mono hidden sm:flex flex-col leading-tight mt-0.5 whitespace-nowrap">
+                  <span>Cross-Platform POS</span>
+                  <span className="text-slate-500">• Linux & Android</span>
+                </div>
               </div>
             </div>
+
+            {/* Navigation Tabs aligned closely to the left */}
+            <nav className="hidden md:flex items-center gap-0.5 bg-slate-950/60 p-1 rounded-xl border border-slate-800 shrink-0 ml-6 lg:ml-10">
+              <button
+                onClick={() => setActiveTab('pos')}
+                className={`flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
+                  activeTab === 'pos'
+                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                }`}
+              >
+                <Store className="w-4 h-4 shrink-0" />
+                <span className="whitespace-nowrap">Kasir (POS)</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('products')}
+                className={`flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
+                  activeTab === 'products'
+                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                }`}
+              >
+                <Package className="w-4 h-4 shrink-0" />
+                <span className="hidden lg:inline whitespace-nowrap">Produk & Stok</span>
+                <span className="lg:hidden whitespace-nowrap">Produk</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('transactions')}
+                className={`flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
+                  activeTab === 'transactions'
+                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                }`}
+              >
+                <Receipt className="w-4 h-4 shrink-0" />
+                <span className="whitespace-nowrap">Riwayat</span>
+              </button>
+
+              {/* TAB STRUKSCAN STUDIO */}
+              <button
+                onClick={() => setActiveTab('strukscan')}
+                className={`flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
+                  activeTab === 'strukscan'
+                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 font-bold'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                }`}
+              >
+                <Scan className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="hidden lg:inline whitespace-nowrap">StrukScan OCR</span>
+                <span className="lg:hidden whitespace-nowrap">StrukScan</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('printer')}
+                className={`flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
+                  activeTab === 'printer'
+                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                }`}
+              >
+                <Printer className="w-4 h-4 shrink-0" />
+                <span className="hidden lg:inline whitespace-nowrap">Uji Printer 58mm</span>
+                <span className="lg:hidden whitespace-nowrap">Printer</span>
+              </button>
+            </nav>
           </div>
 
-          {/* Navigation Tabs */}
-          <nav className="hidden md:flex items-center gap-1 bg-slate-950/60 p-1.5 rounded-xl border border-slate-800">
-            <button
-              onClick={() => setActiveTab('pos')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'pos'
-                  ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-850'
-              }`}
-            >
-              <Store className="w-4 h-4" />
-              Kasir (POS)
-            </button>
-
-            <button
-              onClick={() => setActiveTab('products')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'products'
-                  ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-850'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              Produk & Stok
-            </button>
-
-            <button
-              onClick={() => setActiveTab('transactions')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'transactions'
-                  ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-850'
-              }`}
-            >
-              <Receipt className="w-4 h-4" />
-              Riwayat
-            </button>
-
-            {/* TAB STRUKSCAN STUDIO (SEBELAH KANAN RIWAYAT & SEBELAH KIRI UJI PRINTER) */}
-            <button
-              onClick={() => setActiveTab('strukscan')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'strukscan'
-                  ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 font-bold'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-850'
-              }`}
-            >
-              <Scan className="w-4 h-4 text-emerald-400" />
-              <span>StrukScan OCR</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('printer')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'printer'
-                  ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-850'
-              }`}
-            >
-              <Printer className="w-4 h-4" />
-              Uji Printer 58mm
-            </button>
-          </nav>
-
-          {/* Quick Actions: Sync Status, Backup, Settings, Printer & Login Status */}
-          <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Right: Consolidated Quick Actions & Status */}
+          <div className="flex items-center gap-2 lg:gap-3 shrink-0">
             {/* Live Sync Status Pill Indicator */}
             <div className="relative" ref={syncPopoverRef}>
               <button
                 onClick={() => setShowSyncInfo(!showSyncInfo)}
                 title="Status Database & Sinkronisasi (Klik untuk rincian)"
-                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition whitespace-nowrap shrink-0 ${
                   isFirestoreActive
                     ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60'
                     : 'bg-amber-950/50 border-amber-500/40 text-amber-300 hover:bg-amber-900/50'
                 }`}
               >
                 {/* Visual Dual-LED Lights */}
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1 shrink-0">
                   {/* Dexie LED (Always Active) */}
                   <span 
-                    className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" 
+                    className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400 shrink-0" 
                     title="Dexie IndexedDB (Offline): Aktif" 
                   />
                   {/* Firestore Cloud LED */}
                   <span
-                    className={`w-2 h-2 rounded-full ${
+                    className={`w-2 h-2 rounded-full shrink-0 ${
                       isFirestoreActive
                         ? 'bg-cyan-400 animate-pulse shadow-sm shadow-cyan-400'
                         : 'bg-slate-600'
@@ -241,10 +265,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <HardDrive className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 )}
 
-                <span className="hidden xl:inline text-[11px] font-mono">
+                <span className="hidden 2xl:inline text-[11px] font-mono whitespace-nowrap shrink-0">
                   {isFirestoreActive ? 'Cloud + Dexie (2/2 Aktif)' : 'Hanya Dexie (1/2 Aktif)'}
                 </span>
-                <span className="hidden sm:inline xl:hidden text-[11px] font-mono">
+                <span className="hidden xl:inline 2xl:hidden text-[11px] font-mono whitespace-nowrap shrink-0">
+                  {isFirestoreActive ? 'Cloud + Dexie' : 'Hanya Dexie'}
+                </span>
+                <span className="hidden sm:inline xl:hidden text-[11px] font-mono whitespace-nowrap shrink-0">
                   {isFirestoreActive ? '2/2 DB' : '1/2 DB'}
                 </span>
               </button>
@@ -253,7 +280,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {showSyncInfo && (
                 <div className="absolute right-0 mt-2 w-80 p-4 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 text-xs space-y-3 animate-in fade-in">
                   <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
-                    <span className="font-bold text-white flex items-center gap-1.5 text-xs">
+                    <span className="font-bold text-white flex items-center gap-1.5 text-xs whitespace-nowrap">
                       <Database className="w-4 h-4 text-emerald-400" />
                       Status Sinkronisasi Database
                     </span>
@@ -270,9 +297,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" />
-                        <span className="font-bold text-white">Dexie.js (IndexedDB)</span>
+                        <span className="font-bold text-white whitespace-nowrap">Dexie.js (IndexedDB)</span>
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 whitespace-nowrap">
                         🟢 AKTIF (100%)
                       </span>
                     </div>
@@ -292,10 +319,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                               : 'bg-amber-400'
                           }`}
                         />
-                        <span className="font-bold text-white">Firebase Firestore</span>
+                        <span className="font-bold text-white whitespace-nowrap">Firebase Firestore</span>
                       </div>
                       <span 
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${
                           isFirestoreActive
                             ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
                             : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
@@ -328,7 +355,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                             setShowSyncInfo(false);
                             onOpenAuthModal();
                           }}
-                          className="w-full py-1.5 px-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition shadow"
+                          className="w-full py-1.5 px-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition shadow whitespace-nowrap"
                         >
                           <LogIn className="w-3.5 h-3.5" />
                           Login untuk Aktifkan Cloud Sync (2/2)
@@ -340,111 +367,203 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
 
-            {/* Full Backup & Export/Import Button */}
-            <button
-              onClick={onOpenBackupModal}
-              title="Pusat Ekspor & Impor Data (Backup & Restore)"
-              className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-cyan-400 hover:text-white transition"
-            >
-              <Database className="w-4 h-4" />
-            </button>
-
-            {/* Theme Toggle Button (Dark / Light) */}
-            {toggleTheme && (
+            {/* Unified User & Settings Dropdown Menu Button */}
+            <div className="relative" ref={menuPopoverRef}>
               <button
-                onClick={toggleTheme}
-                title={theme === 'dark' ? 'Ganti ke Tema Terang (Light Mode)' : 'Ganti ke Tema Gelap (Dark Mode)'}
-                className={`p-2 rounded-xl border transition flex items-center justify-center ${
-                  theme === 'dark'
-                    ? 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-amber-400 hover:text-amber-300'
-                    : 'bg-slate-200 hover:bg-slate-300 border-slate-300 text-indigo-600'
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                title="Buka Menu Pengaturan & Akun"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition whitespace-nowrap shrink-0 ${
+                  currentUser
+                    ? userProfile?.role === 'owner'
+                      ? 'bg-amber-950/40 border-amber-500/40 text-amber-300 hover:bg-amber-900/50 shadow-sm'
+                      : userProfile?.role === 'manager'
+                      ? 'bg-cyan-950/40 border-cyan-500/40 text-cyan-300 hover:bg-cyan-900/50 shadow-sm'
+                      : 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 shadow-sm'
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
                 }`}
               >
-                {theme === 'dark' ? (
-                  <Sun className="w-4 h-4" />
+                {currentUser?.photoURL ? (
+                  <img
+                    src={currentUser.photoURL}
+                    alt={getUserNameLabel(currentUser)}
+                    className={`w-4 h-4 rounded-full object-cover border shrink-0 ${
+                      userProfile?.role === 'owner'
+                        ? 'border-amber-400/70'
+                        : userProfile?.role === 'manager'
+                        ? 'border-cyan-400/70'
+                        : 'border-emerald-400/70'
+                    }`}
+                  />
+                ) : currentUser ? (
+                  <div className={`w-4 h-4 rounded-full font-black text-[10px] flex items-center justify-center leading-none shrink-0 ${
+                    userProfile?.role === 'owner'
+                      ? 'bg-amber-400 text-slate-950'
+                      : userProfile?.role === 'manager'
+                      ? 'bg-cyan-400 text-slate-950'
+                      : 'bg-emerald-500 text-slate-950'
+                  }`}>
+                    {getUserInitial(currentUser)}
+                  </div>
                 ) : (
-                  <Moon className="w-4 h-4" />
+                  <LogIn className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                )}
+                
+                <span className="hidden sm:inline max-w-[80px] xl:max-w-[120px] truncate whitespace-nowrap shrink-0">
+                  {currentUser ? getUserNameLabel(currentUser) : 'Pengaturan'}
+                </span>
+
+                {userProfile?.role && (
+                  <span className={`hidden xl:inline text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase whitespace-nowrap shrink-0 ${
+                    userProfile.role === 'owner'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                      : userProfile.role === 'manager'
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  }`}>
+                    {userProfile.role}
+                  </span>
                 )}
               </button>
-            )}
 
-            {/* User Management Button for Owner */}
-            {userProfile?.role === 'owner' && onOpenUsersModal && (
-              <button
-                onClick={onOpenUsersModal}
-                title="Kelola Akun Manager & Kasir Toko (Khusus Owner)"
-                className="px-2.5 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 hover:text-white transition flex items-center gap-1.5 text-xs font-bold"
-              >
-                <Users className="w-4 h-4 text-indigo-400" />
-                <span className="hidden xl:inline">Staf</span>
-              </button>
-            )}
+              {/* Dropdown Menu Card */}
+              {showProfileMenu && (
+                <div className="absolute right-0 mt-2 w-72 p-3 bg-slate-900 border border-slate-750 rounded-2xl shadow-2xl z-50 text-xs space-y-2 animate-in fade-in zoom-in-95 duration-100">
+                  {/* User Profile Header Section */}
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-3">
+                    {currentUser?.photoURL ? (
+                      <img
+                        src={currentUser.photoURL}
+                        alt="Profile"
+                        className="w-10 h-10 rounded-full object-cover border border-slate-700"
+                      />
+                    ) : (
+                      <div className={`w-10 h-10 rounded-full font-black text-sm flex items-center justify-center leading-none shrink-0 ${
+                        currentUser
+                          ? userProfile?.role === 'owner'
+                            ? 'bg-amber-400 text-slate-950'
+                            : userProfile?.role === 'manager'
+                            ? 'bg-cyan-400 text-slate-950'
+                            : 'bg-emerald-500 text-slate-950'
+                          : 'bg-slate-800 text-slate-400'
+                      }`}>
+                        {currentUser ? getUserInitial(currentUser) : '?'}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-white truncate text-[13px]">
+                        {currentUser ? getUserNameLabel(currentUser) : 'Mode Lokal / Offline'}
+                      </p>
+                      <p className="text-[10px] text-slate-400 truncate">
+                        {currentUser ? currentUser.email : 'Data disimpan di perangkat'}
+                      </p>
+                    </div>
+                    {userProfile?.role && (
+                      <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded font-black uppercase shrink-0 ${
+                        userProfile.role === 'owner'
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          : userProfile.role === 'manager'
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      }`}>
+                        {userProfile.role}
+                      </span>
+                    )}
+                  </div>
 
-            {/* Settings Button */}
-            <button
-              onClick={onOpenSettingsModal}
-              title="Pengaturan Toko & Struk Printer Thermal"
-              className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
+                  <div className="border-t border-slate-800 my-1" />
 
-            {/* User Login Status Button */}
-            <button
-              onClick={onOpenAuthModal}
-              title={currentUser ? `Terhubung sebagai: ${currentUser.displayName || currentUser.email || 'Pengguna'} (${userProfile?.role?.toUpperCase() || 'Guest'})` : 'Masuk ke Akun Kasir / Owner'}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition ${
-                currentUser
-                  ? userProfile?.role === 'owner'
-                    ? 'bg-amber-950/40 border-amber-500/40 text-amber-300 hover:bg-amber-900/50 shadow-sm'
-                    : userProfile?.role === 'manager'
-                    ? 'bg-cyan-950/40 border-cyan-500/40 text-cyan-300 hover:bg-cyan-900/50 shadow-sm'
-                    : 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 shadow-sm'
-                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
-              }`}
-            >
-              {currentUser?.photoURL ? (
-                <img
-                  src={currentUser.photoURL}
-                  alt={getUserNameLabel(currentUser)}
-                  className={`w-4 h-4 rounded-full object-cover border ${
-                    userProfile?.role === 'owner'
-                      ? 'border-amber-400/70'
-                      : userProfile?.role === 'manager'
-                      ? 'border-cyan-400/70'
-                      : 'border-emerald-400/70'
-                  }`}
-                />
-              ) : currentUser ? (
-                <div className={`w-4 h-4 rounded-full font-black text-[10px] flex items-center justify-center leading-none ${
-                  userProfile?.role === 'owner'
-                    ? 'bg-amber-400 text-slate-950'
-                    : userProfile?.role === 'manager'
-                    ? 'bg-cyan-400 text-slate-950'
-                    : 'bg-emerald-500 text-slate-950'
-                }`}>
-                  {getUserInitial(currentUser)}
+                  {/* Menu Options */}
+                  <div className="space-y-0.5">
+                    {/* 1. Account / Login Modal */}
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        onOpenAuthModal();
+                      }}
+                      className="w-full flex items-center justify-between p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-850 transition font-medium text-left"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <UserIcon className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>{currentUser ? 'Akun & Integrasi' : 'Masuk ke Cloud Sync'}</span>
+                      </div>
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 uppercase font-bold">
+                        {currentUser ? 'Atur' : 'Login'}
+                      </span>
+                    </button>
+
+                    {/* 2. Store & Printer Settings */}
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        onOpenSettingsModal();
+                      }}
+                      className="w-full flex items-center gap-2.5 p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-850 transition font-medium text-left"
+                    >
+                      <Settings className="w-4 h-4 text-slate-450 shrink-0" />
+                      <span>Pengaturan Toko & Printer</span>
+                    </button>
+
+                    {/* 3. Backup & Restore */}
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        onOpenBackupModal();
+                      }}
+                      className="w-full flex items-center gap-2.5 p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-850 transition font-medium text-left"
+                    >
+                      <Database className="w-4 h-4 text-cyan-400 shrink-0" />
+                      <span>Backup & Impor Data (Dexie)</span>
+                    </button>
+
+                    {/* 4. Staff Management (Owner only) */}
+                    {userProfile?.role === 'owner' && onOpenUsersModal && (
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          onOpenUsersModal();
+                        }}
+                        className="w-full flex items-center gap-2.5 p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-855 transition font-medium text-left"
+                      >
+                        <Users className="w-4 h-4 text-indigo-400 shrink-0" />
+                        <span>Kelola Staf Toko (Staf)</span>
+                      </button>
+                    )}
+
+                    {/* 5. Theme Toggle Switch */}
+                    {toggleTheme && (
+                      <button
+                        onClick={() => {
+                          toggleTheme();
+                        }}
+                        className="w-full flex items-center justify-between p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-850 transition font-medium text-left"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          {theme === 'dark' ? (
+                            <Sun className="w-4 h-4 text-amber-400 shrink-0" />
+                          ) : (
+                            <Moon className="w-4 h-4 text-indigo-400 shrink-0" />
+                          )}
+                          <span>Tema: {theme === 'dark' ? 'Gelap' : 'Terang'}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {theme === 'dark' ? 'Dark' : 'Light'}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Environment info footer */}
+                  <div className="border-t border-slate-800 pt-2 pb-1 px-2 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                    <span>KasirPro v2.0</span>
+                    <span className="uppercase bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 text-cyan-500 text-[9px]">
+                      {runtimeEnv}
+                    </span>
+                  </div>
                 </div>
-              ) : (
-                <LogIn className="w-3.5 h-3.5 text-emerald-400" />
               )}
-              <span className="max-w-[100px] truncate">
-                {getUserNameLabel(currentUser)}
-              </span>
-              {userProfile?.role && (
-                <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase ${
-                  userProfile.role === 'owner'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                    : userProfile.role === 'manager'
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                }`}>
-                  {userProfile.role}
-                </span>
-              )}
-            </button>
+            </div>
 
-            <div className="hidden lg:block px-2.5 py-1 rounded-md text-[11px] font-mono uppercase bg-slate-800 text-cyan-400 border border-slate-700">
+            <div className="hidden xl:block px-2.5 py-1 rounded-md text-[11px] font-mono uppercase bg-slate-800 text-cyan-400 border border-slate-700 whitespace-nowrap shrink-0">
               {runtimeEnv}
             </div>
           </div>
