@@ -90,9 +90,29 @@
         "autoDrawer": { "type": "boolean", "description": "Whether to send kick drawer pulse on cash sale" }
       },
       "required": ["storeName", "paperWidthChars", "currencyPrefix"]
+    },
+    "CustomTemplate": {
+      "title": "CustomTemplate",
+      "description": "OCR Receipt Metadata template kustom",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID template" },
+        "storeId": { "type": "string", "description": "ID toko opsional" },
+        "name": { "type": "string", "description": "Nama template" },
+        "badgeTitle": { "type": "string", "description": "Status badge title" },
+        "metadata": { "type": "array", "description": "Daftar metadata item kustom" },
+        "footerNote": { "type": "string", "description": "Catatan kaki struk kustom" },
+        "createdAt": { "type": "number", "description": "Timestamp pembuatan" },
+        "updatedAt": { "type": "string", "description": "Timestamp pembaruan" }
+      },
+      "required": ["id", "name", "metadata"]
     }
   },
   "firestore": {
+    "/receiptTemplates/{templateId}": {
+      "schema": { "$ref": "CustomTemplate" },
+      "description": "Custom metadata templates for OCR scanning"
+    },
     "/stores/{storeId}": {
       "schema": { "$ref": "Store" },
       "description": "Store profiles"

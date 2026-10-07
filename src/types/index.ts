@@ -2,6 +2,7 @@ export interface MetadataItem {
   id: string;
   key: string;
   value: string;
+  isCentered?: boolean;
 }
 
 export interface CustomTemplate {

@@ -18,12 +18,14 @@ import {
   CheckCircle2,
   Layers,
   SlidersHorizontal,
-  FileCheck
+  FileCheck,
+  AlignCenter,
+  GripVertical
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { StoreSettings, PrinterDeviceStatus, MetadataItem, CustomTemplate } from '../types';
 import { printerService } from '../services/printerService';
-import { padCenter, padRow, padSeparator, formatRupiah, ESC, GS, LF } from '../utils/escpos';
+import { padCenter, padRow, padSeparator, formatRupiah, ESC, GS, LF, EscPosEncoder, loadLogoRasterBytes } from '../utils/escpos';
 import { sounds } from '../utils/audio';
 import { db } from '../db/db';
 import { 
@@ -80,7 +82,7 @@ const SAMPLE_PLN_RECEIPT: ExtractedReceiptData = {
   date: '7/10/2026',
   time: '08:07',
   paymentMethod: 'GoPay Tabungan',
-  badgeTitle: 'BUKTI TRANSFER BERHASIL',
+  badgeTitle: '',
   metadata: [
     { id: 'm1', key: 'STATUS', value: 'Berhasil' },
     { id: 'm2', key: 'METODE PEMBAYARAN', value: 'v1 GoPay Tabungan' },
@@ -125,7 +127,7 @@ export const parseRawReceiptText = (rawText: string, currentSettings?: StoreSett
   let date = new Date().toLocaleDateString('id-ID');
   let time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   let paymentMethod = 'GoPay Tabungan';
-  let badgeTitle = 'BUKTI TRANSFER BERHASIL';
+  let badgeTitle = '';
   let footerNote = currentSettings?.footerMessage || '';
 
   const metadata: MetadataItem[] = [];
@@ -133,7 +135,19 @@ export const parseRawReceiptText = (rawText: string, currentSettings?: StoreSett
   let mainNominalPrice = 0;
   let detectedServiceCharge = 0;
 
-  lines.forEach((line, idx) => {
+  lines.forEach((rawLine, idx) => {
+    let line = rawLine;
+
+    // Request 7: Clean up "Bayar ( GoPay Tabungan )" or similar payment variations
+    if (/bayar/i.test(line)) {
+      const valMatch = line.match(/(?:Rp|\s|^)[:\s]*([\d\.]{3,10})/i);
+      if (valMatch) {
+        line = `Bayar: Rp ${valMatch[1]}`;
+      } else {
+        line = 'Bayar';
+      }
+    }
+
     // 1. Ref / Nomor Referensi OCR Detection
     const refMatch = line.match(/(?:NOMOR\s*REFERENSI|NO\.?\s*REFERENSI|NO\.?\s*REF|REF|INEF|NO\.?\s*FAKTUR|ID\s*TRANSAKSI|RESI|TRX)[-:\s]*([A-Z0-9\/-]{6,36})/i);
     if (refMatch && refMatch[1] && !refNo) {
@@ -171,7 +185,11 @@ export const parseRawReceiptText = (rawText: string, currentSettings?: StoreSett
     // 4. Status / Badge Detection
     if (/Status/i.test(line)) {
       const statusVal = line.replace(/^Status[:\s]*/i, '').trim();
-      badgeTitle = `BUKTI TRANSFER ${statusVal.toUpperCase()}`;
+      if (statusVal.toUpperCase() !== 'BERHASIL') {
+        badgeTitle = `BUKTI TRANSFER ${statusVal.toUpperCase()}`;
+      } else {
+        badgeTitle = ''; // Hapus BUKTI TRANSFER BERHASIL
+      }
     }
 
     // 5. Footer Note Detection
@@ -298,13 +316,35 @@ export const parseRawReceiptText = (rawText: string, currentSettings?: StoreSett
   };
 };
 
+export const createEmptyReceipt = (settings?: StoreSettings): ExtractedReceiptData => ({
+  id: 'empty-' + Date.now(),
+  timestamp: Date.now(),
+  storeName: settings?.storeName || 'KASIR PRO',
+  storeAddress: settings?.address || '',
+  storePhone: settings?.phone || '',
+  refNo: '',
+  date: new Date().toLocaleDateString('id-ID'),
+  time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+  paymentMethod: '',
+  badgeTitle: '',
+  metadata: [],
+  items: [],
+  subtotal: 0,
+  serviceCharge: 0,
+  total: 0,
+  paidAmount: 0,
+  changeAmount: 0,
+  footerNote: settings?.footerMessage || '',
+  rawText: ''
+});
+
 export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
   settings,
   printerStatus,
   storeId
 }) => {
-  // State data struk aktif
-  const [data, setData] = useState<ExtractedReceiptData>(SAMPLE_PLN_RECEIPT);
+  // State data struk aktif (Starts completely empty & clean on mount)
+  const [data, setData] = useState<ExtractedReceiptData>(() => createEmptyReceipt(settings));
   const [history, setHistory] = useState<ExtractedReceiptData[]>(() => {
     try {
       const saved = localStorage.getItem('kasirpro_strukscan_history');
@@ -313,7 +353,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
         if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
-    return [SAMPLE_PLN_RECEIPT];
+    return []; // No default pre-filled sample/dummy history
   });
 
   // Custom Metadata Templates state
@@ -342,6 +382,8 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
   const [copiedRaw, setCopiedRaw] = useState(false);
   const [copiedReceiptText, setCopiedReceiptText] = useState(false);
   const [printStatusMsg, setPrintStatusMsg] = useState<string | null>(null);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragActiveId, setDragActiveId] = useState<string | null>(null);
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -545,28 +587,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
       console.error('Failed to clear history:', err);
     }
 
-    const emptyReceipt: ExtractedReceiptData = {
-      id: 'empty-' + Date.now(),
-      timestamp: Date.now(),
-      storeName: settings?.storeName || 'KASIR PRO',
-      storeAddress: settings?.address || '',
-      storePhone: settings?.phone || '',
-      refNo: '',
-      date: new Date().toLocaleDateString('id-ID'),
-      time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-      paymentMethod: '',
-      badgeTitle: '',
-      metadata: [],
-      items: [],
-      subtotal: 0,
-      serviceCharge: 0,
-      total: 0,
-      paidAmount: 0,
-      changeAmount: 0,
-      footerNote: settings?.footerMessage || '',
-      rawText: ''
-    };
-
+    const emptyReceipt = createEmptyReceipt(settings);
     setData(emptyReceipt);
     sounds.playScanBeep();
     showPrintStatus('✓ Seluruh riwayat struk dan data workspace berhasil dikosongkan!');
@@ -684,7 +705,10 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
       const k = (m.key || '').trim();
       const v = (m.value || '').trim();
       if (!k && !v) return;
-      if (k && v) {
+      if (m.isCentered) {
+        const mergedText = k && v ? `${k} ${v}` : (k || v);
+        text += padCenter(mergedText, width) + '\n';
+      } else if (k && v) {
         text += padRow(`${k}:`, v, width) + '\n';
       } else if (k) {
         text += padCenter(k, width) + '\n';
@@ -715,7 +739,10 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
     if (data.paidAmount > 0) {
       text += padSeparator('-', width) + '\n';
       text += padRow('Bayar', `Rp ${formatRupiah(data.paidAmount)}`, width) + '\n';
-      text += padRow('Kembalian', `Rp ${formatRupiah(data.changeAmount)}`, width) + '\n';
+      const changeStr = data.paidAmount < data.total 
+        ? `-Rp ${formatRupiah(data.total - data.paidAmount)}` 
+        : `Rp ${formatRupiah(data.changeAmount)}`;
+      text += padRow('Kembalian', changeStr, width) + '\n';
     }
 
     if (data.footerNote) {
@@ -726,33 +753,141 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
     return text;
   };
 
-  // Convert text to ESC/POS binary buffer for thermal printers
-  const generateEscPosBinary = (): Uint8Array => {
-    const textStr = generateEscPosText();
-    const encoder = new TextEncoder();
-    const textBytes = encoder.encode(textStr);
+  // Convert text & logo to ESC/POS binary buffer with full settings integration
+  const generateEscPosBinaryAsync = async (): Promise<Uint8Array> => {
+    const width = paperWidth === '58mm' ? 32 : 48;
+    const feedCount = settings?.feedLines !== undefined ? settings.feedLines : 1;
+    const enableAutoCut = settings?.enableAutoCut || false;
+    const storeHeader = settings?.storeName || data.storeName || 'COOL KIDS CELL';
+    const storeAddr = settings?.address || data.storeAddress || '';
+    const storePh = settings?.phone || data.storePhone || '';
 
-    const initCmd = new Uint8Array([ESC, 0x40]);
-    const alignCenterCmd = new Uint8Array([ESC, 0x61, 0x01]);
-    const feedCutCmd = new Uint8Array([LF, LF, LF, GS, 0x56, 0x42, 0x00]);
+    const encoder = new EscPosEncoder();
+    encoder.init();
 
-    const totalLen = initCmd.length + alignCenterCmd.length + textBytes.length + feedCutCmd.length;
-    const buffer = new Uint8Array(totalLen);
+    // Kick drawer at start of printing
+    encoder.kickDrawer();
 
-    let offset = 0;
-    buffer.set(initCmd, offset); offset += initCmd.length;
-    buffer.set(alignCenterCmd, offset); offset += alignCenterCmd.length;
-    buffer.set(textBytes, offset); offset += textBytes.length;
-    buffer.set(feedCutCmd, offset);
+    // 1. Logo
+    if (settings?.logoUrl) {
+      try {
+        const logoRasterBytes = await loadLogoRasterBytes(settings.logoUrl, 240);
+        if (logoRasterBytes && logoRasterBytes.length > 0) {
+          encoder.align('center');
+          encoder.rasterImage(logoRasterBytes);
+        }
+      } catch (e) {
+        console.warn('Failed to print logo in OCR studio:', e);
+      }
+    }
 
-    return buffer;
+    // 2. Header
+    encoder.align('center');
+    encoder.bold(true);
+    encoder.textLine(storeHeader.toUpperCase());
+    encoder.bold(false);
+
+    if (storeAddr) {
+      encoder.textLine(storeAddr.substring(0, width));
+    }
+    if (storePh) {
+      encoder.textLine(`Telp: ${storePh}`);
+    }
+    encoder.separator('-', width);
+
+    // 3. Metadata Header
+    encoder.align('left');
+    encoder.twoColumn('No. Struk', data.refNo.substring(0, width - 10), width);
+    encoder.twoColumn('Tanggal/Waktu', `${data.date} ${data.time}`, width);
+    encoder.twoColumn('Kasir', settings?.cashierName || 'Sistem', width);
+    encoder.separator('-', width);
+
+    // 4. Badge
+    if (data.badgeTitle) {
+      encoder.align('center');
+      encoder.bold(true);
+      encoder.textLine(`*** ${data.badgeTitle} ***`);
+      encoder.bold(false);
+      encoder.separator('-', width);
+    }
+
+    // 5. Metadata list
+    if (data.metadata.length > 0) {
+      data.metadata.forEach(m => {
+        const k = (m.key || '').trim();
+        const v = (m.value || '').trim();
+        if (!k && !v) return;
+        if (m.isCentered) {
+          const mergedText = k && v ? `${k} ${v}` : (k || v);
+          encoder.align('center');
+          encoder.textLine(mergedText);
+        } else if (k && v) {
+          encoder.twoColumn(`${k}:`, v, width);
+        } else if (k) {
+          encoder.align('center');
+          encoder.textLine(k);
+        } else if (v) {
+          encoder.align('center');
+          encoder.textLine(v);
+        }
+      });
+      encoder.separator('-', width);
+    }
+
+    // 6. Items
+    encoder.align('left');
+    data.items.forEach(item => {
+      encoder.textLine(item.name.substring(0, width));
+      const qtyStr = `  ${item.qty} x ${formatRupiah(item.price)}`;
+      const totStr = formatRupiah(item.total);
+      encoder.twoColumn(qtyStr, totStr, width);
+    });
+    encoder.separator('-', width);
+
+    // 7. Summary Total
+    encoder.twoColumn('Subtotal', `Rp ${formatRupiah(data.subtotal)}`, width);
+    if (data.serviceCharge > 0) {
+      encoder.twoColumn('Biaya Admin/Layanan', `Rp ${formatRupiah(data.serviceCharge)}`, width);
+    }
+    encoder.bold(true);
+    encoder.twoColumn('TOTAL', `Rp ${formatRupiah(data.total)}`, width);
+    encoder.bold(false);
+
+    // 8. Payment info
+    if (data.paidAmount > 0) {
+      encoder.separator('-', width);
+      encoder.twoColumn('Bayar', `Rp ${formatRupiah(data.paidAmount)}`, width);
+      const changeStr = data.paidAmount < data.total 
+        ? `-Rp ${formatRupiah(data.total - data.paidAmount)}` 
+        : `Rp ${formatRupiah(data.changeAmount)}`;
+      encoder.twoColumn('Kembalian', changeStr, width);
+    }
+
+    // 9. Footer
+    if (data.footerNote) {
+      encoder.separator('-', width);
+      encoder.align('center');
+      const footerLines = data.footerNote.split('\n');
+      for (const line of footerLines) {
+        encoder.textLine(line.substring(0, width));
+      }
+    }
+
+    // End-of-receipt: feed lines & cut paper strictly following user's configuration
+    if (enableAutoCut) {
+      encoder.cut(false, feedCount);
+    } else {
+      encoder.feed(feedCount);
+    }
+
+    return encoder.encode();
   };
 
   // Print directly to connected Thermal Printer (Linux / Bluetooth)
   const handlePrintThermal = async () => {
     sounds.playScanBeep();
     try {
-      const binary = generateEscPosBinary();
+      const binary = await generateEscPosBinaryAsync();
       const text = generateEscPosText();
 
       const res = await printerService.printUnified(
@@ -832,6 +967,39 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
       list[targetIndex] = temp;
       return { ...prev, metadata: list };
     });
+  };
+
+  const handleToggleMetadataCenter = (id: string) => {
+    updateData(prev => ({
+      ...prev,
+      metadata: prev.metadata.map(m => m.id === id ? { ...m, isCentered: !m.isCentered } : m)
+    }));
+    sounds.playScanBeep();
+  };
+
+  // HTML5 Native Drag & Drop Handlers for flexible, library-free sorting
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    updateData(prev => {
+      const list = [...prev.metadata];
+      const draggedItem = list[draggedIndex];
+      list.splice(draggedIndex, 1);
+      list.splice(index, 0, draggedItem);
+      return { ...prev, metadata: list };
+    });
+    setDraggedIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
   };
 
   // Receipt Items handlers
@@ -1190,8 +1358,12 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                           const v = (m.value || '').trim();
                           if (!k && !v) return null;
                           return (
-                            <div key={m.id || idx} className="flex justify-between gap-1">
-                              {k && v ? (
+                            <div key={m.id || idx} className="flex justify-between gap-1 w-full">
+                              {m.isCentered ? (
+                                <span className="font-bold text-slate-800 text-center w-full break-all">
+                                  {k && v ? `${k} ${v}` : (k || v)}
+                                </span>
+                              ) : k && v ? (
                                 <>
                                   <span className="text-slate-600 shrink-0">{k}:</span>
                                   <span className="font-bold text-right break-all">{v}</span>
@@ -1247,7 +1419,11 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                         </div>
                         <div className="flex justify-between text-slate-600">
                           <span>Kembalian</span>
-                          <span>Rp {formatRupiah(data.changeAmount)}</span>
+                          <span>
+                            {data.paidAmount < data.total 
+                              ? `-Rp ${formatRupiah(data.total - data.paidAmount)}` 
+                              : `Rp ${formatRupiah(data.changeAmount)}`}
+                          </span>
                         </div>
                       </>
                     )}
@@ -1292,7 +1468,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                   className="py-2.5 px-3 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-xl flex items-center justify-center gap-1.5 transition shadow-lg shadow-cyan-500/20"
                 >
                   <Zap className="w-4 h-4" />
-                  <span>Koneksi Bluetooth / Thermal</span>
+                  <span>Cetak Thermal</span>
                 </button>
 
                 <button
@@ -1497,15 +1673,79 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                   </button>
                 </div>
 
-                <div className="space-y-2">
+                 <div className="space-y-2">
                   {data.metadata.map((m, index) => (
-                    <div key={m.id} className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-2 rounded-xl">
-                      <span className="text-[10px] font-mono text-slate-500 w-5 text-center shrink-0">
+                    <div 
+                      key={m.id} 
+                      draggable={dragActiveId === m.id}
+                      onDragStart={(e) => handleDragStart(e, index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDragEnd={handleDragEnd}
+                      className={`flex items-center gap-2 bg-slate-950 border p-2 rounded-xl transition-all duration-200 ${
+                        draggedIndex === index 
+                          ? 'opacity-40 border-emerald-500 scale-[0.98]' 
+                          : 'border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {/* Drag & Drop Grip Handle */}
+                      <div 
+                        className="cursor-grab active:cursor-grabbing p-1 text-slate-500 hover:text-slate-300 transition"
+                        title="Tarik untuk mengurutkan posisi info ini"
+                        onMouseEnter={() => setDragActiveId(m.id)}
+                        onMouseLeave={() => setDragActiveId(null)}
+                      >
+                        <GripVertical className="w-4 h-4" />
+                      </div>
+
+                      <span className="text-[10px] font-mono text-slate-500 w-4 text-center shrink-0">
                         {index + 1}
                       </span>
 
-                      {/* Move Up/Down buttons */}
-                      <div className="flex flex-col gap-0.5">
+                      {/* Align Center / Merge Toggle Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleMetadataCenter(m.id)}
+                        className={`p-1.5 rounded-lg border transition ${
+                          m.isCentered
+                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
+                            : 'bg-slate-900 border-slate-750 text-slate-500 hover:text-white'
+                        }`}
+                        title={m.isCentered ? "Ubah ke Kolom Kiri:Kanan" : "Gabung & Rata Tengah"}
+                      >
+                        <AlignCenter className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Inputs with Center-Aware Styling */}
+                      <input
+                        type="text"
+                        value={m.key}
+                        onChange={e => handleUpdateMetadata(m.id, e.target.value, m.value)}
+                        placeholder="Nama Info (kiri)"
+                        className={`w-1/3 px-3 py-1.5 bg-slate-900 border rounded-lg text-xs font-semibold focus:outline-none transition-all ${
+                          m.isCentered
+                            ? 'text-center border-emerald-500/40 text-emerald-300 font-bold'
+                            : 'border-slate-750 focus:border-emerald-500 text-white'
+                        }`}
+                      />
+
+                      <span className={`font-bold text-xs transition ${m.isCentered ? 'text-emerald-400' : 'text-slate-600'}`}>
+                        ⇄
+                      </span>
+
+                      <input
+                        type="text"
+                        value={m.value}
+                        onChange={e => handleUpdateMetadata(m.id, m.key, e.target.value)}
+                        placeholder="Nilai Info (kanan)"
+                        className={`flex-1 px-3 py-1.5 bg-slate-900 border rounded-lg text-xs font-mono focus:outline-none transition-all ${
+                          m.isCentered
+                            ? 'text-center border-emerald-500/40 text-emerald-300 font-bold'
+                            : 'border-slate-750 focus:border-emerald-500 text-white'
+                        }`}
+                      />
+
+                      {/* Move Up/Down buttons (Keep as convenient fallback) */}
+                      <div className="flex flex-col gap-0.5 shrink-0 pl-1 border-l border-slate-800">
                         <button
                           onClick={() => handleMoveMetadata(index, 'up')}
                           disabled={index === 0}
@@ -1521,24 +1761,6 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                           <ArrowDown className="w-3 h-3" />
                         </button>
                       </div>
-
-                      <input
-                        type="text"
-                        value={m.key}
-                        onChange={e => handleUpdateMetadata(m.id, e.target.value, m.value)}
-                        placeholder="Nama Info (misal IDPEL)"
-                        className="w-1/3 px-3 py-1.5 bg-slate-900 border border-slate-750 rounded-lg text-xs text-white font-semibold focus:outline-none"
-                      />
-
-                      <span className="text-slate-600 font-bold">⇄</span>
-
-                      <input
-                        type="text"
-                        value={m.value}
-                        onChange={e => handleUpdateMetadata(m.id, m.key, e.target.value)}
-                        placeholder="Nilai (misal 536410207403)"
-                        className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-750 rounded-lg text-xs text-white font-mono focus:outline-none"
-                      />
 
                       <button
                         onClick={() => handleDeleteMetadata(m.id)}
@@ -1700,10 +1922,12 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                   <div>
                     <label className="block text-slate-400 mb-1 font-medium">Kembalian (Rp):</label>
                     <input
-                      type="number"
-                      value={data.changeAmount}
-                      onChange={e => updateData(prev => ({ ...prev, changeAmount: Number(e.target.value) || 0 }))}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono focus:outline-none"
+                      type="text"
+                      value={data.paidAmount < data.total ? `-${formatRupiah(data.total - data.paidAmount)}` : formatRupiah(data.changeAmount)}
+                      readOnly
+                      className={`w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl font-mono focus:outline-none font-bold ${
+                        data.paidAmount < data.total ? 'text-rose-400' : 'text-emerald-400'
+                      }`}
                     />
                   </div>
                 </div>
