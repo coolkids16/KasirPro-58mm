@@ -16,14 +16,15 @@ import {
   CheckCircle2,
   Sun,
   Moon,
-  Users
+  Users,
+  Scan
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { PrinterDeviceStatus, StoreSettings, UserProfile } from '../types';
 
 export interface NavbarProps {
-  activeTab: 'pos' | 'products' | 'transactions' | 'printer';
-  setActiveTab: (tab: 'pos' | 'products' | 'transactions' | 'printer') => void;
+  activeTab: 'pos' | 'products' | 'strukscan' | 'transactions' | 'printer';
+  setActiveTab: (tab: 'pos' | 'products' | 'strukscan' | 'transactions' | 'printer') => void;
   printerStatus: PrinterDeviceStatus;
   onOpenPrinterModal: () => void;
   onOpenSettingsModal: () => void;
@@ -175,6 +176,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Receipt className="w-4 h-4" />
               Riwayat
+            </button>
+
+            {/* TAB STRUKSCAN STUDIO (SEBELAH KANAN RIWAYAT & SEBELAH KIRI UJI PRINTER) */}
+            <button
+              onClick={() => setActiveTab('strukscan')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'strukscan'
+                  ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 font-bold'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-850'
+              }`}
+            >
+              <Scan className="w-4 h-4 text-emerald-400" />
+              <span>StrukScan OCR</span>
             </button>
 
             <button
@@ -464,6 +478,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Receipt className="w-4 h-4" />
             Riwayat
+          </button>
+          <button
+            onClick={() => setActiveTab('strukscan')}
+            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded ${
+              activeTab === 'strukscan' ? 'text-emerald-400 font-bold' : 'text-slate-400'
+            }`}
+          >
+            <Scan className="w-4 h-4 text-emerald-400" />
+            StrukScan
           </button>
           <button
             onClick={() => setActiveTab('printer')}

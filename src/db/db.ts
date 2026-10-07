@@ -1,10 +1,11 @@
 import Dexie, { type Table } from 'dexie';
-import { Product, Transaction, StoreSettings } from '../types';
+import { Product, Transaction, StoreSettings, CustomTemplate } from '../types';
 
 export class KasirProDatabase extends Dexie {
   products!: Table<Product, any>;
   transactions!: Table<Transaction, any>;
   settings!: Table<StoreSettings & { id: string }, string>;
+  strukTemplates!: Table<CustomTemplate, string>;
 
   constructor() {
     super('KasirProPOS_DB');
@@ -12,6 +13,12 @@ export class KasirProDatabase extends Dexie {
       products: '++id, name, category, sku, barcode, stock',
       transactions: '++id, invoiceNumber, timestamp, paymentMethod',
       settings: 'id'
+    });
+    this.version(2).stores({
+      products: '++id, name, category, sku, barcode, stock',
+      transactions: '++id, invoiceNumber, timestamp, paymentMethod',
+      settings: 'id',
+      strukTemplates: 'id, name'
     });
   }
 }

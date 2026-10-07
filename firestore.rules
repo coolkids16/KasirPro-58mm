@@ -108,5 +108,11 @@ service cloud.firestore {
       allow create, update: if isSignedIn() && (isOwner() || !exists(/databases/$(database)/documents/settings/$(settingsId)));
       allow delete: if false;
     }
+
+    // OCR Receipt Templates
+    match /receiptTemplates/{templateId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
+    }
   }
 }

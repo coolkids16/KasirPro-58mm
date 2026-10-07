@@ -33,7 +33,7 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { Product, Transaction, StoreSettings, UserRole, UserProfile, Store } from '../types';
+import { Product, Transaction, StoreSettings, UserRole, UserProfile, Store, CustomTemplate } from '../types';
 import { INITIAL_PRODUCTS, DEFAULT_SETTINGS } from '../db/db';
 
 // Initialize Firebase App
@@ -872,5 +872,46 @@ export async function saveStoreSettingsToFirestore(settings: StoreSettings): Pro
     } catch (e) {}
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+// ----------------- FIRESTORE RECEIPT TEMPLATES SERVICE -----------------
+
+export async function getReceiptTemplatesFromFirestore(): Promise<CustomTemplate[]> {
+  const path = 'receiptTemplates';
+  try {
+    const templatesRef = collection(db, 'receiptTemplates');
+    const snapshot = await getDocs(templatesRef);
+    const templates: CustomTemplate[] = [];
+    snapshot.forEach(docSnap => {
+      templates.push({ id: docSnap.id, ...docSnap.data() } as CustomTemplate);
+    });
+    return templates;
+  } catch (error) {
+    console.warn('Error reading receiptTemplates from Firestore:', error);
+    return [];
+  }
+}
+
+export async function saveReceiptTemplateToFirestore(template: CustomTemplate): Promise<void> {
+  const path = `receiptTemplates/${template.id}`;
+  try {
+    const docRef = doc(db, 'receiptTemplates', template.id);
+    await setDoc(docRef, {
+      ...template,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    console.warn('Error saving receiptTemplate to Firestore:', error);
+  }
+}
+
+export async function deleteReceiptTemplateFromFirestore(templateId: string): Promise<void> {
+  const path = `receiptTemplates/${templateId}`;
+  try {
+    const docRef = doc(db, 'receiptTemplates', templateId);
+    await deleteDoc(docRef);
+  } catch (error) {
+    console.warn('Error deleting receiptTemplate from Firestore:', error);
   }
 }

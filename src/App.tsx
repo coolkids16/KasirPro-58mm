@@ -3,6 +3,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { Navbar } from './components/Navbar';
 import { PosScreen } from './components/PosScreen';
 import { ProductManagement } from './components/ProductManagement';
+import { StrukScanStudio } from './components/StrukScanStudio';
 import { TransactionHistory } from './components/TransactionHistory';
 import { PrinterTester } from './components/PrinterTester';
 import { ReceiptModal } from './components/ReceiptModal';
@@ -28,7 +29,7 @@ import { UserManagementModal } from './components/UserManagementModal';
 
 export default function App() {
   const { currentUser, userProfile, role, storeId, isOwner, isManager, isCashier } = useRole();
-  const [activeTab, setActiveTab] = useState<'pos' | 'products' | 'transactions' | 'printer'>('pos');
+  const [activeTab, setActiveTab] = useState<'pos' | 'products' | 'strukscan' | 'transactions' | 'printer'>('pos');
   const [products, setProducts] = useState<Product[]>([]);
   
   // Synchronously initialize settings from localStorage if available, otherwise DEFAULT_SETTINGS
@@ -309,6 +310,14 @@ export default function App() {
                   storeId={storeId}
                 />
               </RoleProtectedRoute>
+            )}
+
+            {activeTab === 'strukscan' && (
+              <StrukScanStudio
+                settings={settings}
+                printerStatus={printerStatus}
+                storeId={storeId}
+              />
             )}
 
             {activeTab === 'transactions' && (

@@ -1,3 +1,19 @@
+export interface MetadataItem {
+  id: string;
+  key: string;
+  value: string;
+}
+
+export interface CustomTemplate {
+  id: string;
+  storeId?: string;
+  name: string;
+  badgeTitle: string;
+  metadata: MetadataItem[];
+  footerNote?: string;
+  createdAt?: number;
+}
+
 export type UserRole = 'owner' | 'manager' | 'cashier';
 
 export interface UserProfile {
