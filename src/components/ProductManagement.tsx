@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
+import { CustomSelect } from './CustomSelect';
 import { 
   Package, 
   Plus, 
@@ -960,27 +961,21 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                       className="w-full px-3 py-2 bg-slate-950 border border-emerald-500 rounded-xl text-white font-semibold focus:outline-none"
                     />
                   ) : (
-                    <select
+                    <CustomSelect
                       value={formCategory}
-                      onChange={e => {
-                        if (e.target.value === '__add_new__') {
+                      onChange={val => {
+                        if (val === '__add_new__') {
                           setIsCustomCategory(true);
                           setCustomCategoryInput('');
                         } else {
-                          setFormCategory(e.target.value);
+                          setFormCategory(val);
                         }
                       }}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none focus:border-emerald-500"
-                    >
-                      {availableCategories.map(cat => (
-                        <option key={cat} value={cat} className="bg-slate-900 text-white py-1">
-                          {cat}
-                        </option>
-                      ))}
-                      <option value="__add_new__" className="text-emerald-400 font-bold bg-slate-900 py-1">
-                        + Tambah Kategori Manual...
-                      </option>
-                    </select>
+                      options={[
+                        ...availableCategories.map(cat => ({ label: cat, value: cat })),
+                        { label: '+ Tambah Kategori Manual...', value: '__add_new__' }
+                      ]}
+                    />
                   )}
                 </div>
               </div>

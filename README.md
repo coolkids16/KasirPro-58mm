@@ -1,6 +1,6 @@
 # KasirPro 58mm - Sistem POS Kasir Cross-Platform (Linux Desktop & Android)
 
-Aplikasi Point of Sale (POS) kasir *offline-first* berkinerja tinggi yang dirancang untuk berjalan di **Linux Desktop** (menggunakan **Tauri v2**) dan **Android** (menggunakan **Capacitor**), dengan fitur utama dukungan **printer thermal 58mm (ESC/POS)** berstandar 32 karakter per baris.
+Aplikasi Point of Sale (POS) kasir *offline-first* berkinerja tinggi yang dirancang untuk berjalan di **Linux Desktop** (menggunakan **Tauri v2**) dan **Android** (menggunakan **Capacitor**), dengan fitur utama dukungan **printer thermal 58mm (ESC/POS)** berstandar 32 karakter per baris, modul **Pembukuan & Arus Kas Keuangan Lengkap** (termasuk Buku Bon dengan fitur edit & penambahan hutang berkala pelanggan), serta **StrukScan OCR AI** untuk pemindaian otomatis nota belanja dan nota kulakan grosir.
 
 ---
 
@@ -17,14 +17,17 @@ Aplikasi Point of Sale (POS) kasir *offline-first* berkinerja tinggi yang diranc
   - Feed 1 baris minimal (mencegah kertas kosong terbuang).
   - Pilihan baris kosong fleksibel (0–2 baris) & kontrol auto-cutter di menu Pengaturan.
 - **Fitur Pembukuan & Arus Kas Terpadu (Cash Flow Management)**:
-  - **Sinkronisasi Kasir POS Real-Time**: Seluruh transaksi penjualan dari meja kasir otomatis tercatat dan ditampilkan di daftar **Arus Transaksi Keuangan Terbaru**, metrik laba bersih, dan grafik omzet toko.
-  - **Pemasukan Luar Kasir & Pengeluaran Toko**: Pencatatan transaksi non-kasir (servis, top up e-wallet, jasa) dan operasional belanja stok/biaya toko.
-  - **Koreksi & Hapus Transaksi**: Fitur edit dan hapus catatan pemasukan/pengeluaran untuk mengoreksi kesalahan pembukuan dengan aman.
-  - **Buku Bon & Hutang Pelanggan**: Pencatatan piutang pelanggan, pencatatan pembayaran cicilan bertahap, dan pengingat jatuh tempo.
+  - **Sinkronisasi Kasir POS Real-Time**: Seluruh transaksi penjualan dari meja kasir otomatis terhubung dan tampil di daftar **Arus Transaksi Keuangan Terbaru**, metrik laba bersih, dan grafik omzet toko secara real-time.
+  - **Pemasukan Luar Kasir & Pengeluaran Toko**: Pencatatan transaksi pemasukan non-kasir (servis HP/laptop, pulsa, transfer bank) dan biaya operasional belanja stok/listrik/gaji karyawan toko.
+  - **Koreksi & Hapus Transaksi**: Fitur edit dan hapus catatan pemasukan/pengeluaran untuk mengoreksi pembukuan dengan aman.
+  - **Buku Bon & Hutang Pelanggan (Dengan Menu Edit)**:
+    - Pencatatan piutang pelanggan lengkap dengan nama, nomor kontak WhatsApp, dan rincian barang bon.
+    - **Menu Edit Bon / Tambah Hutang**: Ketika pelanggan yang sama menambah hutang baru di kemudian hari, pemilik toko cukup mengedit bon yang sudah ada dengan kalkulator otomatis penambahan nominal dan catatan barang baru.
+    - Pembayaran bertahap (cicilan bon), pelunasan instan 1-klik, cetak nota bon 58mm, dan kirim pengingat tagihan ramah via WhatsApp.
 - **StrukScan OCR (Pengenal Struk Belanja & Nota AI)**:
-  - Pemindaian struk fisik belanja/nota kulakan grosir menggunakan kamera atau unggah foto dokumen.
-  - Ekstraksi cerdas berbasis OCR untuk mendeteksi nama supplier, tanggal nota, daftar item belanja, harga beli, dan total pembayaran.
-  - Ekspor 1-klik langsung menjadi catatan pengeluaran kas pembukuan atau katalog produk baru tanpa ketik manual.
+  - **Pemindaian Nota Fisik**: Pindai struk fisik belanja/nota kulakan grosir menggunakan kamera ponsel/laptop atau unggah foto dokumen.
+  - **Ekstraksi Teks Cerdas (OCR AI)**: Deteksi otomatis nama supplier/toko grosir, tanggal transaksi nota, daftar rincian barang, harga beli, dan total nominal.
+  - **Ekspor Otomatis 1-Klik**: Hasil scan dapat langsung diekspor menjadi catatan pengeluaran kas di modul Pembukuan atau dimasukkan ke katalog produk baru tanpa perlu mengetik ulang manual.
 - **Laporan & Manajemen Stok**:
   - Dashboard analitik & grafik omzet harian interaktif (Recharts).
   - Manajemen produk, kategori kustom, varian harga, dan pelacak sisa stok.

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { CustomSelect } from './CustomSelect';
 import { 
-  Printer, 
+  Printer,
   Bluetooth, 
   Terminal, 
   Scissors, 
@@ -819,15 +820,15 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
                 <label className="block text-slate-300 font-medium mb-1">
                   Lebar Kolom Kertas
                 </label>
-                <select
+                <CustomSelect
                   value={formData.paperWidthChars}
-                  onChange={e => setFormData({ ...formData, paperWidthChars: Number(e.target.value) })}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono"
-                >
-                  <option value={32}>32 Karakter (Standar 58mm)</option>
-                  <option value={42}>42 Karakter (Font B 58mm)</option>
-                  <option value={48}>48 Karakter (Thermal 80mm)</option>
-                </select>
+                  onChange={val => setFormData({ ...formData, paperWidthChars: Number(val) })}
+                  options={[
+                    { label: '32 Karakter (Standar 58mm)', value: 32 },
+                    { label: '42 Karakter (Font B 58mm)', value: 42 },
+                    { label: '48 Karakter (Thermal 80mm)', value: 48 }
+                  ]}
+                />
               </div>
 
               <div>
@@ -855,16 +856,18 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
                     Jumlah baris kosong yang digulung di akhir struk.
                   </p>
                 </div>
-                <select
-                  value={formData.feedLines !== undefined ? formData.feedLines : 1}
-                  onChange={e => setFormData({ ...formData, feedLines: Number(e.target.value) })}
-                  className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-emerald-400 font-bold text-xs"
-                >
-                  <option value={0}>0 Baris (Ultra Hemat)</option>
-                  <option value={1}>1 Baris (Rekomendasi Hemat)</option>
-                  <option value={2}>2 Baris (Normal)</option>
-                  <option value={3}>3 Baris (Lebar)</option>
-                </select>
+                <div className="w-48">
+                  <CustomSelect
+                    value={formData.feedLines !== undefined ? formData.feedLines : 1}
+                    onChange={val => setFormData({ ...formData, feedLines: Number(val) })}
+                    options={[
+                      { label: '0 Baris (Ultra Hemat)', value: 0 },
+                      { label: '1 Baris (Rekomendasi)', value: 1 },
+                      { label: '2 Baris (Normal)', value: 2 },
+                      { label: '3 Baris (Lebar)', value: 3 }
+                    ]}
+                  />
+                </div>
               </div>
 
               <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">

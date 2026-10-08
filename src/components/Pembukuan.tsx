@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { CustomSelect } from './CustomSelect';
 import { 
   Wallet, 
   TrendingUp, 
@@ -100,6 +101,9 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   
   // Active editing & delete items
   const [editingCashFlow, setEditingCashFlow] = useState<CashFlowRecord | null>(null);
+  const [editingDebt, setEditingDebt] = useState<CustomerDebt | null>(null);
+  const [debtAddAmount, setDebtAddAmount] = useState<string>('');
+  const [debtAddDescription, setDebtAddDescription] = useState<string>('');
   const [activeDebtForInstallment, setActiveDebtForInstallment] = useState<CustomerDebt | null>(null);
   const [installmentAmount, setInstallmentAmount] = useState<string>('');
   const [installmentNote, setInstallmentNote] = useState<string>('Cicilan');
@@ -418,7 +422,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     }
 
     // 2. POS Transactions (Automatic Sales Income from POS Register)
-    if (dashboardFilter !== 'expense' && dashboardFilter !== 'income') {
+    if (dashboardFilter !== 'expense') {
       for (const tx of filteredPosTransactions) {
         const items = Array.isArray(tx.items) ? tx.items : [];
         if (searchQuery.trim()) {
@@ -605,13 +609,28 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     setIsExpenseModalOpen(true);
   };
 
-  const handleOpenDebtModal = () => {
-    setDebtCustomerName('');
-    setDebtCustomerPhone('');
-    setDebtDescription('');
-    setDebtTotalAmount('');
-    setDebtPaidInitial('0');
-    setDebtDueDate('');
+  const handleOpenDebtModal = (debt?: CustomerDebt) => {
+    if (debt) {
+      setEditingDebt(debt);
+      setDebtCustomerName(debt.customerName || '');
+      setDebtCustomerPhone(debt.customerPhone || '');
+      setDebtDescription(debt.description || '');
+      setDebtTotalAmount(debt.totalAmount.toString());
+      setDebtPaidInitial(debt.paidAmount.toString());
+      setDebtDueDate(debt.dueDate || '');
+      setDebtAddAmount('');
+      setDebtAddDescription('');
+    } else {
+      setEditingDebt(null);
+      setDebtCustomerName('');
+      setDebtCustomerPhone('');
+      setDebtDescription('');
+      setDebtTotalAmount('');
+      setDebtPaidInitial('0');
+      setDebtDueDate('');
+      setDebtAddAmount('');
+      setDebtAddDescription('');
+    }
     setIsDebtModalOpen(true);
   };
 
@@ -691,7 +710,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     }
   };
 
-  // Save Customer Debt (Buku Bon)
+  // Save or Update Customer Debt (Buku Bon)
   const handleSaveDebt = async (e: React.FormEvent) => {
     e.preventDefault();
     const totalNum = parseFloat(debtTotalAmount) || 0;
@@ -703,6 +722,45 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       return;
     }
 
+    let initialStatus: 'belum_lunas' | 'cicilan' | 'lunas' = 'belum_lunas';
+    if (remainingNum === 0) {
+      initialStatus = 'lunas';
+    } else if (paidNum > 0) {
+      initialStatus = 'cicilan';
+    }
+
+    // Editing Existing Debt
+    if (editingDebt && editingDebt.id) {
+      const updatedPayload: Partial<CustomerDebt> = {
+        customerName: debtCustomerName.trim() || 'Pelanggan Umum',
+        customerPhone: debtCustomerPhone.trim() || undefined,
+        description: debtDescription.trim() || 'Bon Belanja',
+        totalAmount: totalNum,
+        paidAmount: paidNum,
+        remainingAmount: remainingNum,
+        status: initialStatus,
+        dueDate: debtDueDate || undefined,
+        updatedAt: Date.now()
+      };
+
+      try {
+        await db.debts.update(editingDebt.id, updatedPayload);
+        if (auth.currentUser) {
+          updateDebtInFirestore(editingDebt.firestoreId || editingDebt.id, updatedPayload).catch(console.warn);
+        }
+        sounds.playSuccess();
+        showToast(`✓ Catatan bon "${updatedPayload.customerName}" berhasil diperbarui!`);
+        setIsDebtModalOpen(false);
+        setEditingDebt(null);
+        loadData();
+      } catch (err: any) {
+        console.error('Error updating debt:', err);
+        alert('Gagal memperbarui catatan hutang: ' + err.message);
+      }
+      return;
+    }
+
+    // Creating New Debt
     const initialPayments: DebtPayment[] = [];
     if (paidNum > 0) {
       initialPayments.push({
@@ -711,13 +769,6 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
         timestamp: Date.now(),
         note: 'Uang Muka / Pembayaran Awal'
       });
-    }
-
-    let initialStatus: 'belum_lunas' | 'cicilan' | 'lunas' = 'belum_lunas';
-    if (remainingNum === 0) {
-      initialStatus = 'lunas';
-    } else if (paidNum > 0) {
-      initialStatus = 'cicilan';
     }
 
     const payload: CustomerDebt = {
@@ -743,6 +794,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       sounds.playSuccess();
       showToast(`✓ Catatan bon untuk "${payload.customerName}" tersimpan!`);
       setIsDebtModalOpen(false);
+      setEditingDebt(null);
       loadData();
     } catch (err: any) {
       console.error('Error saving debt:', err);
@@ -1063,7 +1115,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           </button>
 
           <button
-            onClick={handleOpenDebtModal}
+            onClick={() => handleOpenDebtModal()}
             className="px-3.5 py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 transition"
           >
             <BookOpen className="w-4 h-4" />
@@ -1326,9 +1378,9 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                       : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-750'
                   }`}
                 >
-                  <span>Pemasukan Luar Kasir</span>
+                  <span>Pemasukan (Semua)</span>
                   <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${dashboardFilter === 'income' ? 'bg-black/20 text-slate-950 font-bold' : 'bg-slate-900 text-slate-400'}`}>
-                    {metrics.countIncome}
+                    {metrics.countPos + metrics.countIncome}
                   </span>
                 </button>
 
@@ -1356,7 +1408,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                       : dashboardFilter === 'expense'
                       ? 'Belum ada catatan pengeluaran di periode ini.'
                       : dashboardFilter === 'income'
-                      ? 'Belum ada catatan pemasukan manual di periode ini.'
+                      ? 'Belum ada catatan pemasukan kasir atau luar kasir di periode ini.'
                       : 'Belum ada catatan keuangan atau transaksi kasir di periode ini.'}
                   </div>
                 ) : (
@@ -1508,12 +1560,21 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                         <p className="text-[11px] text-slate-400 truncate">{d.description}</p>
                         <div className="flex items-center justify-between pt-1 border-t border-slate-800 text-[10px]">
                           <span className="text-slate-500">{new Date(d.createdAt).toLocaleDateString('id-ID')}</span>
-                          <button
-                            onClick={() => handleOpenInstallmentModal(d)}
-                            className="text-emerald-400 hover:text-emerald-300 font-bold"
-                          >
-                            + Bayar Cicilan
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleOpenDebtModal(d)}
+                              className="text-amber-400 hover:text-amber-300 font-bold"
+                              title="Edit bon atau tambah hutang pelanggan"
+                            >
+                              Edit Bon
+                            </button>
+                            <button
+                              onClick={() => handleOpenInstallmentModal(d)}
+                              className="text-emerald-400 hover:text-emerald-300 font-bold"
+                            >
+                              + Cicilan
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -1654,17 +1715,15 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
               />
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <select
+            <div className="flex items-center gap-2 w-full sm:w-auto min-w-[160px]">
+              <CustomSelect
                 value={selectedCategoryFilter}
-                onChange={e => setSelectedCategoryFilter(e.target.value)}
-                className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-emerald-500"
-              >
-                <option value="all">Semua Kategori</option>
-                {incomeCategories.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+                onChange={val => setSelectedCategoryFilter(val)}
+                options={[
+                  { label: 'Semua Kategori', value: 'all' },
+                  ...incomeCategories.map(c => ({ label: c, value: c }))
+                ]}
+              />
 
               <button
                 onClick={() => handleOpenIncomeModal()}
@@ -1805,17 +1864,15 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
               />
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <select
+            <div className="flex items-center gap-2 w-full sm:w-auto min-w-[160px]">
+              <CustomSelect
                 value={selectedCategoryFilter}
-                onChange={e => setSelectedCategoryFilter(e.target.value)}
-                className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-emerald-500"
-              >
-                <option value="all">Semua Kategori</option>
-                {expenseCategories.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+                onChange={val => setSelectedCategoryFilter(val)}
+                options={[
+                  { label: 'Semua Kategori', value: 'all' },
+                  ...expenseCategories.map(c => ({ label: c, value: c }))
+                ]}
+              />
 
               <button
                 onClick={() => handleOpenExpenseModal()}
@@ -1947,7 +2004,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
               </div>
 
               <button
-                onClick={handleOpenDebtModal}
+                onClick={() => handleOpenDebtModal()}
                 className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 transition whitespace-nowrap shadow-sm"
               >
                 <Plus className="w-4 h-4" />
@@ -2040,6 +2097,16 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                   {/* Actions Area */}
                   <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-1.5">
                     <div className="flex items-center gap-1">
+                      {/* Edit Bon / Tambah Hutang */}
+                      <button
+                        onClick={() => handleOpenDebtModal(debt)}
+                        className="px-2.5 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-xl transition flex items-center gap-1 text-xs font-bold"
+                        title="Edit Catatan Bon / Tambah Hutang Pelanggan"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Edit Bon</span>
+                      </button>
+
                       {/* Print Receipt */}
                       <button
                         onClick={() => handlePrintDebtReceipt(debt)}
@@ -2134,15 +2201,11 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
             <form onSubmit={handleSaveCashFlow} className="space-y-3.5 text-xs">
               <div>
                 <label className="block text-slate-400 mb-1 font-medium">Kategori Transaksi</label>
-                <select
+                <CustomSelect
                   value={formCategory}
-                  onChange={e => setFormCategory(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none focus:border-emerald-500"
-                >
-                  {incomeCategories.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                  onChange={val => setFormCategory(val)}
+                  options={incomeCategories.map(c => ({ label: c, value: c }))}
+                />
               </div>
 
               <div>
@@ -2196,27 +2259,27 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-400 mb-1 font-medium">Metode Pembayaran</label>
-                  <select
+                  <CustomSelect
                     value={formPaymentMethod}
-                    onChange={e => setFormPaymentMethod(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none"
-                  >
-                    <option value="Tunai">Tunai</option>
-                    <option value="Transfer Bank">Transfer Bank</option>
-                    <option value="QRIS">QRIS</option>
-                  </select>
+                    onChange={val => setFormPaymentMethod(val)}
+                    options={[
+                      { label: 'Tunai', value: 'Tunai' },
+                      { label: 'Transfer Bank', value: 'Transfer Bank' },
+                      { label: 'QRIS', value: 'QRIS' }
+                    ]}
+                  />
                 </div>
 
                 <div>
                   <label className="block text-slate-400 mb-1 font-medium">Status Pembayaran</label>
-                  <select
+                  <CustomSelect
                     value={formStatus}
-                    onChange={e => setFormStatus(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none"
-                  >
-                    <option value="lunas">Lunas</option>
-                    <option value="belum_lunas">Belum Lunas</option>
-                  </select>
+                    onChange={val => setFormStatus(val)}
+                    options={[
+                      { label: 'Lunas', value: 'lunas' },
+                      { label: 'Belum Lunas', value: 'belum_lunas' }
+                    ]}
+                  />
                 </div>
               </div>
 
@@ -2280,15 +2343,11 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
             <form onSubmit={handleSaveCashFlow} className="space-y-3.5 text-xs">
               <div>
                 <label className="block text-slate-400 mb-1 font-medium">Kategori Pengeluaran</label>
-                <select
+                <CustomSelect
                   value={formCategory}
-                  onChange={e => setFormCategory(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none focus:border-rose-500"
-                >
-                  {expenseCategories.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                  onChange={val => setFormCategory(val)}
+                  options={expenseCategories.map(c => ({ label: c, value: c }))}
+                />
               </div>
 
               <div>
@@ -2318,15 +2377,15 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-400 mb-1 font-medium">Sumber Dana</label>
-                  <select
+                  <CustomSelect
                     value={formPaymentMethod}
-                    onChange={e => setFormPaymentMethod(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none"
-                  >
-                    <option value="Kas Toko">Kas Toko (Laci Kasir)</option>
-                    <option value="Rekening Bank">Rekening Bank</option>
-                    <option value="Pribadi / Owner">Pribadi / Owner</option>
-                  </select>
+                    onChange={val => setFormPaymentMethod(val)}
+                    options={[
+                      { label: 'Kas Toko (Laci Kasir)', value: 'Kas Toko' },
+                      { label: 'Rekening Bank', value: 'Rekening Bank' },
+                      { label: 'Pribadi / Owner', value: 'Pribadi / Owner' }
+                    ]}
+                  />
                 </div>
 
                 <div>
@@ -2373,35 +2432,112 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
         </div>
       )}
 
-      {/* ================= MODAL: TAMBAH CATATAN BON (HUTANG BARU) ================= */}
+      {/* ================= MODAL: CATAT / EDIT BON PELANGGAN ================= */}
       {isDebtModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                  <BookOpen className="w-5 h-5" />
+                  {editingDebt ? <Edit3 className="w-5 h-5" /> : <BookOpen className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Catat Bon Pelanggan Baru</h3>
-                  <p className="text-[11px] text-slate-400">Catat hutang barang / pulsa / jasa pelanggan.</p>
+                  <h3 className="text-base font-bold text-white">
+                    {editingDebt ? `Edit Bon: ${editingDebt.customerName}` : 'Catat Bon Pelanggan Baru'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {editingDebt
+                      ? 'Perbarui data bon atau tambah nominal hutang belanja baru untuk pelanggan ini.'
+                      : 'Catat hutang barang / pulsa / jasa pelanggan warung atau toko.'}
+                  </p>
                 </div>
               </div>
               <button
-                onClick={() => setIsDebtModalOpen(false)}
+                onClick={() => {
+                  setIsDebtModalOpen(false);
+                  setEditingDebt(null);
+                }}
                 className="text-slate-400 hover:text-white p-1 rounded-lg"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
+            {/* Editing Helper Banner & Quick Add Debt Feature */}
+            {editingDebt && (
+              <div className="p-3.5 bg-amber-950/30 border border-amber-500/30 rounded-xl space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Total Bon Sebelumnya:</span>
+                  <span className="font-mono font-bold text-white">Rp {formatRupiah(editingDebt.totalAmount)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Sudah Dicicil:</span>
+                  <span className="font-mono font-semibold text-emerald-400">Rp {formatRupiah(editingDebt.paidAmount)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs pt-1.5 border-t border-amber-500/20">
+                  <span className="text-amber-300 font-bold">Sisa Hutang Berjalan:</span>
+                  <span className="font-mono font-black text-amber-400">Rp {formatRupiah(editingDebt.remainingAmount)}</span>
+                </div>
+
+                {/* Instant Add-to-Debt shortcut */}
+                <div className="p-2.5 bg-slate-950/70 border border-amber-500/40 rounded-lg space-y-2 mt-2">
+                  <div className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
+                    <Plus className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Orang Sama Menambah Hutang Belanja:</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-0.5">Tambah Nominal Hutang (Rp):</label>
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="+ Nominal baru (misal: 25000)"
+                        value={debtAddAmount}
+                        onChange={e => {
+                          const addVal = e.target.value;
+                          setDebtAddAmount(addVal);
+                          const addNum = parseFloat(addVal) || 0;
+                          setDebtTotalAmount((editingDebt.totalAmount + addNum).toString());
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-slate-900 border border-amber-500/60 rounded-lg text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-0.5">Catatan Barang Baru (Opsional):</label>
+                      <input
+                        type="text"
+                        placeholder="misal: + Beras 5kg, Telur 1kg"
+                        value={debtAddDescription}
+                        onChange={e => {
+                          const addDesc = e.target.value;
+                          setDebtAddDescription(addDesc);
+                          if (addDesc.trim()) {
+                            setDebtDescription(editingDebt.description ? `${editingDebt.description} + ${addDesc}` : addDesc);
+                          } else {
+                            setDebtDescription(editingDebt.description);
+                          }
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:border-slate-500"
+                      />
+                    </div>
+                  </div>
+                  {parseFloat(debtAddAmount) > 0 && (
+                    <div className="text-[10px] text-emerald-400 font-mono bg-emerald-950/40 px-2 py-1 rounded border border-emerald-500/20">
+                      ✓ Total hutang baru otomatis menjadi: Rp {formatRupiah((editingDebt.totalAmount + (parseFloat(debtAddAmount) || 0)))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleSaveDebt} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1 font-medium">Nama Pelanggan (Opsional)</label>
+                  <label className="block text-slate-400 mb-1 font-medium">Nama Pelanggan *</label>
                   <input
                     type="text"
-                    placeholder="Contoh: Pak RT / Budi (Opsional)"
+                    required
+                    placeholder="Contoh: Pak RT / Budi"
                     value={debtCustomerName}
                     onChange={e => setDebtCustomerName(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white font-semibold focus:outline-none focus:border-amber-500"
@@ -2412,28 +2548,30 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                   <label className="block text-slate-400 mb-1 font-medium">No. WhatsApp / HP (Opsional)</label>
                   <input
                     type="text"
-                    placeholder="08123456789 (Opsional)"
+                    placeholder="08123456789"
                     value={debtCustomerPhone}
                     onChange={e => setDebtCustomerPhone(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono focus:outline-none"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono focus:outline-none focus:border-emerald-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1 font-medium">Rincian Barang / Keperluan (Opsional)</label>
+                <label className="block text-slate-400 mb-1 font-medium">Rincian Barang / Keperluan Bon</label>
                 <textarea
                   rows={2}
-                  placeholder="Contoh: Paket Data Telkomsel 50rb & Rokok Surya 1 bks (Opsional)"
+                  placeholder="Contoh: Paket Data Telkomsel 50rb & Rokok Surya 1 bks"
                   value={debtDescription}
                   onChange={e => setDebtDescription(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1 font-medium">Total Hutang (Rp) *</label>
+                  <label className="block text-slate-400 mb-1 font-medium">
+                    Total Hutang (Rp) * {editingDebt && <span className="text-amber-400 font-normal">(Dapat Diubah)</span>}
+                  </label>
                   <input
                     type="number"
                     required
@@ -2441,21 +2579,31 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                     placeholder="Contoh: 75000"
                     value={debtTotalAmount}
                     onChange={e => setDebtTotalAmount(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-amber-500/60 rounded-xl text-amber-400 font-mono font-bold focus:outline-none"
+                    className="w-full px-3 py-2 bg-slate-950 border border-amber-500/60 rounded-xl text-amber-400 font-mono font-bold focus:outline-none focus:border-amber-400 text-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1 font-medium">Bayar Awal / DP (Rp)</label>
+                  <label className="block text-slate-400 mb-1 font-medium">
+                    {editingDebt ? 'Sudah Dibayar / Cicilan (Rp)' : 'Bayar Awal / DP (Rp)'}
+                  </label>
                   <input
                     type="number"
                     min={0}
                     placeholder="0"
                     value={debtPaidInitial}
                     onChange={e => setDebtPaidInitial(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-slate-300 font-mono focus:outline-none"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-emerald-400 font-mono font-bold focus:outline-none"
                   />
                 </div>
+              </div>
+
+              {/* Calculated remaining indicator */}
+              <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
+                <span className="text-slate-400">Sisa Tagihan Setelah Disimpan:</span>
+                <span className="font-mono font-black text-amber-400 text-sm">
+                  Rp {formatRupiah(Math.max(0, (parseFloat(debtTotalAmount) || 0) - (parseFloat(debtPaidInitial) || 0)))}
+                </span>
               </div>
 
               <div>
@@ -2464,23 +2612,26 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                   type="date"
                   value={debtDueDate}
                   onChange={e => setDebtDueDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none focus:border-slate-600"
                 />
               </div>
 
               <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsDebtModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl font-medium"
+                  onClick={() => {
+                    setIsDebtModalOpen(false);
+                    setEditingDebt(null);
+                  }}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl font-medium transition"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-md transition"
+                  className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-md transition"
                 >
-                  Simpan Catatan Bon
+                  {editingDebt ? 'Simpan Perubahan Bon' : 'Simpan Catatan Bon'}
                 </button>
               </div>
             </form>

@@ -494,7 +494,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         setShowProfileMenu(false);
                         onOpenAuthModal();
                       }}
-                      className="w-full flex items-center justify-between p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-850 transition font-medium text-left"
+                      className="w-full flex items-center justify-between p-2 rounded-xl text-slate-200 hover:text-white hover:bg-slate-800 transition font-medium text-left"
                     >
                       <div className="flex items-center gap-2.5">
                         <UserIcon className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -511,9 +511,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                         setShowProfileMenu(false);
                         onOpenSettingsModal();
                       }}
-                      className="w-full flex items-center gap-2.5 p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-850 transition font-medium text-left"
+                      className="w-full flex items-center gap-2.5 p-2 rounded-xl text-slate-200 hover:text-white hover:bg-slate-800 transition font-medium text-left"
                     >
-                      <Settings className="w-4 h-4 text-slate-450 shrink-0" />
+                      <Settings className="w-4 h-4 text-slate-400 shrink-0" />
                       <span>Pengaturan Toko & Printer</span>
                     </button>
 
@@ -523,7 +523,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         setShowProfileMenu(false);
                         onOpenBackupModal();
                       }}
-                      className="w-full flex items-center gap-2.5 p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-850 transition font-medium text-left"
+                      className="w-full flex items-center gap-2.5 p-2 rounded-xl text-slate-200 hover:text-white hover:bg-slate-800 transition font-medium text-left"
                     >
                       <Database className="w-4 h-4 text-cyan-400 shrink-0" />
                       <span>Backup & Impor Data (Dexie)</span>
@@ -536,7 +536,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           setShowProfileMenu(false);
                           onOpenUsersModal();
                         }}
-                        className="w-full flex items-center gap-2.5 p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-855 transition font-medium text-left"
+                        className="w-full flex items-center gap-2.5 p-2 rounded-xl text-slate-200 hover:text-white hover:bg-slate-800 transition font-medium text-left"
                       >
                         <Users className="w-4 h-4 text-indigo-400 shrink-0" />
                         <span>Kelola Staf Toko (Staf)</span>
@@ -549,7 +549,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         onClick={() => {
                           toggleTheme();
                         }}
-                        className="w-full flex items-center justify-between p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-850 transition font-medium text-left"
+                        className="w-full flex items-center justify-between p-2 rounded-xl text-slate-200 hover:text-white hover:bg-slate-800 transition font-medium text-left"
                       >
                         <div className="flex items-center gap-2.5">
                           {theme === 'dark' ? (
@@ -559,7 +559,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           )}
                           <span>Tema: {theme === 'dark' ? 'Gelap' : 'Terang'}</span>
                         </div>
-                        <span className="text-[10px] text-slate-500 font-mono">
+                        <span className="text-[10px] text-slate-400 font-mono">
                           {theme === 'dark' ? 'Dark' : 'Light'}
                         </span>
                       </button>

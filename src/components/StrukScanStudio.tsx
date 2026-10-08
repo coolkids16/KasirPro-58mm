@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { CustomSelect } from './CustomSelect';
 import { 
-  Scan, 
+  Scan,
   Upload, 
   Printer, 
   Copy, 
@@ -1656,18 +1657,19 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                 </div>
 
                 <div className="flex flex-wrap gap-2 items-center">
-                  <select
-                    value={selectedTemplateId}
-                    onChange={e => handleSelectTemplate(e.target.value)}
-                    className="flex-1 min-w-[200px] px-3 py-2 bg-slate-900 border border-slate-750 rounded-xl text-xs text-white focus:outline-none"
-                  >
-                    <option value="">-- Pilih Template Tersimpan --</option>
-                    {templates.map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} ({t.metadata.length} kolom info)
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex-1 min-w-[200px]">
+                    <CustomSelect
+                      value={selectedTemplateId}
+                      onChange={val => handleSelectTemplate(val)}
+                      options={[
+                        { label: '-- Pilih Template Tersimpan --', value: '' },
+                        ...templates.map(t => ({
+                          label: `${t.name} (${t.metadata.length} kolom info)`,
+                          value: t.id
+                        }))
+                      ]}
+                    />
+                  </div>
 
                   {selectedTemplateId && (
                     <div className="flex items-center gap-1">
@@ -1884,25 +1886,26 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                       </button>
 
                       {/* Font Size Select */}
-                      <select
-                        value={m.textSize || 'N'}
-                        onChange={e => {
-                          const size = e.target.value as 'S' | 'N' | 'DW' | 'DH' | 'M';
-                          updateData(prev => ({
-                            ...prev,
-                            metadata: prev.metadata.map(item => item.id === m.id ? { ...item, textSize: size } : item)
-                          }));
-                          sounds.playScanBeep();
-                        }}
-                        className="px-1.5 py-1 bg-slate-900 border border-slate-750 rounded-lg text-xs font-bold text-slate-300 focus:outline-none focus:border-emerald-500 shrink-0"
-                        title="Ukuran Huruf (S = Kecil, N = Normal, DW = Dobel Lebar, DH = Dobel Tinggi, M = Campuran)"
-                      >
-                        <option value="S">S</option>
-                        <option value="N">N</option>
-                        <option value="DW">DW</option>
-                        <option value="DH">DH</option>
-                        <option value="M">M</option>
-                      </select>
+                      <div className="w-16">
+                        <CustomSelect
+                          value={m.textSize || 'N'}
+                          onChange={val => {
+                            const size = val as 'S' | 'N' | 'DW' | 'DH' | 'M';
+                            updateData(prev => ({
+                              ...prev,
+                              metadata: prev.metadata.map(item => item.id === m.id ? { ...item, textSize: size } : item)
+                            }));
+                            sounds.playScanBeep();
+                          }}
+                          options={[
+                            { label: 'S', value: 'S' },
+                            { label: 'N', value: 'N' },
+                            { label: 'DW', value: 'DW' },
+                            { label: 'DH', value: 'DH' },
+                            { label: 'M', value: 'M' }
+                          ]}
+                        />
+                      </div>
 
                       {/* Move Up/Down buttons (Keep as convenient fallback) */}
                       <div className="flex flex-col gap-0.5 shrink-0 pl-1 border-l border-slate-800">
