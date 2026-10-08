@@ -18,7 +18,8 @@ import {
   Moon,
   Users,
   Scan,
-  Wallet
+  Wallet,
+  RefreshCw
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { PrinterDeviceStatus, StoreSettings, UserProfile } from '../types';
@@ -361,6 +362,22 @@ export const Navbar: React.FC<NavbarProps> = ({
                         </span>
                       )}
                     </p>
+
+                      {currentUser && (
+                        <div className="pt-2 pl-4.5">
+                          <button
+                            onClick={() => {
+                              setShowSyncInfo(false);
+                              window.location.reload();
+                            }}
+                            className="w-full py-1.5 px-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition shadow whitespace-nowrap"
+                            title="Paksa sinkronisasi ulang data terbaru dari cloud (Android / Linux)"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin-slow" />
+                            Sinkronkan Sekarang (Force Sync)
+                          </button>
+                        </div>
+                      )}
 
                     {!currentUser && (
                       <div className="pt-2 pl-4.5">
