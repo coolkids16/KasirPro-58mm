@@ -106,9 +106,57 @@
         "updatedAt": { "type": "string", "description": "Timestamp pembaruan" }
       },
       "required": ["id", "name", "metadata"]
+    },
+    "CashFlow": {
+      "title": "CashFlow",
+      "description": "Pencatatan arus kas pemasukan dan pengeluaran toko",
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string", "description": "ID toko" },
+        "type": { "type": "string", "enum": ["income", "expense"], "description": "Tipe arus kas" },
+        "category": { "type": "string", "description": "Kategori transaksi" },
+        "description": { "type": "string", "description": "Deskripsi atau keperluan" },
+        "amount": { "type": "number", "description": "Nominal transaksi" },
+        "cost": { "type": "number", "description": "Harga modal (opsional)" },
+        "profit": { "type": "number", "description": "Laba bersih (opsional)" },
+        "status": { "type": "string", "enum": ["lunas", "belum_lunas"], "description": "Status pembayaran" },
+        "paymentMethod": { "type": "string", "description": "Metode pembayaran" },
+        "timestamp": { "type": "number", "description": "Timestamp epoch" },
+        "dateString": { "type": "string", "description": "Format tanggal YYYY-MM-DD" },
+        "createdAt": { "type": "string", "description": "ISO timestamp" }
+      },
+      "required": ["type", "category", "amount", "status", "timestamp", "dateString"]
+    },
+    "Debt": {
+      "title": "Debt",
+      "description": "Buku Bon dan hutang piutang pelanggan",
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string", "description": "ID toko" },
+        "customerName": { "type": "string", "description": "Nama pelanggan" },
+        "customerPhone": { "type": "string", "description": "Nomor WhatsApp atau HP" },
+        "description": { "type": "string", "description": "Rincian barang atau keperluan" },
+        "totalAmount": { "type": "number", "description": "Total nominal hutang" },
+        "paidAmount": { "type": "number", "description": "Nominal yang sudah dibayar" },
+        "remainingAmount": { "type": "number", "description": "Sisa hutang" },
+        "status": { "type": "string", "enum": ["belum_lunas", "cicilan", "lunas"], "description": "Status hutang" },
+        "createdAt": { "type": "number", "description": "Timestamp pembuatan" },
+        "dueDate": { "type": "string", "description": "Tanggal jatuh tempo (opsional)" },
+        "payments": { "type": "array", "description": "Riwayat cicilan atau pembayaran" },
+        "updatedAt": { "type": "number", "description": "Timestamp pembaruan terakhir" }
+      },
+      "required": ["customerName", "totalAmount", "remainingAmount", "status", "createdAt"]
     }
   },
   "firestore": {
+    "/cashFlows/{cashFlowId}": {
+      "schema": { "$ref": "CashFlow" },
+      "description": "Cash flow records for income and expense bookkeeping"
+    },
+    "/debts/{debtId}": {
+      "schema": { "$ref": "Debt" },
+      "description": "Customer debts and installment tracking records"
+    },
     "/receiptTemplates/{templateId}": {
       "schema": { "$ref": "CustomTemplate" },
       "description": "Custom metadata templates for OCR scanning"

@@ -1,4 +1,4 @@
-import { Product, Transaction, StoreSettings } from '../types';
+import { Product, Transaction, StoreSettings, CashFlowRecord, CustomerDebt } from '../types';
 
 export interface FullBackupData {
   version: string;
@@ -6,6 +6,8 @@ export interface FullBackupData {
   storeSettings?: StoreSettings;
   products: Product[];
   transactions: Transaction[];
+  cashFlows?: CashFlowRecord[];
+  debts?: CustomerDebt[];
 }
 
 export function downloadFile(content: string, filename: string, mimeType: string) {
@@ -25,14 +27,18 @@ export function downloadFile(content: string, filename: string, mimeType: string
 export function exportFullBackupJson(
   products: Product[],
   transactions: Transaction[],
-  settings?: StoreSettings
+  settings?: StoreSettings,
+  cashFlows?: CashFlowRecord[],
+  debts?: CustomerDebt[]
 ) {
   const backup: FullBackupData = {
-    version: '1.0.0',
+    version: '2.0.0',
     exportedAt: new Date().toISOString(),
     storeSettings: settings,
     products,
-    transactions
+    transactions,
+    cashFlows,
+    debts
   };
   const dateStr = new Date().toISOString().slice(0, 10);
   downloadFile(

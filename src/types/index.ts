@@ -131,3 +131,47 @@ export interface PrinterDeviceStatus {
   linuxInfo?: LinuxPrinterInfo;
   bluetoothDevice?: BluetoothDeviceOption;
 }
+
+export type CashFlowType = 'income' | 'expense';
+
+export interface CashFlowRecord {
+  id?: any;
+  firestoreId?: string;
+  type: CashFlowType; // 'income' | 'expense'
+  category: string;
+  description: string;
+  amount: number;
+  cost?: number;
+  profit?: number;
+  status: 'lunas' | 'belum_lunas';
+  paymentMethod?: string;
+  timestamp: number;
+  dateString: string;
+  storeId?: string;
+  createdAt?: string;
+}
+
+export interface DebtPayment {
+  id: string;
+  amount: number;
+  timestamp: number;
+  note?: string;
+}
+
+export interface CustomerDebt {
+  id?: any;
+  firestoreId?: string;
+  customerName: string;
+  customerPhone?: string;
+  description: string;
+  totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  status: 'belum_lunas' | 'cicilan' | 'lunas';
+  createdAt: number;
+  dueDate?: string;
+  payments: DebtPayment[];
+  storeId?: string;
+  updatedAt?: number;
+}
+

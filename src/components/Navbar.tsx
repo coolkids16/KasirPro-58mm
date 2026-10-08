@@ -17,14 +17,15 @@ import {
   Sun,
   Moon,
   Users,
-  Scan
+  Scan,
+  Wallet
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { PrinterDeviceStatus, StoreSettings, UserProfile } from '../types';
 
 export interface NavbarProps {
-  activeTab: 'pos' | 'products' | 'strukscan' | 'transactions' | 'printer';
-  setActiveTab: (tab: 'pos' | 'products' | 'strukscan' | 'transactions' | 'printer') => void;
+  activeTab: 'pos' | 'products' | 'strukscan' | 'transactions' | 'printer' | 'pembukuan';
+  setActiveTab: (tab: 'pos' | 'products' | 'strukscan' | 'transactions' | 'printer' | 'pembukuan') => void;
   printerStatus: PrinterDeviceStatus;
   onOpenPrinterModal: () => void;
   onOpenSettingsModal: () => void;
@@ -197,6 +198,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <Receipt className="w-4 h-4 shrink-0" />
                 <span className="whitespace-nowrap">Riwayat</span>
+              </button>
+
+              {/* TAB PEMBUKUAN */}
+              <button
+                onClick={() => setActiveTab('pembukuan')}
+                className={`flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
+                  activeTab === 'pembukuan'
+                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 font-bold'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                }`}
+              >
+                <Wallet className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="whitespace-nowrap">Pembukuan</span>
               </button>
 
               {/* TAB STRUKSCAN STUDIO */}
@@ -597,6 +611,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Receipt className="w-4 h-4" />
             Riwayat
+          </button>
+          <button
+            onClick={() => setActiveTab('pembukuan')}
+            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded ${
+              activeTab === 'pembukuan' ? 'text-emerald-400 font-bold' : 'text-slate-400'
+            }`}
+          >
+            <Wallet className="w-4 h-4 text-emerald-400" />
+            Buku
           </button>
           <button
             onClick={() => setActiveTab('strukscan')}

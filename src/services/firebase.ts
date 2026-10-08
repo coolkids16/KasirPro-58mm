@@ -33,7 +33,7 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { Product, Transaction, StoreSettings, UserRole, UserProfile, Store, CustomTemplate } from '../types';
+import { Product, Transaction, StoreSettings, UserRole, UserProfile, Store, CustomTemplate, CashFlowRecord, CustomerDebt } from '../types';
 import { INITIAL_PRODUCTS, DEFAULT_SETTINGS } from '../db/db';
 
 // Initialize Firebase App
@@ -915,3 +915,251 @@ export async function deleteReceiptTemplateFromFirestore(templateId: string): Pr
     console.warn('Error deleting receiptTemplate from Firestore:', error);
   }
 }
+
+// ----------------- FIRESTORE CASH FLOW SERVICE -----------------
+
+export async function saveCashFlowToFirestore(cf: CashFlowRecord, storeId?: string): Promise<string> {
+  if (!auth.currentUser) return String(cf.id || '');
+  const path = 'cashFlows';
+  try {
+    const targetStoreId = storeId || cf.storeId || activeStoreId || 'default_store';
+    const payload = {
+      storeId: targetStoreId,
+      type: cf.type,
+      category: cf.category,
+      description: cf.description,
+      amount: Number(cf.amount) || 0,
+      cost: cf.cost !== undefined ? Number(cf.cost) : undefined,
+      profit: cf.profit !== undefined ? Number(cf.profit) : undefined,
+      status: cf.status,
+      paymentMethod: cf.paymentMethod || 'Tunai',
+      timestamp: cf.timestamp || Date.now(),
+      dateString: cf.dateString || new Date().toISOString().split('T')[0],
+      createdAt: cf.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    if (cf.id && typeof cf.id === 'string') {
+      await setDoc(doc(db, path, cf.id), payload, { merge: true });
+      return cf.id;
+    } else {
+      const docRef = await addDoc(collection(db, path), payload);
+      return docRef.id;
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteCashFlowFromFirestore(itemOrId: CashFlowRecord | string | number): Promise<void> {
+  if (!auth.currentUser) return;
+  const path = 'cashFlows';
+  try {
+    if (typeof itemOrId === 'string' && isNaN(Number(itemOrId))) {
+      await deleteDoc(doc(db, path, itemOrId));
+      return;
+    }
+
+    if (typeof itemOrId === 'object' && itemOrId !== null) {
+      if (itemOrId.firestoreId) {
+        await deleteDoc(doc(db, path, itemOrId.firestoreId));
+        return;
+      }
+      if (typeof itemOrId.id === 'string' && isNaN(Number(itemOrId.id))) {
+        await deleteDoc(doc(db, path, itemOrId.id));
+        return;
+      }
+
+      // Query matching cash flow by timestamp and amount
+      if (itemOrId.timestamp && itemOrId.amount) {
+        const q = query(
+          collection(db, path),
+          where('timestamp', '==', itemOrId.timestamp),
+          where('amount', '==', Number(itemOrId.amount))
+        );
+        const snaps = await getDocs(q);
+        for (const d of snaps.docs) {
+          await deleteDoc(d.ref);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to delete cashFlow from Firestore:', error);
+  }
+}
+
+export function subscribeCashFlows(
+  callback: (list: CashFlowRecord[]) => void,
+  onError?: (err: any) => void,
+  storeId?: string
+) {
+  if (!auth.currentUser) {
+    if (onError) onError(new Error('User not authenticated'));
+    return () => {};
+  }
+  const targetStoreId = storeId || activeStoreId;
+  const cfCol = collection(db, 'cashFlows');
+  const q = targetStoreId
+    ? query(cfCol, where('storeId', '==', targetStoreId))
+    : query(cfCol);
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: CashFlowRecord[] = [];
+      snapshot.forEach(docSnap => {
+        const d = docSnap.data();
+        list.push({
+          id: docSnap.id as any,
+          ...d
+        } as CashFlowRecord);
+      });
+      list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      callback(list);
+    },
+    (err) => {
+      console.warn('subscribeCashFlows error:', err);
+      if (onError) onError(err);
+    }
+  );
+}
+
+// ----------------- FIRESTORE DEBTS SERVICE -----------------
+
+export async function saveDebtToFirestore(debt: CustomerDebt, storeId?: string): Promise<string> {
+  if (!auth.currentUser) return String(debt.id || '');
+  const path = 'debts';
+  try {
+    const targetStoreId = storeId || debt.storeId || activeStoreId || 'default_store';
+    const payload = {
+      storeId: targetStoreId,
+      customerName: debt.customerName,
+      customerPhone: debt.customerPhone || '',
+      description: debt.description,
+      totalAmount: Number(debt.totalAmount) || 0,
+      paidAmount: Number(debt.paidAmount) || 0,
+      remainingAmount: Number(debt.remainingAmount) || 0,
+      status: debt.status,
+      createdAt: debt.createdAt || Date.now(),
+      dueDate: debt.dueDate || '',
+      payments: debt.payments || [],
+      updatedAt: Date.now()
+    };
+    if (debt.id && typeof debt.id === 'string') {
+      await setDoc(doc(db, path, debt.id), payload, { merge: true });
+      return debt.id;
+    } else {
+      const docRef = await addDoc(collection(db, path), payload);
+      return docRef.id;
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function updateDebtInFirestore(docId: string | number, partial: Partial<CustomerDebt>): Promise<void> {
+  if (!auth.currentUser) return;
+  const path = 'debts';
+  try {
+    if (typeof docId === 'string' && isNaN(Number(docId))) {
+      await updateDoc(doc(db, path, docId), {
+        ...partial,
+        updatedAt: Date.now()
+      });
+    }
+  } catch (error) {
+    console.warn('Failed to update debt in Firestore:', error);
+  }
+}
+
+export async function deleteDebtFromFirestore(debtOrId: CustomerDebt | string | number): Promise<void> {
+  if (!auth.currentUser) return;
+  const path = 'debts';
+  try {
+    if (typeof debtOrId === 'string' && isNaN(Number(debtOrId))) {
+      await deleteDoc(doc(db, path, debtOrId));
+      return;
+    }
+
+    if (typeof debtOrId === 'object' && debtOrId !== null) {
+      if (debtOrId.firestoreId) {
+        await deleteDoc(doc(db, path, debtOrId.firestoreId));
+        return;
+      }
+      if (typeof debtOrId.id === 'string' && isNaN(Number(debtOrId.id))) {
+        await deleteDoc(doc(db, path, debtOrId.id));
+        return;
+      }
+
+      if (debtOrId.createdAt && debtOrId.totalAmount) {
+        const q = query(
+          collection(db, path),
+          where('createdAt', '==', debtOrId.createdAt),
+          where('totalAmount', '==', Number(debtOrId.totalAmount))
+        );
+        const snaps = await getDocs(q);
+        for (const d of snaps.docs) {
+          await deleteDoc(d.ref);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to delete debt from Firestore:', error);
+  }
+}
+
+export function subscribeDebts(
+  callback: (list: CustomerDebt[]) => void,
+  onError?: (err: any) => void,
+  storeId?: string
+) {
+  if (!auth.currentUser) {
+    if (onError) onError(new Error('User not authenticated'));
+    return () => {};
+  }
+  const targetStoreId = storeId || activeStoreId;
+  const debtsCol = collection(db, 'debts');
+  const q = targetStoreId
+    ? query(debtsCol, where('storeId', '==', targetStoreId))
+    : query(debtsCol);
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: CustomerDebt[] = [];
+      snapshot.forEach(docSnap => {
+        const d = docSnap.data();
+        list.push({
+          id: docSnap.id as any,
+          ...d
+        } as CustomerDebt);
+      });
+      list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      callback(list);
+    },
+    (err) => {
+      console.warn('subscribeDebts error:', err);
+      if (onError) onError(err);
+    }
+  );
+}
+
+export async function batchSaveCashFlowsToFirestore(list: CashFlowRecord[], storeId?: string): Promise<number> {
+  if (!auth.currentUser) return 0;
+  let count = 0;
+  for (const cf of list) {
+    await saveCashFlowToFirestore(cf, storeId);
+    count++;
+  }
+  return count;
+}
+
+export async function batchSaveDebtsToFirestore(list: CustomerDebt[], storeId?: string): Promise<number> {
+  if (!auth.currentUser) return 0;
+  let count = 0;
+  for (const d of list) {
+    await saveDebtToFirestore(d, storeId);
+    count++;
+  }
+  return count;
+}
+

@@ -48,6 +48,34 @@ class SoundEffects {
   }
 
   /**
+   * Pleasant ascending two-tone chime for success / saved operations (587Hz -> 880Hz)
+   */
+  playSuccess() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.09); // A5
+
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.22);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.22);
+    } catch (e) {
+      console.warn('Audio play failure:', e);
+    }
+  }
+
+  /**
    * Low warning beep for unrecognized barcode (350Hz, 0.2s)
    */
   playErrorBeep() {

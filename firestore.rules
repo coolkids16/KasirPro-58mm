@@ -114,5 +114,19 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update, delete: if isSignedIn();
     }
+
+    // Cash Flows (Pembukuan Arus Kas)
+    // - Authenticated store members can read, create, update, and delete cash flows
+    match /cashFlows/{cashFlowId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
+    }
+
+    // Debts (Buku Bon / Hutang Piutang Pelanggan)
+    // - Authenticated store members can read, record, update installments, and clear debts
+    match /debts/{debtId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
+    }
   }
 }

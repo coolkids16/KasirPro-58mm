@@ -40,6 +40,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const [printSuccessMessage, setPrintSuccessMessage] = useState<string | null>(null);
   const [printErrorMessage, setPrintErrorMessage] = useState<string | null>(null);
   const [escPosBinary, setEscPosBinary] = useState<Uint8Array>(() => generateEscPosBinary(transaction, settings));
+  const [savedBtPrinter, setSavedBtPrinter] = useState<BluetoothDeviceOption | null>(() => printerService.getSavedBluetoothPrinter());
+  const [showBtPicker, setShowBtPicker] = useState(false);
+  const [pairedBtDevices, setPairedBtDevices] = useState<BluetoothDeviceOption[]>([]);
+  const [isLoadingBt, setIsLoadingBt] = useState(false);
 
   // Asynchronously generate rasterized binary containing custom logo if available
   useEffect(() => {
@@ -54,22 +58,17 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     };
   }, [transaction, settings]);
 
-  if (!isOpen) return null;
-
-  const isTauri = printerService.getRuntimeEnv() === 'tauri';
-  const linuxPath = settings.linuxDevicePath || '/dev/usb/lp0';
-
-  const [savedBtPrinter, setSavedBtPrinter] = useState<BluetoothDeviceOption | null>(() => printerService.getSavedBluetoothPrinter());
-  const [showBtPicker, setShowBtPicker] = useState(false);
-  const [pairedBtDevices, setPairedBtDevices] = useState<BluetoothDeviceOption[]>([]);
-  const [isLoadingBt, setIsLoadingBt] = useState(false);
-
   useEffect(() => {
     if (isOpen) {
       setSavedBtPrinter(printerService.getSavedBluetoothPrinter());
       setShowBtPicker(false);
     }
   }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const isTauri = printerService.getRuntimeEnv() === 'tauri';
+  const linuxPath = settings.linuxDevicePath || '/dev/usb/lp0';
 
   const handleOpenBtPicker = async () => {
     setShowBtPicker(true);

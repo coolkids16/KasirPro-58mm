@@ -1,11 +1,13 @@
 import Dexie, { type Table } from 'dexie';
-import { Product, Transaction, StoreSettings, CustomTemplate } from '../types';
+import { Product, Transaction, StoreSettings, CustomTemplate, CashFlowRecord, CustomerDebt } from '../types';
 
 export class KasirProDatabase extends Dexie {
   products!: Table<Product, any>;
   transactions!: Table<Transaction, any>;
   settings!: Table<StoreSettings & { id: string }, string>;
   strukTemplates!: Table<CustomTemplate, string>;
+  cashFlows!: Table<CashFlowRecord, any>;
+  debts!: Table<CustomerDebt, any>;
 
   constructor() {
     super('KasirProPOS_DB');
@@ -20,13 +22,21 @@ export class KasirProDatabase extends Dexie {
       settings: 'id',
       strukTemplates: 'id, name'
     });
+    this.version(3).stores({
+      products: '++id, name, category, sku, barcode, stock',
+      transactions: '++id, invoiceNumber, timestamp, paymentMethod',
+      settings: 'id',
+      strukTemplates: 'id, name',
+      cashFlows: '++id, type, category, status, timestamp, dateString, storeId',
+      debts: '++id, customerName, status, createdAt, storeId'
+    });
   }
 }
 
 export const db = new KasirProDatabase();
 
 export const DEFAULT_SETTINGS: StoreSettings = {
-  storeName: 'WARUNG KOPI & KASIRPRO',
+  storeName: 'Cool Kids Cell',
   address: 'Jl. Merdeka No. 45, Bandung',
   phone: '0812-3456-7890',
   footerMessage: 'Terima kasih atas kunjungan Anda!\nBarang yang dibeli tidak dapat ditukar.',
