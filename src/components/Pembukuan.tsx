@@ -44,7 +44,8 @@ import {
   deleteDebtFromFirestore,
   subscribeCashFlows,
   subscribeDebts,
-  subscribeTransactions
+  subscribeTransactions,
+  subscribeToAuthState
 } from '../services/firebase';
 
 interface PembukuanProps {
@@ -116,6 +117,19 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  // Helper to safely parse any timestamp (numeric, string, or Firestore Timestamp)
+  const parseTimestamp = useCallback((val: any): number => {
+    if (!val) return Date.now();
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const parsed = Date.parse(val);
+      if (!isNaN(parsed)) return parsed;
+    }
+    if (typeof val?.toMillis === 'function') return val.toMillis();
+    if (typeof val?.seconds === 'number') return val.seconds * 1000;
+    return Date.now();
+  }, []);
+
   // 1. Fetch data from Dexie
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -125,15 +139,23 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
         db.debts.toArray(),
         db.transactions.toArray()
       ]);
-      setCashFlows(cfList.sort((a, b) => b.timestamp - a.timestamp));
+      setCashFlows(
+        cfList
+          .map(cf => ({ ...cf, timestamp: parseTimestamp(cf.timestamp) }))
+          .sort((a, b) => b.timestamp - a.timestamp)
+      );
       setDebts(debtList.sort((a, b) => b.createdAt - a.createdAt));
-      setPosTransactions(txList.sort((a, b) => b.timestamp - a.timestamp));
+      setPosTransactions(
+        txList
+          .map(tx => ({ ...tx, timestamp: parseTimestamp(tx.timestamp) }))
+          .sort((a, b) => b.timestamp - a.timestamp)
+      );
     } catch (err) {
       console.error('Failed to load pembukuan data from Dexie:', err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [parseTimestamp]);
 
   useEffect(() => {
     loadData();
@@ -141,62 +163,83 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
   // Real-time listener for Firestore when user is signed in
   useEffect(() => {
-    if (!auth.currentUser) return;
+    let unsubCf: (() => void) | null = null;
+    let unsubDebts: (() => void) | null = null;
+    let unsubTx: (() => void) | null = null;
 
-    const unsubCf = subscribeCashFlows(
-      async (remoteList) => {
-        if (remoteList && remoteList.length > 0) {
-          setCashFlows(remoteList);
-          try {
-            await db.cashFlows.clear();
-            await db.cashFlows.bulkAdd(remoteList);
-          } catch (e) {
-            console.warn('Mirror cashflows error:', e);
-          }
-        }
-      },
-      undefined,
-      storeId || undefined
-    );
+    const unsubAuth = subscribeToAuthState((user) => {
+      // Unsubscribe previous listeners
+      if (unsubCf) { unsubCf(); unsubCf = null; }
+      if (unsubDebts) { unsubDebts(); unsubDebts = null; }
+      if (unsubTx) { unsubTx(); unsubTx = null; }
 
-    const unsubDebts = subscribeDebts(
-      async (remoteDebts) => {
-        if (remoteDebts && remoteDebts.length > 0) {
-          setDebts(remoteDebts);
-          try {
-            await db.debts.clear();
-            await db.debts.bulkAdd(remoteDebts);
-          } catch (e) {
-            console.warn('Mirror debts error:', e);
-          }
-        }
-      },
-      undefined,
-      storeId || undefined
-    );
+      if (user) {
+        unsubCf = subscribeCashFlows(
+          async (remoteList) => {
+            if (remoteList && remoteList.length > 0) {
+              const mapped = remoteList
+                .map(cf => ({ ...cf, timestamp: parseTimestamp(cf.timestamp) }))
+                .sort((a, b) => b.timestamp - a.timestamp);
+              setCashFlows(mapped);
+              try {
+                await db.cashFlows.clear();
+                await db.cashFlows.bulkAdd(mapped);
+              } catch (e) {
+                console.warn('Mirror cashflows error:', e);
+              }
+            }
+          },
+          undefined,
+          storeId || undefined
+        );
 
-    const unsubTx = subscribeTransactions(
-      async (remoteList) => {
-        if (remoteList && remoteList.length > 0) {
-          setPosTransactions(remoteList);
-          try {
-            await db.transactions.clear();
-            await db.transactions.bulkAdd(remoteList);
-          } catch (e) {
-            console.warn('Mirror transactions error:', e);
-          }
-        }
-      },
-      undefined,
-      storeId || undefined
-    );
+        unsubDebts = subscribeDebts(
+          async (remoteDebts) => {
+            if (remoteDebts && remoteDebts.length > 0) {
+              setDebts(remoteDebts.sort((a, b) => b.createdAt - a.createdAt));
+              try {
+                await db.debts.clear();
+                await db.debts.bulkAdd(remoteDebts);
+              } catch (e) {
+                console.warn('Mirror debts error:', e);
+              }
+            }
+          },
+          undefined,
+          storeId || undefined
+        );
+
+        unsubTx = subscribeTransactions(
+          async (remoteList) => {
+            if (remoteList && remoteList.length > 0) {
+              const mapped = remoteList
+                .map(tx => ({ ...tx, timestamp: parseTimestamp(tx.timestamp) }))
+                .sort((a, b) => b.timestamp - a.timestamp);
+              setPosTransactions(mapped);
+              try {
+                await db.transactions.clear();
+                await db.transactions.bulkAdd(mapped);
+              } catch (e) {
+                console.warn('Mirror transactions error:', e);
+              }
+            }
+          },
+          undefined,
+          storeId || undefined
+        );
+      } else {
+        // Fallback to local Dexie data
+        loadData();
+      }
+    });
 
     return () => {
-      unsubCf();
-      unsubDebts();
-      unsubTx();
+      unsubAuth();
+      if (unsubCf) unsubCf();
+      if (unsubDebts) unsubDebts();
+      if (unsubTx) unsubTx();
     };
-  }, [storeId]);
+  }, [storeId, loadData, parseTimestamp]);
 
   // Form states for Income / Expense
   const [formType, setFormType] = useState<'income' | 'expense'>('income');
@@ -240,8 +283,9 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   ];
 
   // Date filtering logic
-  const isDateInPeriod = useCallback((timestamp: number): boolean => {
-    const recordDate = new Date(timestamp);
+  const isDateInPeriod = useCallback((timestamp: any): boolean => {
+    const timeNum = parseTimestamp(timestamp);
+    const recordDate = new Date(timeNum);
     const now = new Date();
 
     if (period === 'today') {
@@ -262,10 +306,10 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       start.setHours(0, 0, 0, 0);
       const end = new Date(customEndDate);
       end.setHours(23, 59, 59, 999);
-      return timestamp >= start.getTime() && timestamp <= end.getTime();
+      return timeNum >= start.getTime() && timeNum <= end.getTime();
     }
     return true; // 'all'
-  }, [period, customStartDate, customEndDate]);
+  }, [period, customStartDate, customEndDate, parseTimestamp]);
 
   // Filtered Cashflows
   const filteredCashFlows = useMemo(() => {
@@ -376,14 +420,16 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     // 2. POS Transactions (Automatic Sales Income from POS Register)
     if (dashboardFilter !== 'expense' && dashboardFilter !== 'income') {
       for (const tx of filteredPosTransactions) {
+        const items = Array.isArray(tx.items) ? tx.items : [];
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
           const matchInv = (tx.invoiceNumber || '').toLowerCase().includes(q);
-          const matchItem = tx.items.some(i => (i.product?.name || '').toLowerCase().includes(q));
-          if (!matchInv && !matchItem) continue;
+          const matchItem = items.some(i => (i?.product?.name || '').toLowerCase().includes(q));
+          const matchCashier = (tx.cashierName || '').toLowerCase().includes(q);
+          if (!matchInv && !matchItem && !matchCashier) continue;
         }
 
-        const itemsSummary = tx.items.map(i => `${i.product.name} (${i.quantity}x)`).join(', ');
+        const itemsSummary = items.map(i => `${i?.product?.name || 'Produk'} (${i?.quantity || 1}x)`).join(', ');
         const desc = itemsSummary 
           ? `Penjualan Kasir #${tx.invoiceNumber}: ${itemsSummary}` 
           : `Penjualan Kasir #${tx.invoiceNumber}`;
@@ -456,18 +502,20 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     // 2. POS Sales Records
     if (incomeSourceFilter !== 'manual') {
       for (const tx of filteredPosTransactions) {
+        const items = Array.isArray(tx.items) ? tx.items : [];
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
           const matchInv = (tx.invoiceNumber || '').toLowerCase().includes(q);
-          const matchItem = tx.items.some(i => (i.product?.name || '').toLowerCase().includes(q));
-          if (!matchInv && !matchItem) continue;
+          const matchItem = items.some(i => (i?.product?.name || '').toLowerCase().includes(q));
+          const matchCashier = (tx.cashierName || '').toLowerCase().includes(q);
+          if (!matchInv && !matchItem && !matchCashier) continue;
         }
 
-        const itemsSummary = tx.items.map(i => `${i.product.name} (${i.quantity}x)`).join(', ');
+        const itemsSummary = items.map(i => `${i?.product?.name || 'Produk'} (${i?.quantity || 1}x)`).join(', ');
         const methodLabel = tx.paymentMethod === 'cash' ? 'Tunai' : (tx.paymentMethod === 'qris' ? 'QRIS' : 'Transfer');
 
         list.push({
-          id: `pos-${tx.id || tx.invoiceNumber}`,
+          id: `pos-${tx.id || tx.firestoreId || tx.invoiceNumber}`,
           source: 'pos',
           category: 'Kasir POS',
           description: itemsSummary ? `Penjualan Kasir #${tx.invoiceNumber}: ${itemsSummary}` : `Penjualan Kasir #${tx.invoiceNumber}`,
@@ -1187,15 +1235,23 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             {/* Left 2 Cols: Arus Kas Terbaru */}
-            <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-sm">
+            <div id="arus-transaksi-keuangan" className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-sm scroll-mt-20">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-emerald-400" />
-                    Arus Transaksi Keuangan Terbaru
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Daftar seluruh transaksi Kasir POS, pemasukan, & pengeluaran yang tercatat.
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-emerald-400" />
+                      Arus Transaksi Keuangan Terbaru
+                    </h3>
+                    {metrics.countPos > 0 && (
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        {metrics.countPos} Kasir POS Terhubung
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Daftar seluruh transaksi Kasir POS, pemasukan kas, & pengeluaran yang tercatat secara real-time.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1208,6 +1264,25 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Notice when transactions exist in other periods */}
+              {period === 'today' && filteredPosTransactions.length === 0 && posTransactions.length > 0 && (
+                <div className="p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-emerald-300">
+                    <Receipt className="w-4 h-4 shrink-0 text-emerald-400" />
+                    <span>
+                      Ada <strong>{posTransactions.length} transaksi Kasir POS</strong> di riwayat toko Anda (di luar hari ini).
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPeriod('all')}
+                    className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-[11px] whitespace-nowrap transition shadow-sm"
+                  >
+                    Tampilkan Semua Periode
+                  </button>
+                </div>
+              )}
 
               {/* Quick Filter Tabs: Semua / Kasir POS / Pemasukan Manual / Pengeluaran */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs scrollbar-none">
@@ -1236,7 +1311,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                   }`}
                 >
                   <Receipt className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Kasir POS</span>
+                  <span>Kasir POS (Sinkron)</span>
                   <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-950 text-emerald-300 font-bold border border-emerald-500/30">
                     {metrics.countPos}
                   </span>
@@ -1251,7 +1326,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                       : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-750'
                   }`}
                 >
-                  <span>Pemasukan Manual</span>
+                  <span>Pemasukan Luar Kasir</span>
                   <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${dashboardFilter === 'income' ? 'bg-black/20 text-slate-950 font-bold' : 'bg-slate-900 text-slate-400'}`}>
                     {metrics.countIncome}
                   </span>
@@ -1447,10 +1522,10 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
               </div>
 
               {/* POS Shortcut with Live Synced Metrics */}
-              <div className="p-3.5 bg-emerald-950/40 border border-emerald-500/30 rounded-xl space-y-2 mt-4">
+              <div className="p-3.5 bg-emerald-950/40 border border-emerald-500/30 rounded-xl space-y-2.5 mt-4">
                 <div className="flex items-center justify-between text-emerald-300 font-bold text-xs">
                   <div className="flex items-center gap-2">
-                    <Receipt className="w-4 h-4" />
+                    <Receipt className="w-4 h-4 text-emerald-400" />
                     <span>Sinkronisasi Kasir POS Aktif</span>
                   </div>
                   <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">
@@ -1459,19 +1534,34 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 </div>
                 <p className="text-[11px] text-slate-400 leading-relaxed">
                   {metrics.countPos > 0 ? (
-                    <>Tercatat omzet kasir <strong className="text-emerald-300 font-mono">Rp {formatRupiah(metrics.posTotalRevenue)}</strong> otomatis masuk ke ringkasan & daftar transaksi sebelah kiri.</>
+                    <>Tercatat omzet kasir <strong className="text-emerald-300 font-mono">Rp {formatRupiah(metrics.posTotalRevenue)}</strong> otomatis terhubung dan tampil di daftar <strong>Arus Transaksi Keuangan Terbaru</strong> di sebelah kiri.</>
                   ) : (
-                    <>Penjualan dari menu Kasir utama otomatis terhitung ke dalam total perputaran kas masuk toko.</>
+                    <>Setiap transaksi penjualan dari kasir otomatis terhubung dan ditampilkan di daftar Arus Transaksi Keuangan Terbaru.</>
                   )}
                 </p>
-                {onNavigateToPos && (
+                <div className="flex items-center gap-2 pt-1">
                   <button
-                    onClick={onNavigateToPos}
-                    className="w-full py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-lg transition shadow-sm"
+                    type="button"
+                    onClick={() => {
+                      setDashboardFilter('pos');
+                      const el = document.getElementById('arus-transaksi-keuangan');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="flex-1 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 shadow-sm"
                   >
-                    Buka Kasir (POS)
+                    <Clock className="w-3.5 h-3.5" />
+                    Tampilkan di Arus Kas ({metrics.countPos})
                   </button>
-                )}
+                  {onNavigateToPos && (
+                    <button
+                      type="button"
+                      onClick={onNavigateToPos}
+                      className="py-1.5 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-lg transition shadow-sm whitespace-nowrap"
+                    >
+                      Buka Kasir
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

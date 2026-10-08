@@ -11,11 +11,20 @@ Aplikasi Point of Sale (POS) kasir *offline-first* berkinerja tinggi yang diranc
   - **Firebase Firestore**: Sinkronisasi cloud *real-time* otomatis ke semua perangkat kasir (multi-cabang / multi-device).
 - **Direct ESC/POS 58mm Thermal Printing**:
   - **Linux Desktop**: Akses langsung hardware via port `/dev/usb/lp0` (Tauri Native IPC).
-  - **Android Mobile**: Web Bluetooth API & Capacitor BLE untuk printer thermal saku portabel Bluetooth.
+  - **Android Mobile**: Web Bluetooth API & Capacitor BLE untuk printer thermal saku portabel Bluetooth (Mode PPOB).
   - **Simulator**: Virtual thermal printer 58mm bawaan (32 kolom teks & barcode/QR).
 - **Mode Hemat Kertas Otomatis**:
   - Feed 1 baris minimal (mencegah kertas kosong terbuang).
   - Pilihan baris kosong fleksibel (0–2 baris) & kontrol auto-cutter di menu Pengaturan.
+- **Fitur Pembukuan & Arus Kas Terpadu (Cash Flow Management)**:
+  - **Sinkronisasi Kasir POS Real-Time**: Seluruh transaksi penjualan dari meja kasir otomatis tercatat dan ditampilkan di daftar **Arus Transaksi Keuangan Terbaru**, metrik laba bersih, dan grafik omzet toko.
+  - **Pemasukan Luar Kasir & Pengeluaran Toko**: Pencatatan transaksi non-kasir (servis, top up e-wallet, jasa) dan operasional belanja stok/biaya toko.
+  - **Koreksi & Hapus Transaksi**: Fitur edit dan hapus catatan pemasukan/pengeluaran untuk mengoreksi kesalahan pembukuan dengan aman.
+  - **Buku Bon & Hutang Pelanggan**: Pencatatan piutang pelanggan, pencatatan pembayaran cicilan bertahap, dan pengingat jatuh tempo.
+- **StrukScan OCR (Pengenal Struk Belanja & Nota AI)**:
+  - Pemindaian struk fisik belanja/nota kulakan grosir menggunakan kamera atau unggah foto dokumen.
+  - Ekstraksi cerdas berbasis OCR untuk mendeteksi nama supplier, tanggal nota, daftar item belanja, harga beli, dan total pembayaran.
+  - Ekspor 1-klik langsung menjadi catatan pengeluaran kas pembukuan atau katalog produk baru tanpa ketik manual.
 - **Laporan & Manajemen Stok**:
   - Dashboard analitik & grafik omzet harian interaktif (Recharts).
   - Manajemen produk, kategori kustom, varian harga, dan pelacak sisa stok.
@@ -340,6 +349,45 @@ Modul backup di tombol **Database (`Data`)** menyediakan:
 - **Full Backup JSON**: Seluruh data produk, stok, transaksi, dan setting dalam 1 file JSON bertanda waktu.
 - **Ekspor CSV (Excel)**: Laporan penjualan dan katalog produk format spreadsheet.
 - **Impor & Restore Fleksibel**: Pilihan mode *Gabungkan (Merge)* atau *Timpa Semua (Replace)* dengan sinkronisasi instan ke Dexie.js dan Cloud Firestore.
+
+---
+
+## 📊 Panduan Fitur Pembukuan & Arus Kas Terpadu
+
+Fitur Pembukuan dirancang untuk menyatukan seluruh perputaran kas masuk dan kas keluar toko Anda dalam satu tampilan cerdas:
+
+1. **Sinkronisasi Otomatis Kasir POS**:
+   - Setiap transaksi penjualan yang diselesaikan di meja Kasir (POS) otomatis tercatat ke dalam sistem pembukuan secara *real-time*.
+   - Transaksi kasir langsung muncul di panel **Arus Transaksi Keuangan Terbaru** dengan penanda visual khusus badge `KASIR POS`, nomor faktur struk, rincian produk yang dibeli, kasir yang bertugas, dan tombol cetak ulang struk 58mm.
+   - Dilengkapi filter cepat untuk memilah transaksi: **Semua**, **Kasir POS (Sinkron)**, **Pemasukan Luar Kasir**, dan **Pengeluaran**.
+2. **Pemasukan Luar Kasir**:
+   - Mencatat pendapatan operasional toko di luar penjualan produk kasir, seperti jasa transfer uang, tarik tunai, top-up e-wallet, servis HP/elektronik, dan komisi loket pembayaran.
+3. **Pengeluaran Operasional Toko**:
+   - Mencatat biaya belanja kulakan stok barang/aksesoris, pengisian saldo server pulsa, pembelian kertas thermal, biaya listrik/sewa, dan konsumsi/gaji karyawan.
+4. **Fitur Koreksi (Edit & Hapus Transaksi)**:
+   - Apabila terdapat kesalahan input nominal, deskripsi, atau kategori, kasir atau admin dapat langsung mengedit atau menghapus catatan transaksi terkait melalui tombol aksi di tabel.
+   - Dilengkapi dialog konfirmasi keamanan serta perhitungan ulang saldo dan laba bersih otomatis.
+5. **Buku Bon & Piutang Pelanggan**:
+   - Catat hutang belanja pelanggan dengan detail nama, nomor telepon, catatan barang, dan tanggal jatuh tempo.
+   - Dukungan pembayaran cicilan bertahap dengan pencatatan riwayat pembayaran otomatis hingga status menjadi `LUNAS`.
+
+---
+
+## 🔍 Panduan Fitur StrukScan OCR (Pengenal Struk & Nota AI)
+
+Modul **StrukScan Studio** mempermudah pencatatan nota belanja atau faktur kulakan supplier tanpa perlu mengetik satu per satu secara manual:
+
+1. **Pemindaian Fleksibel**:
+   - Ambil foto nota belanja fisik secara langsung menggunakan kamera HP Android / webcam laptop, atau unggah foto gambar nota yang tersimpan di galeri/file komputer.
+2. **Ekstraksi Cerdas Berbasis OCR**:
+   - Sistem secara otomatis memindai teks pada gambar struk untuk mendeteksi:
+     - Nama toko / supplier penyedia barang.
+     - Tanggal transaksi nota.
+     - Daftar nama produk beserta kuantitas, harga satuan, dan diskon.
+     - Total nilai pembayaran dan metode bayar.
+3. **Ekspor Cepat 1-Klik**:
+   - **Masuk ke Pengeluaran**: Langsung tambahkan total belanja ke catatan pengeluaran pembukuan toko dalam satu kali klik.
+   - **Tambah ke Katalog Produk**: Tambahkan item baru dari nota ke master data produk untuk langsung dijual di kasir.
 
 ---
 
