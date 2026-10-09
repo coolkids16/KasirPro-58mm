@@ -33,7 +33,7 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { Product, Transaction, StoreSettings, UserRole, UserProfile, Store, CustomTemplate, CashFlowRecord, CustomerDebt } from '../types';
+import { Product, Transaction, StoreSettings, UserRole, UserProfile, Store, CustomTemplate, CashFlowRecord, CustomerDebt, CapitalRecord } from '../types';
 import { INITIAL_PRODUCTS, DEFAULT_SETTINGS } from '../db/db';
 
 // Initialize Firebase App
@@ -1036,6 +1036,10 @@ export async function saveDebtToFirestore(debt: CustomerDebt, storeId?: string):
       customerPhone: debt.customerPhone || '',
       description: debt.description,
       totalAmount: Number(debt.totalAmount) || 0,
+      cost: debt.cost !== undefined ? Number(debt.cost) : (debt.modal !== undefined ? Number(debt.modal) : 0),
+      profit: debt.profit !== undefined ? Number(debt.profit) : (debt.keuntunganBersih !== undefined ? Number(debt.keuntunganBersih) : 0),
+      modal: debt.modal !== undefined ? Number(debt.modal) : (debt.cost !== undefined ? Number(debt.cost) : 0),
+      keuntunganBersih: debt.keuntunganBersih !== undefined ? Number(debt.keuntunganBersih) : (debt.profit !== undefined ? Number(debt.profit) : 0),
       paidAmount: Number(debt.paidAmount) || 0,
       remainingAmount: Number(debt.remainingAmount) || 0,
       status: debt.status,
@@ -1143,6 +1147,28 @@ export async function deleteDebtFromFirestore(debtOrId: CustomerDebt | string | 
   }
 }
 
+export async function deleteDebtsByCustomerFromFirestore(customerName: string, storeId?: string): Promise<void> {
+  if (!auth.currentUser || !customerName) return;
+  const path = 'debts';
+  try {
+    const targetStoreId = storeId || activeStoreId;
+    const debtsCol = collection(db, path);
+    const q = targetStoreId
+      ? query(debtsCol, where('storeId', '==', targetStoreId))
+      : query(debtsCol);
+    const snaps = await getDocs(q);
+    const target = customerName.trim().toLowerCase();
+    for (const d of snaps.docs) {
+      const data = d.data();
+      if ((data.customerName || '').trim().toLowerCase() === target) {
+        await deleteDoc(d.ref);
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to delete debts by customer from Firestore:', error);
+  }
+}
+
 export function subscribeDebts(
   callback: (list: CustomerDebt[]) => void,
   onError?: (err: any) => void,
@@ -1178,6 +1204,148 @@ export function subscribeDebts(
       if (onError) onError(err);
     }
   );
+}
+
+// ----------------- FIRESTORE CAPITAL SERVICE -----------------
+
+export async function saveCapitalRecordToFirestore(cap: CapitalRecord, storeId?: string): Promise<string> {
+  if (!auth.currentUser) return String(cap.id || '');
+  const path = 'capital';
+  try {
+    const targetStoreId = storeId || cap.storeId || activeStoreId || 'default_store';
+    const payload = {
+      storeId: targetStoreId,
+      type: cap.type,
+      amount: Number(cap.amount) || 0,
+      description: cap.description,
+      timestamp: cap.timestamp || Date.now()
+    };
+    if (cap.firestoreId && typeof cap.firestoreId === 'string') {
+      await setDoc(doc(db, path, cap.firestoreId), payload, { merge: true });
+      return cap.firestoreId;
+    }
+    const docRef = await addDoc(collection(db, path), payload);
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export function subscribeCapital(
+  callback: (list: CapitalRecord[]) => void,
+  onError?: (err: any) => void,
+  storeId?: string
+) {
+  if (!auth.currentUser) {
+    if (onError) onError(new Error('User not authenticated'));
+    return () => {};
+  }
+  const targetStoreId = storeId || activeStoreId;
+  const capitalCol = collection(db, 'capital');
+  const q = targetStoreId
+    ? query(capitalCol, where('storeId', '==', targetStoreId))
+    : query(capitalCol);
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: CapitalRecord[] = [];
+      snapshot.forEach(docSnap => {
+        const d = docSnap.data();
+        list.push({
+          id: docSnap.id as any,
+          firestoreId: docSnap.id,
+          ...d
+        } as CapitalRecord);
+      });
+      list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      callback(list);
+    },
+    (err) => {
+      console.warn('subscribeCapital error:', err);
+      if (onError) onError(err);
+    }
+  );
+}
+
+export async function deleteAllCashFlowsFromFirestore(storeId?: string): Promise<void> {
+  if (!auth.currentUser) return;
+  const path = 'cashFlows';
+  const effectiveStoreId = storeId || activeStoreId;
+  console.log(`Deleting all from ${path} for store ${effectiveStoreId}`);
+  try {
+    const q = effectiveStoreId
+      ? query(collection(db, path), where('storeId', '==', effectiveStoreId))
+      : collection(db, path);
+    const snaps = await getDocs(q);
+    console.log(`Found ${snaps.size} docs in ${path}`);
+    const batch = writeBatch(db);
+    snaps.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    console.log(`Successfully deleted ${snaps.size} docs from ${path}`);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function deleteAllTransactionsFromFirestore(storeId?: string): Promise<void> {
+  if (!auth.currentUser) return;
+  const path = 'transactions';
+  const effectiveStoreId = storeId || activeStoreId;
+  console.log(`Deleting all from ${path} for store ${effectiveStoreId}`);
+  try {
+    const q = effectiveStoreId
+      ? query(collection(db, path), where('storeId', '==', effectiveStoreId))
+      : collection(db, path);
+    const snaps = await getDocs(q);
+    console.log(`Found ${snaps.size} docs in ${path}`);
+    const batch = writeBatch(db);
+    snaps.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    console.log(`Successfully deleted ${snaps.size} docs from ${path}`);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function deleteAllDebtsFromFirestore(storeId?: string): Promise<void> {
+  if (!auth.currentUser) return;
+  const path = 'debts';
+  const effectiveStoreId = storeId || activeStoreId;
+  console.log(`Deleting all from ${path} for store ${effectiveStoreId}`);
+  try {
+    const q = effectiveStoreId
+      ? query(collection(db, path), where('storeId', '==', effectiveStoreId))
+      : collection(db, path);
+    const snaps = await getDocs(q);
+    console.log(`Found ${snaps.size} docs in ${path}`);
+    const batch = writeBatch(db);
+    snaps.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    console.log(`Successfully deleted ${snaps.size} docs from ${path}`);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function deleteAllCapitalFromFirestore(storeId?: string): Promise<void> {
+  if (!auth.currentUser) return;
+  const path = 'capital';
+  const effectiveStoreId = storeId || activeStoreId;
+  console.log(`Deleting all from ${path} for store ${effectiveStoreId}`);
+  try {
+    const q = effectiveStoreId
+      ? query(collection(db, path), where('storeId', '==', effectiveStoreId))
+      : collection(db, path);
+    const snaps = await getDocs(q);
+    console.log(`Found ${snaps.size} docs in ${path}`);
+    const batch = writeBatch(db);
+    snaps.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    console.log(`Successfully deleted ${snaps.size} docs from ${path}`);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
 }
 
 export async function batchSaveCashFlowsToFirestore(list: CashFlowRecord[], storeId?: string): Promise<number> {

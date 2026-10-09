@@ -15,9 +15,9 @@ import {
   Barcode,
   CheckCircle2
 } from 'lucide-react';
-import { Product, CartItem, PaymentMethod, Transaction, StoreSettings } from '../types';
+import { Product, CartItem, PaymentMethod, Transaction, StoreSettings, CapitalRecord } from '../types';
 import { db } from '../db/db';
-import { saveTransactionToFirestore, saveProductToFirestore } from '../services/firebase';
+import { saveTransactionToFirestore, saveProductToFirestore, saveCapitalRecordToFirestore, auth } from '../services/firebase';
 import { formatRupiah } from '../utils/escpos';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
 import { CameraBarcodeScannerModal } from './CameraBarcodeScannerModal';
@@ -211,6 +211,27 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         paymentMethod,
         cashierName: settings.cashierName
       };
+
+      // Handle rounding adjustment
+      const roundingAdjustment = paid - grandTotal;
+      if (roundingAdjustment !== 0) {
+        const capitalPayload: CapitalRecord = {
+          type: roundingAdjustment > 0 ? 'add' : 'subtract',
+          amount: Math.abs(roundingAdjustment),
+          description: `Penyesuaian Pembulatan - ${invoiceNumber}`,
+          timestamp: Date.now(),
+          storeId: storeId || undefined
+        };
+        const capLocalId = await db.capital.add(capitalPayload);
+        if (auth.currentUser) {
+          try {
+            const firestoreId = await saveCapitalRecordToFirestore({ ...capitalPayload, id: capLocalId }, storeId || undefined);
+            await db.capital.update(capLocalId, { firestoreId });
+          } catch (e) {
+            console.warn('Failed to save rounding adjustment to Firestore:', e);
+          }
+        }
+      }
 
       // 1. Save transaction in Dexie IndexedDB
       const txId = await db.transactions.add(newTransaction);

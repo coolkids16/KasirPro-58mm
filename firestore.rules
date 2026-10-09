@@ -122,6 +122,13 @@ service cloud.firestore {
       allow create, update, delete: if isSignedIn();
     }
 
+    // Capital (Modal Usaha)
+    // - Authenticated store members can read, create, update, and delete capital records
+    match /capital/{capitalId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
+    }
+
     // Debts (Buku Bon / Hutang Piutang Pelanggan)
     // - Authenticated store members can read, record, update installments, and clear debts
     match /debts/{debtId} {

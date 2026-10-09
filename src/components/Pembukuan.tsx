@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { CustomSelect } from './CustomSelect';
+import { CapitalModal } from './CapitalModal';
 import { 
   Wallet, 
   TrendingUp, 
@@ -29,10 +30,14 @@ import {
   RefreshCw,
   ExternalLink,
   Percent,
-  Receipt
+  Receipt,
+  RotateCcw,
+  AlertTriangle,
+  Truck,
+  ShoppingBag
 } from 'lucide-react';
 import { db } from '../db/db';
-import { CashFlowRecord, CustomerDebt, DebtPayment, StoreSettings, Transaction } from '../types';
+import { CashFlowRecord, CustomerDebt, DebtPayment, StoreSettings, Transaction, CapitalRecord } from '../types';
 import { formatRupiah, padCenter, padRow, padSeparator, EscPosEncoder } from '../utils/escpos';
 import { printerService } from '../services/printerService';
 import { sounds } from '../utils/audio';
@@ -43,10 +48,18 @@ import {
   saveDebtToFirestore, 
   updateDebtInFirestore, 
   deleteDebtFromFirestore,
+  deleteDebtsByCustomerFromFirestore,
   subscribeCashFlows,
   subscribeDebts,
   subscribeTransactions,
-  subscribeToAuthState
+  subscribeCapital,
+  subscribeToAuthState,
+  saveCapitalRecordToFirestore,
+  deleteAllCashFlowsFromFirestore,
+  deleteAllTransactionsFromFirestore,
+  deleteAllDebtsFromFirestore,
+  deleteAllCapitalFromFirestore,
+  setActiveStoreId
 } from '../services/firebase';
 
 interface PembukuanProps {
@@ -80,6 +93,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   const [cashFlows, setCashFlows] = useState<CashFlowRecord[]>([]);
   const [debts, setDebts] = useState<CustomerDebt[]>([]);
   const [posTransactions, setPosTransactions] = useState<Transaction[]>([]);
+  const [capitalRecords, setCapitalRecords] = useState<CapitalRecord[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Search & Filter queries
@@ -95,14 +109,17 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
   // Modal states
   const [isIncomeModalOpen, setIsIncomeModalOpen] = useState<boolean>(false);
+  const [isAddingNewCustomer, setIsAddingNewCustomer] = useState<boolean>(false);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState<boolean>(false);
   const [isDebtModalOpen, setIsDebtModalOpen] = useState<boolean>(false);
+  const [isCapitalModalOpen, setIsCapitalModalOpen] = useState<boolean>(false);
   const [isInstallmentModalOpen, setIsInstallmentModalOpen] = useState<boolean>(false);
   
   // Active editing & delete items
   const [editingCashFlow, setEditingCashFlow] = useState<CashFlowRecord | null>(null);
   const [editingDebt, setEditingDebt] = useState<CustomerDebt | null>(null);
   const [debtAddAmount, setDebtAddAmount] = useState<string>('');
+  const [debtAddCost, setDebtAddCost] = useState<string>('');
   const [debtAddDescription, setDebtAddDescription] = useState<string>('');
   const [activeDebtForInstallment, setActiveDebtForInstallment] = useState<CustomerDebt | null>(null);
   const [installmentAmount, setInstallmentAmount] = useState<string>('');
@@ -111,7 +128,11 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   // Custom confirmation modals for deleting
   const [cashFlowToDelete, setCashFlowToDelete] = useState<CashFlowRecord | null>(null);
   const [debtToDelete, setDebtToDelete] = useState<CustomerDebt | null>(null);
+  const [debtToPayoff, setDebtToPayoff] = useState<CustomerDebt | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [isConfirmClearAllOpen, setIsConfirmClearAllOpen] = useState<boolean>(false);
+  const [isConfirmResetCapitalOpen, setIsConfirmResetCapitalOpen] = useState<boolean>(false);
+  const [isResettingCapital, setIsResettingCapital] = useState<boolean>(false);
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -120,6 +141,56 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
+
+  const executeResetCapital = async () => {
+    setIsResettingCapital(true);
+    try {
+      await db.capital.clear();
+      if (auth.currentUser) {
+        await deleteAllCapitalFromFirestore(storeId || undefined);
+      }
+      setCapitalRecords([]);
+      await loadData();
+      setIsConfirmResetCapitalOpen(false);
+      showToast("Seluruh saldo modal berhasil direset ke Rp 0");
+    } catch (err: any) {
+      console.error('Failed to reset capital:', err);
+      showToast("Gagal mereset modal: " + (err?.message || 'Error'));
+    } finally {
+      setIsResettingCapital(false);
+    }
+  };
+
+  const executeClearAllData = async () => {
+    setIsDeleting(true);
+    try {
+      await db.cashFlows.clear();
+      await db.transactions.clear();
+      await db.debts.clear();
+      await db.capital.clear();
+      if (auth.currentUser) {
+        await Promise.allSettled([
+          deleteAllCashFlowsFromFirestore(storeId || undefined),
+          deleteAllTransactionsFromFirestore(storeId || undefined),
+          deleteAllDebtsFromFirestore(storeId || undefined),
+          deleteAllCapitalFromFirestore(storeId || undefined)
+        ]);
+      }
+      setCashFlows([]);
+      setDebts([]);
+      setPosTransactions([]);
+      setCapitalRecords([]);
+      await loadData();
+      setIsConfirmClearAllOpen(false);
+      showToast("Semua data transaksi dan arus kas berhasil dihapus");
+    } catch (err: any) {
+      console.error('Error clearing data:', err);
+      showToast("Gagal menghapus beberapa data: " + (err?.message || 'Error'));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
 
   // Helper to safely parse any timestamp (numeric, string, or Firestore Timestamp)
   const parseTimestamp = useCallback((val: any): number => {
@@ -138,10 +209,11 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [cfList, debtList, txList] = await Promise.all([
+      const [cfList, debtList, txList, capList] = await Promise.all([
         db.cashFlows.toArray(),
         db.debts.toArray(),
-        db.transactions.toArray()
+        db.transactions.toArray(),
+        db.capital.toArray()
       ]);
       setCashFlows(
         cfList
@@ -154,6 +226,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           .map(tx => ({ ...tx, timestamp: parseTimestamp(tx.timestamp) }))
           .sort((a, b) => b.timestamp - a.timestamp)
       );
+      setCapitalRecords(capList.sort((a, b) => b.timestamp - a.timestamp));
     } catch (err) {
       console.error('Failed to load pembukuan data from Dexie:', err);
     } finally {
@@ -167,15 +240,21 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
   // Real-time listener for Firestore when user is signed in
   useEffect(() => {
+    setActiveStoreId(storeId || null);
+  }, [storeId]);
+
+  useEffect(() => {
     let unsubCf: (() => void) | null = null;
     let unsubDebts: (() => void) | null = null;
     let unsubTx: (() => void) | null = null;
+    let unsubCapital: (() => void) | null = null;
 
     const unsubAuth = subscribeToAuthState((user) => {
       // Unsubscribe previous listeners
       if (unsubCf) { unsubCf(); unsubCf = null; }
       if (unsubDebts) { unsubDebts(); unsubDebts = null; }
       if (unsubTx) { unsubTx(); unsubTx = null; }
+      if (unsubCapital) { unsubCapital(); unsubCapital = null; }
 
       if (user) {
         unsubCf = subscribeCashFlows(
@@ -238,6 +317,25 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           undefined,
           storeId || undefined
         );
+
+        unsubCapital = subscribeCapital(
+          async (remoteCapital) => {
+            if (remoteCapital) {
+              const sorted = (remoteCapital || []).sort((a, b) => b.timestamp - a.timestamp);
+              setCapitalRecords(sorted);
+              try {
+                await db.capital.clear();
+                if (sorted.length > 0) {
+                  await db.capital.bulkAdd(sorted);
+                }
+              } catch (e) {
+                console.warn('Mirror capital error:', e);
+              }
+            }
+          },
+          undefined,
+          storeId || undefined
+        );
       } else {
         // Fallback to local Dexie data
         loadData();
@@ -249,12 +347,14 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       if (unsubCf) unsubCf();
       if (unsubDebts) unsubDebts();
       if (unsubTx) unsubTx();
+      if (unsubCapital) unsubCapital();
     };
   }, [storeId, loadData, parseTimestamp]);
 
   // Form states for Income / Expense
   const [formType, setFormType] = useState<'income' | 'expense'>('income');
   const [formCategory, setFormCategory] = useState<string>('Transfer Uang');
+  const [formCustomerName, setFormCustomerName] = useState<string>('');
   const [formDescription, setFormDescription] = useState<string>('');
   const [formAmount, setFormAmount] = useState<string>('');
   const [formCost, setFormCost] = useState<string>('');
@@ -267,6 +367,10 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   const [debtCustomerPhone, setDebtCustomerPhone] = useState<string>('');
   const [debtDescription, setDebtDescription] = useState<string>('');
   const [debtTotalAmount, setDebtTotalAmount] = useState<string>('');
+  const [debtCost, setDebtCost] = useState<string>('');
+  const [debtProfit, setDebtProfit] = useState<string>('');
+  const [debtType, setDebtType] = useState<'standard' | 'kasbon' | 'jasa_antar'>('standard');
+  const [debtIsLoanWithoutProfit, setDebtIsLoanWithoutProfit] = useState<boolean>(false);
   const [debtPaidInitial, setDebtPaidInitial] = useState<string>('0');
   const [debtDueDate, setDebtDueDate] = useState<string>('');
 
@@ -278,6 +382,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     'Token Listrik & PLN',
     'Pulsa & Paket Data',
     'Voucher Game',
+    'Jasa Antar / Ongkir',
     'Jasa Servis / Ketik',
     'Lainnya'
   ];
@@ -380,6 +485,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       countPos: filteredPosTransactions.length
     };
   }, [filteredCashFlows, filteredPosTransactions, debts]);
+
+  const totalCapital = useMemo(() => capitalRecords.reduce((sum, c) => c.type === 'add' ? sum + c.amount : sum - c.amount, 0), [capitalRecords]);
 
   // Unified recent activities for "Arus Transaksi Keuangan Terbaru"
   const unifiedRecentTransactions = useMemo(() => {
@@ -589,6 +696,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       setFormPaymentMethod('Tunai');
       setFormDate(new Date().toISOString().split('T')[0]);
     }
+    setFormCustomerName('');
+    setIsAddingNewCustomer(false);
     setIsIncomeModalOpen(true);
   };
 
@@ -623,9 +732,17 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       setDebtCustomerPhone(debt.customerPhone || '');
       setDebtDescription(debt.description || '');
       setDebtTotalAmount(debt.totalAmount.toString());
+      const effCost = debt.cost !== undefined ? debt.cost : (debt.modal !== undefined ? debt.modal : '');
+      const effProfit = debt.profit !== undefined ? debt.profit : (debt.keuntunganBersih !== undefined ? debt.keuntunganBersih : '');
+      setDebtCost(effCost !== '' ? effCost.toString() : '');
+      setDebtProfit(effProfit !== '' ? effProfit.toString() : '');
+      const detectedType = debt.debtType || (debt.usesCapital === false ? 'jasa_antar' : (effProfit === 0 || (effCost !== '' && Number(effCost) === debt.totalAmount) ? 'kasbon' : 'standard'));
+      setDebtType(detectedType);
+      setDebtIsLoanWithoutProfit(detectedType === 'kasbon');
       setDebtPaidInitial(debt.paidAmount.toString());
       setDebtDueDate(debt.dueDate || '');
       setDebtAddAmount('');
+      setDebtAddCost('');
       setDebtAddDescription('');
     } else {
       setEditingDebt(null);
@@ -633,9 +750,14 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       setDebtCustomerPhone('');
       setDebtDescription('');
       setDebtTotalAmount('');
+      setDebtCost('');
+      setDebtProfit('');
+      setDebtType('standard');
+      setDebtIsLoanWithoutProfit(false);
       setDebtPaidInitial('0');
       setDebtDueDate('');
       setDebtAddAmount('');
+      setDebtAddCost('');
       setDebtAddDescription('');
     }
     setIsDebtModalOpen(true);
@@ -650,6 +772,93 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
     if (amountNum <= 0) {
       alert('Nominal harus lebih dari 0');
+      return;
+    }
+
+    // Handle debt creation for unpaid income
+    if (formType === 'income' && formStatus === 'belum_lunas') {
+      const customerName = formCustomerName.trim() || 'Pelanggan Umum';
+
+      try {
+        // Hapus semua catatan bon lama yang menggunakan nama yang sama
+        const normalizedName = customerName.toLowerCase();
+        const oldDebts = await db.debts
+          .filter(d => (d.customerName || '').trim().toLowerCase() === normalizedName)
+          .toArray();
+
+        for (const oldDebt of oldDebts) {
+          if (oldDebt.id) {
+            await db.debts.delete(oldDebt.id);
+          }
+          if (auth.currentUser) {
+            await deleteDebtFromFirestore(oldDebt);
+          }
+        }
+        if (auth.currentUser) {
+          await deleteDebtsByCustomerFromFirestore(customerName, storeId || undefined);
+        }
+        setDebts(prev => prev.filter(d => (d.customerName || '').trim().toLowerCase() !== normalizedName));
+
+        // Cek apakah kategori adalah Jasa Antar / Ongkir (tanpa modal & tanpa laba)
+        const isJasaAntar = formCategory === 'Jasa Antar / Ongkir';
+        const usesCapital = !isJasaAntar;
+
+        // Untuk bon tanpa laba atau pinjaman kasbon, modal yang terpotong adalah seluruh nominal jika modal belum diinput
+        const effectiveCost = isJasaAntar ? 0 : (costNum > 0 ? costNum : (profitNum === 0 ? amountNum : 0));
+        const effectiveProfit = isJasaAntar ? 0 : Math.max(0, amountNum - effectiveCost);
+
+        // Buatkan catatan bon baru yang segar dan bersih
+        const debtPayload: CustomerDebt = {
+          customerName: customerName,
+          description: formDescription.trim() || (isJasaAntar ? 'Jasa Antar Langganan (Bayar 1 Bulan Sekali)' : 'Bon Belanja'),
+          totalAmount: amountNum,
+          cost: effectiveCost,
+          profit: effectiveProfit,
+          modal: effectiveCost,
+          keuntunganBersih: effectiveProfit,
+          paidAmount: 0,
+          remainingAmount: amountNum,
+          status: 'belum_lunas',
+          debtType: isJasaAntar ? 'jasa_antar' : (effectiveProfit === 0 ? 'kasbon' : 'standard'),
+          usesCapital: usesCapital,
+          createdAt: Date.now(),
+          payments: [],
+          storeId: storeId || undefined,
+          updatedAt: Date.now()
+        };
+
+        const localId = await db.debts.add(debtPayload);
+        if (auth.currentUser) {
+          const firestoreId = await saveDebtToFirestore({ ...debtPayload, id: localId }, storeId || undefined);
+          await db.debts.update(localId, { firestoreId });
+        }
+        showToast(`✓ Catatan bon baru untuk "${customerName}" tersimpan (bon lama dihapus)!`);
+
+        // Pengurangan modal dari Total Modal HANYA jika usesCapital === true
+        if (usesCapital && effectiveCost > 0) {
+          const capitalCostPayload: CapitalRecord = {
+            type: 'subtract',
+            amount: effectiveCost,
+            description: effectiveProfit === 0
+              ? `Pinjaman Kasbon: ${customerName}`
+              : `Biaya Modal: ${formDescription.trim() || formCategory}`,
+            timestamp: Date.now(),
+            storeId: storeId || undefined
+          };
+          const capCostLocalId = await db.capital.add(capitalCostPayload);
+          if (auth.currentUser) {
+            const firestoreId = await saveCapitalRecordToFirestore({ ...capitalCostPayload, id: capCostLocalId }, storeId || undefined);
+            await db.capital.update(capCostLocalId, { firestoreId });
+          }
+        }
+
+        sounds.playSuccess();
+        setIsIncomeModalOpen(false);
+        loadData();
+      } catch (err: any) {
+        console.error('Error saving debt:', err);
+        alert('Gagal menyimpan catatan hutang: ' + err.message);
+      }
       return;
     }
 
@@ -681,6 +890,37 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
         if (auth.currentUser) {
           saveCashFlowToFirestore({ ...payload, id: localId }, storeId || undefined).catch(console.warn);
         }
+        
+        // Add CapitalRecord automatically
+        const capitalPayload: CapitalRecord = {
+          type: formType === 'income' ? 'add' : 'subtract',
+          amount: amountNum,
+          description: `Arus Kas: ${formDescription.trim() || formCategory}`,
+          timestamp: Date.now(),
+          storeId: storeId || undefined
+        };
+        const capLocalId = await db.capital.add(capitalPayload);
+        if (auth.currentUser) {
+          const firestoreId = await saveCapitalRecordToFirestore({ ...capitalPayload, id: capLocalId }, storeId || undefined);
+          await db.capital.update(capLocalId, { firestoreId });
+        }
+
+        // Subtract Capital Cost if income
+        if (formType === 'income' && costNum > 0) {
+          const capitalCostPayload: CapitalRecord = {
+            type: 'subtract',
+            amount: costNum,
+            description: `Biaya Modal: ${formDescription.trim() || formCategory}`,
+            timestamp: Date.now(),
+            storeId: storeId || undefined
+          };
+          const capCostLocalId = await db.capital.add(capitalCostPayload);
+          if (auth.currentUser) {
+            const firestoreId = await saveCapitalRecordToFirestore({ ...capitalCostPayload, id: capCostLocalId }, storeId || undefined);
+            await db.capital.update(capCostLocalId, { firestoreId });
+          }
+        }
+        
         showToast(`✓ Berhasil mencatat ${formType === 'income' ? 'pemasukan' : 'pengeluaran'}!`);
       }
       sounds.playSuccess();
@@ -736,25 +976,85 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       initialStatus = 'cicilan';
     }
 
+    // Determine cost, profit, and capital usage
+    const isJasaAntar = debtType === 'jasa_antar';
+    const usesCapital = !isJasaAntar; // Jasa Antar TANPA menggunakan Total Modal
+
+    let costNum = 0;
+    let profitNum = 0;
+    if (isJasaAntar) {
+      costNum = 0;
+      profitNum = 0;
+    } else if (debtType === 'kasbon' || debtIsLoanWithoutProfit) {
+      costNum = totalNum;
+      profitNum = 0;
+    } else {
+      const parsedCost = parseFloat(debtCost);
+      const parsedProfit = parseFloat(debtProfit);
+      if (!isNaN(parsedCost) && !isNaN(parsedProfit)) {
+        costNum = Math.max(0, parsedCost);
+        profitNum = Math.max(0, parsedProfit);
+      } else if (!isNaN(parsedCost)) {
+        costNum = Math.max(0, parsedCost);
+        profitNum = Math.max(0, totalNum - costNum);
+      } else if (!isNaN(parsedProfit)) {
+        profitNum = Math.max(0, parsedProfit);
+        costNum = Math.max(0, totalNum - profitNum);
+      } else {
+        // Jika keduanya kosong, anggap modal pokok = totalNum (laba Rp0) demi keamanan data
+        costNum = totalNum;
+        profitNum = 0;
+      }
+    }
+
     // Editing Existing Debt
     if (editingDebt && editingDebt.id) {
       const updatedPayload: Partial<CustomerDebt> = {
         customerName: debtCustomerName.trim() || 'Pelanggan Umum',
-        customerPhone: debtCustomerPhone.trim() || undefined,
-        description: debtDescription.trim() || 'Bon Belanja',
+        description: debtDescription.trim() || (isJasaAntar ? 'Jasa Antar Langganan (Bayar 1 Bulan Sekali)' : 'Bon Belanja'),
         totalAmount: totalNum,
+        cost: costNum,
+        profit: profitNum,
+        modal: costNum,
+        keuntunganBersih: profitNum,
         paidAmount: paidNum,
         remainingAmount: remainingNum,
         status: initialStatus,
-        dueDate: debtDueDate || undefined,
+        debtType: debtType,
+        usesCapital: usesCapital,
         updatedAt: Date.now()
       };
+      if (debtCustomerPhone.trim()) updatedPayload.customerPhone = debtCustomerPhone.trim();
+      if (debtDueDate) updatedPayload.dueDate = debtDueDate;
 
       try {
         await db.debts.update(editingDebt.id, updatedPayload);
         if (auth.currentUser) {
           await updateDebtInFirestore(editingDebt.firestoreId || editingDebt.id, updatedPayload, editingDebt.createdAt);
         }
+
+        // Jika ada penambahan modal tambahan di Form Edit Bon, potong dari Total Modal (hanya jika usesCapital)
+        const addCostNum = parseFloat(debtAddCost) || 0;
+        const addAmountNum = parseFloat(debtAddAmount) || 0;
+        const effectiveAddCost = addCostNum > 0
+          ? addCostNum
+          : ((debtType === 'kasbon' || profitNum === 0) && addAmountNum > 0 && usesCapital ? addAmountNum : 0);
+
+        if (usesCapital && effectiveAddCost > 0) {
+          const capitalCostPayload: CapitalRecord = {
+            type: 'subtract',
+            amount: effectiveAddCost,
+            description: `Modal Tambahan Bon: ${updatedPayload.customerName}`,
+            timestamp: Date.now(),
+            storeId: storeId || undefined
+          };
+          const capCostLocalId = await db.capital.add(capitalCostPayload);
+          if (auth.currentUser) {
+            const firestoreId = await saveCapitalRecordToFirestore({ ...capitalCostPayload, id: capCostLocalId }, storeId || undefined);
+            await db.capital.update(capCostLocalId, { firestoreId });
+          }
+        }
+
         sounds.playSuccess();
         showToast(`✓ Catatan bon "${updatedPayload.customerName}" berhasil diperbarui!`);
         setIsDebtModalOpen(false);
@@ -780,28 +1080,88 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
     const payload: CustomerDebt = {
       customerName: debtCustomerName.trim() || 'Pelanggan Umum',
-      customerPhone: debtCustomerPhone.trim() || undefined,
-      description: debtDescription.trim() || 'Bon Belanja',
+      description: debtDescription.trim() || (isJasaAntar ? 'Jasa Antar Langganan (Bayar 1 Bulan Sekali)' : 'Bon Belanja'),
       totalAmount: totalNum,
+      cost: costNum,
+      profit: profitNum,
+      modal: costNum,
+      keuntunganBersih: profitNum,
       paidAmount: paidNum,
       remainingAmount: remainingNum,
       status: initialStatus,
+      debtType: debtType,
+      usesCapital: usesCapital,
       createdAt: Date.now(),
-      dueDate: debtDueDate || undefined,
       payments: initialPayments,
       storeId: storeId || undefined,
       updatedAt: Date.now()
     };
+    if (debtCustomerPhone.trim()) payload.customerPhone = debtCustomerPhone.trim();
+    if (debtDueDate) payload.dueDate = debtDueDate;
 
     try {
+      // Hapus catatan bon lama yang menggunakan nama yang sama
+      const normalizedName = payload.customerName.trim().toLowerCase();
+      const oldDebts = await db.debts
+        .filter(d => (d.customerName || '').trim().toLowerCase() === normalizedName)
+        .toArray();
+
+      for (const oldDebt of oldDebts) {
+        if (oldDebt.id) {
+          await db.debts.delete(oldDebt.id);
+        }
+        if (auth.currentUser) {
+          await deleteDebtFromFirestore(oldDebt);
+        }
+      }
+      if (auth.currentUser) {
+        await deleteDebtsByCustomerFromFirestore(payload.customerName, storeId || undefined);
+      }
+      setDebts(prev => prev.filter(d => (d.customerName || '').trim().toLowerCase() !== normalizedName));
+
       const localId = await db.debts.add(payload);
       if (auth.currentUser) {
         const firestoreId = await saveDebtToFirestore({ ...payload, id: localId }, storeId || undefined);
         payload.firestoreId = firestoreId;
         await db.debts.update(localId, { firestoreId });
       }
+
+      // Pengurangan modal dari Total Modal HANYA jika usesCapital === true
+      if (usesCapital && costNum > 0) {
+        const capitalCostPayload: CapitalRecord = {
+          type: 'subtract',
+          amount: costNum,
+          description: (debtType === 'kasbon' || profitNum === 0)
+            ? `Pinjaman Kasbon: ${payload.customerName}`
+            : `Modal Bon: ${payload.customerName} (${payload.description})`,
+          timestamp: Date.now(),
+          storeId: storeId || undefined
+        };
+        const capCostLocalId = await db.capital.add(capitalCostPayload);
+        if (auth.currentUser) {
+          const firestoreId = await saveCapitalRecordToFirestore({ ...capitalCostPayload, id: capCostLocalId }, storeId || undefined);
+          await db.capital.update(capCostLocalId, { firestoreId });
+        }
+      }
+
+      // Jika ada uang muka atau pembayaran awal saat bon dibuat (hanya masuk modal jika usesCapital)
+      if (usesCapital && paidNum > 0) {
+        const capitalPayPayload: CapitalRecord = {
+          type: 'add',
+          amount: paidNum,
+          description: `Uang Muka Bon: ${payload.customerName}`,
+          timestamp: Date.now(),
+          storeId: storeId || undefined
+        };
+        const capPayLocalId = await db.capital.add(capitalPayPayload);
+        if (auth.currentUser) {
+          const firestoreId = await saveCapitalRecordToFirestore({ ...capitalPayPayload, id: capPayLocalId }, storeId || undefined);
+          await db.capital.update(capPayLocalId, { firestoreId });
+        }
+      }
+
       sounds.playSuccess();
-      showToast(`✓ Catatan bon untuk "${payload.customerName}" tersimpan!`);
+      showToast(`✓ Catatan bon untuk "${payload.customerName}" tersimpan (bon lama dihapus)!`);
       setIsDebtModalOpen(false);
       setEditingDebt(null);
       loadData();
@@ -829,13 +1189,58 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       return;
     }
 
-    const newPaid = activeDebtForInstallment.paidAmount + payNum;
+    const currentRemaining = activeDebtForInstallment.remainingAmount;
+    let roundingAdjustment = 0;
+    let paymentToRecord = payNum;
+
+    if (payNum > currentRemaining) {
+      roundingAdjustment = payNum - currentRemaining;
+      paymentToRecord = currentRemaining;
+    }
+
+    const newPaid = activeDebtForInstallment.paidAmount + paymentToRecord;
     const newRemaining = Math.max(0, activeDebtForInstallment.totalAmount - newPaid);
     const newStatus: 'belum_lunas' | 'cicilan' | 'lunas' = newRemaining <= 0 ? 'lunas' : 'cicilan';
 
+    // Calculate profit and cost breakdown for this installment
+    const totalDebtAmount = activeDebtForInstallment.totalAmount || paymentToRecord;
+    const debtCost = activeDebtForInstallment.cost !== undefined 
+      ? activeDebtForInstallment.cost 
+      : (activeDebtForInstallment.modal !== undefined ? activeDebtForInstallment.modal : 0);
+    const debtProfit = activeDebtForInstallment.profit !== undefined 
+      ? activeDebtForInstallment.profit 
+      : (activeDebtForInstallment.keuntunganBersih !== undefined ? activeDebtForInstallment.keuntunganBersih : 0);
+
+    // Hitung seluruh laba yang sudah diakui dari cicilan-cicilan sebelumnya
+    const previouslyRecognizedProfit = (activeDebtForInstallment.payments || []).reduce((sum, p) => {
+      if (typeof p.profitPortion === 'number') return sum + p.profitPortion;
+      const ratio = totalDebtAmount > 0 ? debtProfit / totalDebtAmount : 0;
+      return sum + Math.round(p.amount * ratio);
+    }, 0);
+
+    const remainingUnrecognizedProfit = Math.max(0, debtProfit - previouslyRecognizedProfit);
+
+    let profitPortion = 0;
+    let costPortion = paymentToRecord;
+
+    if (debtProfit > 0) {
+      if (newRemaining <= 0) {
+        // Pelunasan akhir: sisa seluruh keuntungan yang belum diakui (tidak boleh melebihi sisa laba bon)
+        profitPortion = Math.min(paymentToRecord, remainingUnrecognizedProfit);
+        costPortion = Math.max(0, paymentToRecord - profitPortion);
+      } else {
+        // Cicilan bertahap: proporsional
+        const propProfit = Math.round((paymentToRecord / totalDebtAmount) * debtProfit);
+        profitPortion = Math.min(propProfit, remainingUnrecognizedProfit);
+        costPortion = Math.max(0, paymentToRecord - profitPortion);
+      }
+    }
+
     const newPaymentEntry: DebtPayment = {
       id: 'dp-' + Date.now(),
-      amount: payNum,
+      amount: paymentToRecord,
+      costPortion: costPortion,
+      profitPortion: profitPortion,
       timestamp: Date.now(),
       note: installmentNote.trim() || 'Cicilan'
     };
@@ -865,14 +1270,14 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
         );
       }
 
-      // Optionally record as cash income in pembukuan
+      // Record as cash income in CashFlow (profit strictly reflects actual profitPortion!)
       const cfPayload: CashFlowRecord = {
         type: 'income',
         category: 'Pelunasan Bon Pelanggan',
         description: `Bayar bon: ${activeDebtForInstallment.customerName} (${installmentNote})`,
-        amount: payNum,
-        cost: 0,
-        profit: payNum,
+        amount: paymentToRecord,
+        cost: costPortion,
+        profit: profitPortion,
         status: 'lunas',
         paymentMethod: 'Tunai',
         timestamp: Date.now(),
@@ -884,8 +1289,40 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
         saveCashFlowToFirestore({ ...cfPayload, id: cfId }, storeId || undefined).catch(console.warn);
       }
 
+      // Add CapitalRecord automatically HANYA jika bon menggunakan modal toko
+      if (activeDebtForInstallment.usesCapital !== false) {
+        const capitalPayload: CapitalRecord = {
+          type: 'add',
+          amount: paymentToRecord,
+          description: `Pelunasan Bon: ${activeDebtForInstallment.customerName}`,
+          timestamp: Date.now(),
+          storeId: storeId || undefined
+        };
+        const capLocalId = await db.capital.add(capitalPayload);
+        if (auth.currentUser) {
+          const firestoreId = await saveCapitalRecordToFirestore({ ...capitalPayload, id: capLocalId }, storeId || undefined);
+          await db.capital.update(capLocalId, { firestoreId });
+        }
+      }
+
+      // Handle rounding adjustment as capital
+      if (roundingAdjustment > 0) {
+        const roundCapitalPayload: CapitalRecord = {
+          type: 'add',
+          amount: roundingAdjustment,
+          description: `Penyesuaian Pembulatan Bon: ${activeDebtForInstallment.customerName}`,
+          timestamp: Date.now(),
+          storeId: storeId || undefined
+        };
+        const roundCapLocalId = await db.capital.add(roundCapitalPayload);
+        if (auth.currentUser) {
+          const firestoreId = await saveCapitalRecordToFirestore({ ...roundCapitalPayload, id: roundCapLocalId }, storeId || undefined);
+          await db.capital.update(roundCapLocalId, { firestoreId });
+        }
+      }
+
       sounds.playSuccess();
-      showToast(`✓ Pembayaran cicilan Rp ${formatRupiah(payNum)} berhasil dicatat!`);
+      showToast(`✓ Pembayaran cicilan Rp ${formatRupiah(paymentToRecord)} berhasil dicatat! (Laba: Rp ${formatRupiah(profitPortion)}, Modal Kembali: Rp ${formatRupiah(costPortion)})${roundingAdjustment > 0 ? ` [Pembulatan: Rp ${formatRupiah(roundingAdjustment)}]` : ''}`);
       setIsInstallmentModalOpen(false);
       loadData();
     } catch (err: any) {
@@ -895,65 +1332,108 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   };
 
   // Instant Payoff (Lunasi Sekaligus)
-  const handleQuickPayoffDebt = async (debt: CustomerDebt) => {
+  const handleQuickPayoffDebt = (debt: CustomerDebt) => {
+    setDebtToPayoff(debt);
+  };
+
+  const executePayoffDebt = async (debt: CustomerDebt) => {
+    setDebtToPayoff(null);
     if (!debt.id) return;
-    if (confirm(`Lunasi seluruh sisa hutang Rp ${formatRupiah(debt.remainingAmount)} untuk ${debt.customerName}?`)) {
-      try {
-        const fullAmount = debt.remainingAmount;
-        const newPayment: DebtPayment = {
-          id: 'dp-' + Date.now(),
+    try {
+      const fullAmount = debt.remainingAmount;
+      const totalDebtAmount = debt.totalAmount || fullAmount;
+      const debtCost = debt.cost !== undefined ? debt.cost : (debt.modal !== undefined ? debt.modal : 0);
+      const debtProfit = debt.profit !== undefined ? debt.profit : (debt.keuntunganBersih !== undefined ? debt.keuntunganBersih : 0);
+
+      // Hitung seluruh laba yang sudah diakui dari cicilan-cicilan sebelumnya
+      const previouslyRecognizedProfit = (debt.payments || []).reduce((sum, p) => {
+        if (typeof p.profitPortion === 'number') return sum + p.profitPortion;
+        const ratio = totalDebtAmount > 0 ? debtProfit / totalDebtAmount : 0;
+        return sum + Math.round(p.amount * ratio);
+      }, 0);
+
+      const remainingUnrecognizedProfit = Math.max(0, debtProfit - previouslyRecognizedProfit);
+
+      let profitPortion = 0;
+      let costPortion = fullAmount;
+
+      if (debtProfit > 0) {
+        profitPortion = Math.min(fullAmount, remainingUnrecognizedProfit);
+        costPortion = Math.max(0, fullAmount - profitPortion);
+      }
+
+      const newPayment: DebtPayment = {
+        id: 'dp-' + Date.now(),
+        amount: fullAmount,
+        costPortion: costPortion,
+        profitPortion: profitPortion,
+        timestamp: Date.now(),
+        note: 'Pelunasan Total'
+      };
+
+      await db.debts.update(debt.id, {
+        paidAmount: debt.totalAmount,
+        remainingAmount: 0,
+        status: 'lunas',
+        payments: [...(debt.payments || []), newPayment],
+        updatedAt: Date.now()
+      });
+
+      if (auth.currentUser) {
+        await updateDebtInFirestore(
+          debt.firestoreId || debt.id,
+          {
+            paidAmount: debt.totalAmount,
+            remainingAmount: 0,
+            status: 'lunas',
+            payments: [...(debt.payments || []), newPayment],
+            updatedAt: Date.now()
+          },
+          debt.createdAt
+        );
+      }
+
+      // Record as cash flow (profit is ONLY profitPortion, NOT fullAmount!)
+      const cfPayload: CashFlowRecord = {
+        type: 'income',
+        category: 'Pelunasan Bon Pelanggan',
+        description: `Pelunasan total bon: ${debt.customerName}`,
+        amount: fullAmount,
+        cost: costPortion,
+        profit: profitPortion,
+        status: 'lunas',
+        paymentMethod: 'Tunai',
+        timestamp: Date.now(),
+        dateString: new Date().toISOString().split('T')[0],
+        storeId: storeId || undefined
+      };
+      const cfId = await db.cashFlows.add(cfPayload);
+      if (auth.currentUser) {
+        saveCashFlowToFirestore({ ...cfPayload, id: cfId }, storeId || undefined).catch(console.warn);
+      }
+
+      // Add CapitalRecord automatically HANYA jika bon menggunakan modal toko
+      if (debt.usesCapital !== false) {
+        const capitalPayload: CapitalRecord = {
+          type: 'add',
           amount: fullAmount,
+          description: `Pelunasan Bon: ${debt.customerName}`,
           timestamp: Date.now(),
-          note: 'Pelunasan Total'
-        };
-
-        await db.debts.update(debt.id, {
-          paidAmount: debt.totalAmount,
-          remainingAmount: 0,
-          status: 'lunas',
-          payments: [...(debt.payments || []), newPayment],
-          updatedAt: Date.now()
-        });
-
-        if (auth.currentUser) {
-          await updateDebtInFirestore(
-            debt.firestoreId || debt.id,
-            {
-              paidAmount: debt.totalAmount,
-              remainingAmount: 0,
-              status: 'lunas',
-              payments: [...(debt.payments || []), newPayment],
-              updatedAt: Date.now()
-            },
-            debt.createdAt
-          );
-        }
-
-        // Record as cash flow
-        const cfPayload: CashFlowRecord = {
-          type: 'income',
-          category: 'Pelunasan Bon Pelanggan',
-          description: `Pelunasan total bon: ${debt.customerName}`,
-          amount: fullAmount,
-          cost: 0,
-          profit: fullAmount,
-          status: 'lunas',
-          paymentMethod: 'Tunai',
-          timestamp: Date.now(),
-          dateString: new Date().toISOString().split('T')[0],
           storeId: storeId || undefined
         };
-        const cfId = await db.cashFlows.add(cfPayload);
+        const capLocalId = await db.capital.add(capitalPayload);
         if (auth.currentUser) {
-          saveCashFlowToFirestore({ ...cfPayload, id: cfId }, storeId || undefined).catch(console.warn);
+          const firestoreId = await saveCapitalRecordToFirestore({ ...capitalPayload, id: capLocalId }, storeId || undefined);
+          await db.capital.update(capLocalId, { firestoreId });
         }
-
-        sounds.playSuccess();
-        showToast(`✓ Bon ${debt.customerName} telah LUNAS!`);
-        loadData();
-      } catch (err) {
-        console.error(err);
       }
+
+      sounds.playSuccess();
+      showToast(`✓ Bon ${debt.customerName} telah LUNAS! (Laba: Rp ${formatRupiah(profitPortion)}, Modal: Rp ${formatRupiah(costPortion)})`);
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      alert('Gagal melunasi: ' + err.message);
     }
   };
 
@@ -1030,6 +1510,11 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     encoder.twoColumn('SISA HUTANG', `Rp ${formatRupiah(debt.remainingAmount)}`, W);
     encoder.bold(false);
     encoder.twoColumn('Status', debt.status === 'lunas' ? 'LUNAS' : debt.status === 'cicilan' ? 'DICICIL' : 'BELUM LUNAS', W);
+    if (debt.debtType === 'jasa_antar' || debt.usesCapital === false) {
+      encoder.twoColumn('Jenis Bon', 'JASA ANTAR', W);
+    } else if (debt.debtType === 'kasbon') {
+      encoder.twoColumn('Jenis Bon', 'PINJAMAN KASBON', W);
+    }
     encoder.separator('=', W);
 
     // Payments History if any
@@ -1108,38 +1593,70 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
               Pembukuan & Arus Kas
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Pencatatan keuangan harian, pengeluaran operasional, dan buku bon pelanggan {settings.storeName || 'Cool Kids Cell'} (Offline Dexie.js).
+              Pencatatan keuangan harian, pengeluaran operasional, dan buku bon pelanggan {settings.storeName || 'Cool Kids Cell'}.
             </p>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <button
-            onClick={() => handleOpenIncomeModal()}
-            className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition"
-          >
-            <TrendingUp className="w-4 h-4" />
-            + Pemasukan
-          </button>
+        {/* Total Modal & Action Buttons */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          <div className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl flex items-center justify-between sm:justify-center gap-3 w-full sm:w-auto">
+            <div 
+              className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 transition"
+              onClick={() => setIsCapitalModalOpen(true)}
+              title="Klik untuk Kelola Modal"
+            >
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <Coins className="w-4 h-4 text-indigo-400" />
+                <span className="text-xs font-semibold uppercase tracking-wider">Total Modal</span>
+              </div>
+              <div className="text-base font-black text-white whitespace-nowrap">
+                Rp {formatRupiah(totalCapital)}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsConfirmResetCapitalOpen(true);
+              }}
+              title="Reset Modal ke Rp 0"
+              className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset</span>
+            </button>
+          </div>
 
-          <button
-            onClick={() => handleOpenExpenseModal()}
-            className="px-3.5 py-2 bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 border border-rose-800/80 rounded-xl text-xs font-bold flex items-center gap-1.5 transition"
-          >
-            <TrendingDown className="w-4 h-4" />
-            + Pengeluaran
-          </button>
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <button
+              onClick={() => handleOpenIncomeModal()}
+              className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition"
+            >
+              <TrendingUp className="w-4 h-4" />
+              + Pemasukan
+            </button>
 
-          <button
-            onClick={() => handleOpenDebtModal()}
-            className="px-3.5 py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 transition"
-          >
-            <BookOpen className="w-4 h-4" />
-            + Bon Pelanggan
-          </button>
+            <button
+              onClick={() => handleOpenExpenseModal()}
+              className="px-3.5 py-2 bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 border border-rose-800/80 rounded-xl text-xs font-bold flex items-center gap-1.5 transition"
+            >
+              <TrendingDown className="w-4 h-4" />
+              + Pengeluaran
+            </button>
+
+            <button
+              onClick={() => handleOpenDebtModal()}
+              className="px-3.5 py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 transition"
+            >
+              <BookOpen className="w-4 h-4" />
+              + Bon Pelanggan
+            </button>
+          </div>
         </div>
       </div>
+      
+      {/* (Middle: Total Modal removed) */}
 
       {/* Primary Sub-Tabs Navigation */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-b border-slate-800 pb-2">
@@ -1195,6 +1712,14 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
         {/* Time Period Filter Pill Buttons */}
         <div className="flex items-center gap-1.5 self-end sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setIsConfirmClearAllOpen(true)}
+            className="px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900/70 border border-rose-800/80 text-rose-300 rounded-xl text-xs font-bold transition mr-2 flex items-center gap-1.5 cursor-pointer shadow-sm"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Hapus Semua Data
+          </button>
           <span className="text-[11px] text-slate-500 hidden lg:inline mr-1">Periode:</span>
           <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 p-1 rounded-xl text-xs">
             <button
@@ -1281,6 +1806,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 <span className="text-emerald-400 font-bold">Surplus</span>
               </div>
             </div>
+
+             {/* 5. Total Modal (Removed from here, moved to header) */}
 
             {/* 4. Buku Bon / Piutang Belum Lunas */}
             <div className="bg-slate-900 border border-slate-800 p-4.5 rounded-2xl shadow-sm space-y-2">
@@ -2053,7 +2580,20 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                         <User className="w-4 h-4" />
                       </div>
                       <div className="min-w-0">
-                        <div className="font-extrabold text-sm text-white truncate">{debt.customerName}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <div className="font-extrabold text-sm text-white truncate">{debt.customerName}</div>
+                          {debt.debtType === 'jasa_antar' || debt.usesCapital === false ? (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/60 flex items-center gap-1">
+                              <Truck className="w-2.5 h-2.5" />
+                              <span>Jasa Antar</span>
+                            </span>
+                          ) : debt.debtType === 'kasbon' ? (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-950 text-amber-300 border border-amber-800/60 flex items-center gap-1">
+                              <Coins className="w-2.5 h-2.5" />
+                              <span>Kasbon</span>
+                            </span>
+                          ) : null}
+                        </div>
                         {debt.customerPhone ? (
                           <div className="text-[11px] text-slate-400 flex items-center gap-1">
                             <Phone className="w-3 h-3 text-emerald-400" />
@@ -2087,6 +2627,22 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                     <div className="flex justify-between items-center">
                       <span className="text-slate-400">Total Hutang:</span>
                       <span className="font-mono font-bold text-white">Rp {formatRupiah(debt.totalAmount)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-[11px] text-slate-400">
+                      <span>Modal Pokok:</span>
+                      <span className="font-mono text-slate-300">
+                        {debt.usesCapital === false || debt.debtType === 'jasa_antar' 
+                          ? 'Rp 0 (Tanpa Modal Usaha)' 
+                          : `Rp ${formatRupiah(debt.cost ?? debt.modal ?? 0)}`}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-slate-400">Target Laba:</span>
+                      <span className={`font-mono font-semibold ${((debt.profit ?? debt.keuntunganBersih ?? 0) > 0) ? 'text-emerald-400' : 'text-slate-400'}`}>
+                        {(debt.profit ?? debt.keuntunganBersih ?? 0) > 0 
+                          ? `+Rp ${formatRupiah(debt.profit ?? debt.keuntunganBersih ?? 0)}` 
+                          : (debt.debtType === 'jasa_antar' || debt.usesCapital === false ? 'Rp 0 (Jasa Antar)' : 'Rp 0 (Pinjaman)')}
+                      </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-400">Sudah Terbayar:</span>
@@ -2154,8 +2710,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                       </button>
                     </div>
 
-                    {/* Pay buttons */}
-                    {!isPaid ? (
+                      {/* Pay buttons */}
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => handleOpenInstallmentModal(debt)}
@@ -2170,11 +2725,6 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                           Lunasi
                         </button>
                       </div>
-                    ) : (
-                      <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Lunas
-                      </span>
-                    )}
                   </div>
                 </div>
               );
@@ -2225,8 +2775,45 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 />
               </div>
 
+              {formStatus === 'belum_lunas' && formType === 'income' && (
+                <div>
+                  <label className="block text-slate-400 mb-1 font-medium">Nama Pelanggan</label>
+                  <CustomSelect
+                    value={isAddingNewCustomer ? 'new' : formCustomerName}
+                    onChange={(val) => {
+                      if (val === 'new') {
+                        setIsAddingNewCustomer(true);
+                        setFormCustomerName('');
+                      } else {
+                        setIsAddingNewCustomer(false);
+                        setFormCustomerName(val);
+                      }
+                    }}
+                    options={[
+                      ...Array.from(new Set(debts.map(d => d.customerName))).map(name => ({ label: name, value: name })),
+                      { label: '+ Tambah Pelanggan Baru', value: 'new' }
+                    ]}
+                  />
+                  {isAddingNewCustomer && (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Masukkan nama baru"
+                      value={formCustomerName}
+                      onChange={e => setFormCustomerName(e.target.value)}
+                      className="w-full mt-2 px-3 py-2 bg-slate-950 border border-emerald-500/60 rounded-xl text-white focus:outline-none focus:border-emerald-500 font-semibold"
+                    />
+                  )}
+                  {formCustomerName.trim() && debts.some(d => (d.customerName || '').trim().toLowerCase() === formCustomerName.trim().toLowerCase()) && (
+                    <p className="text-[10px] text-amber-400 mt-1.5 flex items-center gap-1 font-medium">
+                      <span>ℹ️ Bon lama pelanggan "{formCustomerName.trim()}" akan otomatis dihapus dan digantikan bon baru ini.</span>
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div>
-                <label className="block text-slate-400 mb-1 font-medium">Keterangan / Nama Pelanggan (Opsional)</label>
+                <label className="block text-slate-400 mb-1 font-medium">Keterangan (Opsional)</label>
                 <input
                   type="text"
                   placeholder="Contoh: Kirim uang BCA a.n Budi 100rb (Opsional)"
@@ -2502,28 +3089,56 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                     <Plus className="w-3.5 h-3.5 text-amber-400" />
                     <span>Orang Sama Menambah Hutang Belanja:</span>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                     <div>
-                      <label className="text-[10px] text-slate-400 block mb-0.5">Tambah Nominal Hutang (Rp):</label>
+                      <label className="text-[10px] text-slate-400 block mb-0.5">Tambah Tagihan (Rp):</label>
                       <input
                         type="number"
                         min={0}
-                        placeholder="+ Nominal baru (misal: 25000)"
+                        placeholder="+ Tagihan (misal: 23000)"
                         value={debtAddAmount}
                         onChange={e => {
                           const addVal = e.target.value;
                           setDebtAddAmount(addVal);
                           const addNum = parseFloat(addVal) || 0;
-                          setDebtTotalAmount((editingDebt.totalAmount + addNum).toString());
+                          const newTotal = editingDebt.totalAmount + addNum;
+                          setDebtTotalAmount(newTotal.toString());
+
+                          const addCostNum = parseFloat(debtAddCost) || 0;
+                          const baseCost = editingDebt.cost !== undefined ? editingDebt.cost : (editingDebt.modal !== undefined ? editingDebt.modal : 0);
+                          const newCost = baseCost + addCostNum;
+                          setDebtCost(newCost > 0 ? newCost.toString() : '');
+                          setDebtProfit(Math.max(0, newTotal - newCost).toString());
                         }}
                         className="w-full px-2.5 py-1.5 bg-slate-900 border border-amber-500/60 rounded-lg text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-400"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-slate-400 block mb-0.5">Catatan Barang Baru (Opsional):</label>
+                      <label className="text-[10px] text-slate-400 block mb-0.5">Modal Tambahan (Rp):</label>
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="+ Modal (misal: 20000)"
+                        value={debtAddCost}
+                        onChange={e => {
+                          const addCostVal = e.target.value;
+                          setDebtAddCost(addCostVal);
+                          const addCostNum = parseFloat(addCostVal) || 0;
+                          const addTotNum = parseFloat(debtAddAmount) || 0;
+                          const baseCost = editingDebt.cost !== undefined ? editingDebt.cost : (editingDebt.modal !== undefined ? editingDebt.modal : 0);
+                          const newCost = baseCost + addCostNum;
+                          const newTotal = editingDebt.totalAmount + addTotNum;
+                          setDebtCost(newCost > 0 ? newCost.toString() : '');
+                          setDebtProfit(Math.max(0, newTotal - newCost).toString());
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-emerald-400 font-mono text-xs focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-0.5">Catatan Barang (Opsional):</label>
                       <input
                         type="text"
-                        placeholder="misal: + Beras 5kg, Telur 1kg"
+                        placeholder="misal: + Beras 5kg"
                         value={debtAddDescription}
                         onChange={e => {
                           const addDesc = e.target.value;
@@ -2554,11 +3169,22 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                   <input
                     type="text"
                     required
+                    list="debt-customer-suggestions"
                     placeholder="Contoh: Pak RT / Budi"
                     value={debtCustomerName}
                     onChange={e => setDebtCustomerName(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white font-semibold focus:outline-none focus:border-amber-500"
                   />
+                  <datalist id="debt-customer-suggestions">
+                    {Array.from(new Set(debts.map(d => d.customerName).filter(Boolean))).map(name => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
+                  {!editingDebt && debtCustomerName.trim() && debts.some(d => (d.customerName || '').trim().toLowerCase() === debtCustomerName.trim().toLowerCase()) && (
+                    <p className="text-[10px] text-amber-400 mt-1.5 flex items-center gap-1 font-medium bg-amber-950/40 p-2 rounded-lg border border-amber-500/30">
+                      <span>⚠️ Bon lama pelanggan "{debtCustomerName.trim()}" akan otomatis dihapus dan digantikan bon baru ini.</span>
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -2613,6 +3239,152 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-emerald-400 font-mono font-bold focus:outline-none"
                   />
                 </div>
+              </div>
+
+              {/* Pilihan Tipe Bon & Rincian Modal */}
+              <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1.5">Tipe Bon / Keperluan:</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDebtType('standard');
+                        setDebtIsLoanWithoutProfit(false);
+                        const tot = parseFloat(debtTotalAmount) || 0;
+                        if (debtCost === '0') setDebtCost('');
+                        if (debtProfit === '0') setDebtProfit(tot > 0 ? tot.toString() : '');
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                        debtType === 'standard'
+                          ? 'bg-emerald-950/50 border-emerald-500 text-white shadow-sm shadow-emerald-500/20'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-400 mb-1">
+                        <ShoppingBag className="w-3.5 h-3.5" />
+                        <span>Bon Belanja</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-tight">Dengan modal barang & margin laba</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDebtType('kasbon');
+                        setDebtIsLoanWithoutProfit(true);
+                        setDebtCost(debtTotalAmount);
+                        setDebtProfit('0');
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                        debtType === 'kasbon'
+                          ? 'bg-amber-950/50 border-amber-500 text-white shadow-sm shadow-amber-500/20'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-amber-400 mb-1">
+                        <Coins className="w-3.5 h-3.5" />
+                        <span>Pinjaman Kasbon</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-tight">Laba Rp 0, <strong>potong</strong> Total Modal</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDebtType('jasa_antar');
+                        setDebtIsLoanWithoutProfit(false);
+                        setDebtCost('0');
+                        setDebtProfit('0');
+                        if (!debtDescription.trim()) {
+                          setDebtDescription('Jasa Antar Langganan (Bayar 1 Bulan Sekali)');
+                        }
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                        debtType === 'jasa_antar'
+                          ? 'bg-cyan-950/50 border-cyan-500 text-white shadow-sm shadow-cyan-500/20'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-cyan-400 mb-1">
+                        <Truck className="w-3.5 h-3.5" />
+                        <span>Jasa Antar</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-tight">Laba Rp 0, <strong>tanpa</strong> Total Modal</p>
+                    </button>
+                  </div>
+                </div>
+
+                {debtType === 'standard' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">
+                        Biaya Modal Toko (Rp)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="Contoh: 20000"
+                        value={debtCost}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setDebtCost(val);
+                          const tot = parseFloat(debtTotalAmount) || 0;
+                          const c = parseFloat(val) || 0;
+                          if (val !== '' && tot > 0) {
+                            setDebtProfit(Math.max(0, tot - c).toString());
+                          }
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-750 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">
+                        Keuntungan / Margin Bersih (Rp)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="Contoh: 3000"
+                        value={debtProfit}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setDebtProfit(val);
+                          const tot = parseFloat(debtTotalAmount) || 0;
+                          const p = parseFloat(val) || 0;
+                          if (val !== '' && tot > 0) {
+                            setDebtCost(Math.max(0, tot - p).toString());
+                          }
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-750 rounded-lg text-emerald-400 font-mono font-bold text-xs focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {debtType === 'kasbon' && (
+                  <div className="p-2.5 bg-amber-950/40 border border-amber-800/50 rounded-xl space-y-1 text-xs">
+                    <div className="flex items-center justify-between text-amber-300 font-bold text-[11px]">
+                      <span>💸 Kasbon / Pinjaman Kas:</span>
+                      <span className="font-mono text-emerald-400 font-semibold">Laba Bersih = Rp 0</span>
+                    </div>
+                    <p className="text-[10px] text-slate-300">
+                      Uang kas diambil langsung dari <strong>Total Modal</strong> toko. Saat dilunasi, uang kembali ke Total Modal tanpa menambah laba.
+                    </p>
+                  </div>
+                )}
+
+                {debtType === 'jasa_antar' && (
+                  <div className="p-2.5 bg-cyan-950/40 border border-cyan-800/50 rounded-xl space-y-1 text-xs">
+                    <div className="flex items-center justify-between text-cyan-300 font-bold text-[11px]">
+                      <span>🚚 Jasa Antar / Ongkir (Bayar 1 Bulan Sekali):</span>
+                      <span className="font-mono text-cyan-300 font-semibold">Laba Bersih = Rp 0</span>
+                    </div>
+                    <p className="text-[10px] text-slate-300">
+                      Tagihan jasa antar langganan bulanan. <strong>Tidak menggunakan maupun memotong Total Modal toko</strong> saat dicatat maupun saat dilunasi.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Calculated remaining indicator */}
@@ -2691,6 +3463,16 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 <span className="text-white">Sisa Yang Harus Dibayar:</span>
                 <span className="font-mono text-amber-400">Rp {formatRupiah(activeDebtForInstallment.remainingAmount)}</span>
               </div>
+              <div className="flex justify-between text-[11px] pt-1 border-t border-slate-800/80 text-slate-400">
+                <span>Modal Barang/Jasa:</span>
+                <span className="font-mono text-slate-300">Rp {formatRupiah(activeDebtForInstallment.cost ?? activeDebtForInstallment.modal ?? 0)}</span>
+              </div>
+              <div className="flex justify-between text-[11px] text-slate-400">
+                <span>Total Keuntungan Bersih:</span>
+                <span className={`font-mono font-semibold ${((activeDebtForInstallment.profit ?? activeDebtForInstallment.keuntunganBersih ?? 0) > 0) ? 'text-emerald-400' : 'text-slate-400'}`}>
+                  Rp {formatRupiah(activeDebtForInstallment.profit ?? activeDebtForInstallment.keuntunganBersih ?? 0)}
+                </span>
+              </div>
             </div>
 
             <form onSubmit={handleSaveInstallment} className="space-y-3.5 text-xs">
@@ -2701,13 +3483,58 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                   required
                   autoFocus
                   min={1}
-                  max={activeDebtForInstallment.remainingAmount}
                   placeholder="Contoh: 20000"
                   value={installmentAmount}
                   onChange={e => setInstallmentAmount(e.target.value)}
                   className="w-full px-3 py-2.5 bg-slate-950 border border-emerald-500/60 rounded-xl text-emerald-400 font-mono font-bold text-sm focus:outline-none"
                 />
               </div>
+
+              {parseFloat(installmentAmount) > 0 && (() => {
+                const payVal = parseFloat(installmentAmount) || 0;
+                const cappedPay = Math.min(payVal, activeDebtForInstallment.remainingAmount);
+                const totDebt = activeDebtForInstallment.totalAmount || cappedPay;
+                const dProfit = activeDebtForInstallment.profit ?? activeDebtForInstallment.keuntunganBersih ?? 0;
+
+                const previouslyRecognizedProfit = (activeDebtForInstallment.payments || []).reduce((sum, p) => {
+                  if (typeof p.profitPortion === 'number') return sum + p.profitPortion;
+                  const ratio = totDebt > 0 ? dProfit / totDebt : 0;
+                  return sum + Math.round(p.amount * ratio);
+                }, 0);
+                const remainingUnrecognizedProfit = Math.max(0, dProfit - previouslyRecognizedProfit);
+
+                let estProfit = 0;
+                if (dProfit > 0) {
+                  if (cappedPay >= activeDebtForInstallment.remainingAmount) {
+                    estProfit = Math.min(cappedPay, remainingUnrecognizedProfit);
+                  } else {
+                    const propProfit = Math.round((cappedPay / totDebt) * dProfit);
+                    estProfit = Math.min(propProfit, remainingUnrecognizedProfit);
+                  }
+                }
+                const estCost = Math.max(0, cappedPay - estProfit);
+                const estRounding = Math.max(0, payVal - activeDebtForInstallment.remainingAmount);
+
+                return (
+                  <div className="p-2.5 bg-slate-950/90 rounded-xl border border-emerald-500/30 space-y-1 text-[11px]">
+                    <div className="text-slate-400 font-medium">Alokasi Pembayaran Ini:</div>
+                    <div className="flex justify-between text-slate-300">
+                      <span>• Pengembalian Modal/Kas:</span>
+                      <span className="font-mono font-bold text-white">Rp {formatRupiah(estCost)}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-400 font-semibold">
+                      <span>• Masuk ke Laba/Keuntungan:</span>
+                      <span className="font-mono font-bold">{estProfit > 0 ? `+Rp ${formatRupiah(estProfit)}` : 'Rp 0'}</span>
+                    </div>
+                    {estRounding > 0 && (
+                      <div className="flex justify-between text-amber-300 text-[10px] pt-0.5 border-t border-slate-800">
+                        <span>• Penyesuaian Pembulatan (Modal):</span>
+                        <span className="font-mono">+Rp {formatRupiah(estRounding)}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="block text-slate-400 mb-1 font-medium">Catatan / Keterangan</label>
@@ -2877,6 +3704,194 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
             </div>
           </div>
         </div>
+      )}
+      {debtToPayoff && (() => {
+        const fullAmount = debtToPayoff.remainingAmount;
+        const totDebt = debtToPayoff.totalAmount || fullAmount;
+        const dProfit = debtToPayoff.profit ?? debtToPayoff.keuntunganBersih ?? 0;
+
+        const previouslyRecognizedProfit = (debtToPayoff.payments || []).reduce((sum, p) => {
+          if (typeof p.profitPortion === 'number') return sum + p.profitPortion;
+          const ratio = totDebt > 0 ? dProfit / totDebt : 0;
+          return sum + Math.round(p.amount * ratio);
+        }, 0);
+        const remainingUnrecognizedProfit = Math.max(0, dProfit - previouslyRecognizedProfit);
+        const estProfit = dProfit > 0 ? Math.min(fullAmount, remainingUnrecognizedProfit) : 0;
+        const estCost = Math.max(0, fullAmount - estProfit);
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-slate-900 border border-emerald-500/40 w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4">
+              <h3 className="text-base font-bold text-white">Konfirmasi Pelunasan</h3>
+              <p className="text-slate-400 text-xs">
+                Yakin ingin melunasi seluruh sisa hutang <strong className="text-white">Rp {formatRupiah(debtToPayoff.remainingAmount)}</strong> untuk <strong className="text-white">{debtToPayoff.customerName}</strong>?
+              </p>
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1.5 text-xs">
+                <div className="flex justify-between text-slate-300">
+                  <span>Pengembalian Modal:</span>
+                  <span className="font-mono font-bold text-white">
+                    {debtToPayoff.usesCapital === false || debtToPayoff.debtType === 'jasa_antar' 
+                      ? 'Rp 0 (Tanpa Modal Usaha)' 
+                      : `Rp ${formatRupiah(estCost)}`}
+                  </span>
+                </div>
+                <div className="flex justify-between text-emerald-400 font-semibold">
+                  <span>Masuk ke Laba Bersih:</span>
+                  <span className="font-mono font-bold">
+                    {estProfit > 0 
+                      ? `+Rp ${formatRupiah(estProfit)}` 
+                      : (debtToPayoff.debtType === 'jasa_antar' || debtToPayoff.usesCapital === false ? 'Rp 0 (Jasa Antar)' : 'Rp 0 (Pinjaman)')}
+                  </span>
+                </div>
+                <div className="pt-1.5 border-t border-slate-850 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = debtToPayoff;
+                      setDebtToPayoff(null);
+                      handleOpenDebtModal(d);
+                    }}
+                    className="text-[11px] text-amber-400 hover:text-amber-300 hover:underline flex items-center gap-1 font-medium"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Koreksi Modal & Laba Bon</span>
+                  </button>
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setDebtToPayoff(null)}
+                  className="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl transition text-xs font-medium"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={() => executePayoffDebt(debtToPayoff)}
+                  className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition text-xs font-bold shadow-md shadow-emerald-500/20"
+                >
+                  Ya, Lunasi
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ================= MODAL: KONFIRMASI HAPUS SEMUA DATA ================= */}
+      {isConfirmClearAllOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-rose-500/40 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    Hapus Semua Data Pembukuan?
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Pembersihan total data pembukuan & kas.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsConfirmClearAllOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Apakah Anda yakin ingin menghapus <strong className="text-white">SEMUA</strong> data pembukuan? 
+              Catatan arus kas, riwayat transaksi POS, buku bon hutang pelanggan, dan data modal akan dihapus permanen.
+            </p>
+
+            <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <span>Tindakan ini <strong>tidak dapat dibatalkan</strong>. Data yang telah dihapus tidak dapat dipulihkan.</span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setIsConfirmClearAllOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 font-medium rounded-xl text-xs transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={executeClearAllData}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-rose-600/30 transition cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{isDeleting ? 'Menghapus Semua...' : 'Ya, Hapus Semua Data'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: KONFIRMASI RESET MODAL ================= */}
+      {isConfirmResetCapitalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-rose-500/40 w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    Reset Total Modal ke Rp 0?
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Atur ulang saldo modal usaha toko.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsConfirmResetCapitalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Semua catatan riwayat modal usaha akan dihapus dan nominal <strong className="text-white">Total Modal</strong> akan kembali menjadi <strong className="text-emerald-400 font-mono">Rp 0</strong>.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isResettingCapital}
+                onClick={() => setIsConfirmResetCapitalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 font-medium rounded-xl text-xs transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isResettingCapital}
+                onClick={executeResetCapital}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-rose-600/30 transition cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{isResettingCapital ? 'Mereset...' : 'Ya, Reset Modal'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isCapitalModalOpen && (
+        <CapitalModal
+          isOpen={isCapitalModalOpen}
+          onClose={() => setIsCapitalModalOpen(false)}
+          onSuccess={loadData}
+          storeId={storeId}
+        />
       )}
     </div>
   );

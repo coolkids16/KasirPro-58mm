@@ -154,6 +154,8 @@ export interface CashFlowRecord {
 export interface DebtPayment {
   id: string;
   amount: number;
+  costPortion?: number;
+  profitPortion?: number;
   timestamp: number;
   note?: string;
 }
@@ -165,13 +167,29 @@ export interface CustomerDebt {
   customerPhone?: string;
   description: string;
   totalAmount: number;
+  cost?: number; // Biaya Modal / Pokok
+  profit?: number; // Keuntungan Bersih / Margin
+  modal?: number; // Alias untuk modal
+  keuntunganBersih?: number; // Alias untuk laba bersih
   paidAmount: number;
   remainingAmount: number;
   status: 'belum_lunas' | 'cicilan' | 'lunas';
+  debtType?: 'standard' | 'kasbon' | 'jasa_antar';
+  usesCapital?: boolean;
   createdAt: number;
   dueDate?: string;
   payments: DebtPayment[];
   storeId?: string;
   updatedAt?: number;
+}
+
+export interface CapitalRecord {
+  id?: any;
+  firestoreId?: string;
+  type: 'add' | 'subtract';
+  amount: number;
+  description: string;
+  timestamp: number;
+  storeId?: string;
 }
 

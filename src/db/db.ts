@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import { Product, Transaction, StoreSettings, CustomTemplate, CashFlowRecord, CustomerDebt } from '../types';
+import { Product, Transaction, StoreSettings, CustomTemplate, CashFlowRecord, CustomerDebt, CapitalRecord } from '../types';
 
 export class KasirProDatabase extends Dexie {
   products!: Table<Product, any>;
@@ -8,6 +8,7 @@ export class KasirProDatabase extends Dexie {
   strukTemplates!: Table<CustomTemplate, string>;
   cashFlows!: Table<CashFlowRecord, any>;
   debts!: Table<CustomerDebt, any>;
+  capital!: Table<CapitalRecord, any>;
 
   constructor() {
     super('KasirProPOS_DB');
@@ -29,6 +30,15 @@ export class KasirProDatabase extends Dexie {
       strukTemplates: 'id, name',
       cashFlows: '++id, type, category, status, timestamp, dateString, storeId',
       debts: '++id, customerName, status, createdAt, storeId'
+    });
+    this.version(4).stores({
+      products: '++id, name, category, sku, barcode, stock',
+      transactions: '++id, invoiceNumber, timestamp, paymentMethod',
+      settings: 'id',
+      strukTemplates: 'id, name',
+      cashFlows: '++id, type, category, status, timestamp, dateString, storeId',
+      debts: '++id, customerName, status, createdAt, storeId',
+      capital: '++id, type, timestamp, storeId'
     });
   }
 }
