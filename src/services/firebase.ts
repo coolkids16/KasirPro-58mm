@@ -122,6 +122,31 @@ export async function validateFirestoreConnection(): Promise<boolean> {
   }
 }
 
+/**
+ * Universal recursive sanitizer for Firestore writes.
+ * Strips any undefined fields or nested undefined values to prevent Firestore rejection.
+ */
+export function cleanForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return null as any;
+  }
+  if (Array.isArray(data)) {
+    return data
+      .filter((item) => item !== undefined)
+      .map((item) => cleanForFirestore(item)) as any;
+  }
+  if (typeof data === 'object' && !(data instanceof Date)) {
+    const cleaned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data as Record<string, any>)) {
+      if (value !== undefined) {
+        cleaned[key] = cleanForFirestore(value);
+      }
+    }
+    return cleaned as T;
+  }
+  return data;
+}
+
 // ----------------- USER PROFILE & RBAC HELPERS -----------------
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
@@ -923,14 +948,12 @@ export async function saveCashFlowToFirestore(cf: CashFlowRecord, storeId?: stri
   const path = 'cashFlows';
   try {
     const targetStoreId = storeId || cf.storeId || activeStoreId || 'default_store';
-    const payload = {
+    const payload: Record<string, any> = {
       storeId: targetStoreId,
       type: cf.type,
       category: cf.category,
       description: cf.description,
       amount: Number(cf.amount) || 0,
-      cost: cf.cost !== undefined ? Number(cf.cost) : undefined,
-      profit: cf.profit !== undefined ? Number(cf.profit) : undefined,
       status: cf.status,
       paymentMethod: cf.paymentMethod || 'Tunai',
       timestamp: cf.timestamp || Date.now(),
@@ -938,15 +961,25 @@ export async function saveCashFlowToFirestore(cf: CashFlowRecord, storeId?: stri
       createdAt: cf.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    if (cf.id && typeof cf.id === 'string') {
-      await setDoc(doc(db, path, cf.id), payload, { merge: true });
+    if (cf.cost !== undefined && cf.cost !== null && !isNaN(Number(cf.cost))) {
+      payload.cost = Number(cf.cost);
+    }
+    if (cf.profit !== undefined && cf.profit !== null && !isNaN(Number(cf.profit))) {
+      payload.profit = Number(cf.profit);
+    }
+
+    const cleanedPayload = cleanForFirestore(payload);
+
+    if (cf.id && typeof cf.id === 'string' && isNaN(Number(cf.id))) {
+      await setDoc(doc(db, path, cf.id), cleanedPayload, { merge: true });
       return cf.id;
     } else {
-      const docRef = await addDoc(collection(db, path), payload);
+      const docRef = await addDoc(collection(db, path), cleanedPayload);
       return docRef.id;
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
+    return '';
   }
 }
 
@@ -1030,7 +1063,7 @@ export async function saveDebtToFirestore(debt: CustomerDebt, storeId?: string):
   const path = 'debts';
   try {
     const targetStoreId = storeId || debt.storeId || activeStoreId || 'default_store';
-    const payload = {
+    const payload: Record<string, any> = {
       storeId: targetStoreId,
       customerName: debt.customerName,
       customerPhone: debt.customerPhone || '',
@@ -1043,20 +1076,24 @@ export async function saveDebtToFirestore(debt: CustomerDebt, storeId?: string):
       paidAmount: Number(debt.paidAmount) || 0,
       remainingAmount: Number(debt.remainingAmount) || 0,
       status: debt.status,
+      debtCategory: debt.debtCategory || 'pelanggan',
       createdAt: debt.createdAt || Date.now(),
       dueDate: debt.dueDate || '',
       payments: debt.payments || [],
+      mutations: debt.mutations || [],
       updatedAt: Date.now()
     };
+
+    const cleanedPayload = cleanForFirestore(payload);
     if (debt.firestoreId && typeof debt.firestoreId === 'string') {
-      await setDoc(doc(db, path, debt.firestoreId), payload, { merge: true });
+      await setDoc(doc(db, path, debt.firestoreId), cleanedPayload, { merge: true });
       return debt.firestoreId;
     }
     if (debt.id && typeof debt.id === 'string' && isNaN(Number(debt.id))) {
-      await setDoc(doc(db, path, debt.id), payload, { merge: true });
+      await setDoc(doc(db, path, debt.id), cleanedPayload, { merge: true });
       return debt.id;
     } else {
-      const docRef = await addDoc(collection(db, path), payload);
+      const docRef = await addDoc(collection(db, path), cleanedPayload);
       return docRef.id;
     }
   } catch (error) {
@@ -1068,13 +1105,8 @@ export async function updateDebtInFirestore(docId: string | number, partial: Par
   if (!auth.currentUser) return;
   const path = 'debts';
   
-  // Sanitize partial: remove undefined values
-  const sanitizedPartial = Object.entries(partial).reduce((acc, [key, value]) => {
-    if (value !== undefined) {
-      acc[key as keyof CustomerDebt] = value;
-    }
-    return acc;
-  }, {} as Partial<CustomerDebt>);
+  // Sanitize partial: recursively remove undefined values
+  const sanitizedPartial = cleanForFirestore(partial);
 
   try {
     if (docId && typeof docId === 'string' && isNaN(Number(docId))) {

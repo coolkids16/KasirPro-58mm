@@ -160,6 +160,15 @@ export interface DebtPayment {
   note?: string;
 }
 
+export interface DebtMutation {
+  id: string;
+  type: 'give' | 'take'; // 'give' = Berikan (Utang +), 'take' = Terima (Bayar/Cicil -)
+  amount: number;
+  note?: string;
+  timestamp: number;
+  dateString?: string;
+}
+
 export interface CustomerDebt {
   id?: any;
   firestoreId?: string;
@@ -175,10 +184,12 @@ export interface CustomerDebt {
   remainingAmount: number;
   status: 'belum_lunas' | 'cicilan' | 'lunas';
   debtType?: 'standard' | 'kasbon' | 'jasa_antar';
+  debtCategory?: 'pelanggan' | 'saya'; // 'pelanggan' = Utang Pelanggan (Piutang kita), 'saya' = Utang Saya (Hutang kita ke supplier/orang)
   usesCapital?: boolean;
   createdAt: number;
   dueDate?: string;
   payments: DebtPayment[];
+  mutations?: DebtMutation[];
   storeId?: string;
   updatedAt?: number;
 }
