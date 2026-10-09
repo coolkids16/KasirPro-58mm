@@ -1063,12 +1063,21 @@ export async function saveDebtToFirestore(debt: CustomerDebt, storeId?: string):
 export async function updateDebtInFirestore(docId: string | number, partial: Partial<CustomerDebt>, originalCreatedAt?: number): Promise<void> {
   if (!auth.currentUser) return;
   const path = 'debts';
+  
+  // Sanitize partial: remove undefined values
+  const sanitizedPartial = Object.entries(partial).reduce((acc, [key, value]) => {
+    if (value !== undefined) {
+      acc[key as keyof CustomerDebt] = value;
+    }
+    return acc;
+  }, {} as Partial<CustomerDebt>);
+
   try {
-    if (typeof docId === 'string' && isNaN(Number(docId))) {
-      await updateDoc(doc(db, path, docId), {
-        ...partial,
+    if (docId && typeof docId === 'string' && isNaN(Number(docId))) {
+      await setDoc(doc(db, path, docId), {
+        ...sanitizedPartial,
         updatedAt: Date.now()
-      });
+      }, { merge: true });
       return;
     }
 
@@ -1078,14 +1087,23 @@ export async function updateDebtInFirestore(docId: string | number, partial: Par
       : query(collection(db, path));
     
     const snaps = await getDocs(q);
-    for (const d of snaps.docs) {
-      await updateDoc(d.ref, {
-        ...partial,
+    if (!snaps.empty) {
+      for (const d of snaps.docs) {
+        await setDoc(d.ref, {
+          ...sanitizedPartial,
+          updatedAt: Date.now()
+        }, { merge: true });
+      }
+    } else if (originalCreatedAt) {
+      await addDoc(collection(db, path), {
+        ...sanitizedPartial,
+        createdAt: originalCreatedAt,
         updatedAt: Date.now()
       });
     }
   } catch (error) {
-    console.warn('Failed to update debt in Firestore:', error);
+    console.error('Failed to update debt in Firestore:', error);
+    throw error;
   }
 }
 
@@ -1148,6 +1166,7 @@ export function subscribeDebts(
         const d = docSnap.data();
         list.push({
           id: docSnap.id as any,
+          firestoreId: docSnap.id,
           ...d
         } as CustomerDebt);
       });
