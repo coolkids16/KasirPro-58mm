@@ -132,14 +132,14 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[1550px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Left: Brand + Nav Tabs group sitting closely together */}
-          <div className="flex items-center gap-4 lg:gap-5">
+          <div className="flex items-center gap-3 lg:gap-4">
             {/* Logo & Platform Info with Live Indicators */}
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2.5 shrink-0">
               {settings?.logoUrl ? (
-                <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-750 flex items-center justify-center p-1 shadow-md overflow-hidden shrink-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-950 border border-slate-750 flex items-center justify-center p-1 shadow-md overflow-hidden shrink-0">
                   <img 
                     src={settings.logoUrl} 
                     alt={settings.storeName || 'Logo'} 
@@ -147,12 +147,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                   />
                 </div>
               ) : (
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-bold text-lg shrink-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-bold text-lg shrink-0">
                   KP
                 </div>
               )}
               <div className="shrink-0">
-                <h1 className="font-extrabold text-base sm:text-lg tracking-tight text-white leading-tight whitespace-nowrap">
+                <h1 className="font-extrabold text-sm sm:text-base tracking-tight text-white leading-tight whitespace-nowrap">
                   {settings?.storeName ? settings.storeName : 'KasirPro'}
                 </h1>
                 <div className="text-[10px] text-slate-400 font-mono hidden sm:flex flex-col leading-tight mt-0.5 whitespace-nowrap">
@@ -163,7 +163,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             {/* Navigation Tabs aligned closely to the left */}
-            <nav className="hidden md:flex items-center gap-0.5 bg-slate-950/60 p-1 rounded-xl border border-slate-800 shrink-0 ml-6 lg:ml-10">
+            <nav className="hidden md:flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800 shrink-0 ml-2 sm:ml-3">
               <button
                 onClick={() => setActiveTab('pos')}
                 className={`flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
@@ -279,16 +279,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 ) : (
                   <HardDrive className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 )}
-
-                <span className="hidden 2xl:inline text-[11px] font-mono whitespace-nowrap shrink-0">
-                  {isFirestoreActive ? 'Cloud + Dexie (2/2 Aktif)' : 'Hanya Dexie (1/2 Aktif)'}
-                </span>
-                <span className="hidden xl:inline 2xl:hidden text-[11px] font-mono whitespace-nowrap shrink-0">
-                  {isFirestoreActive ? 'Cloud + Dexie' : 'Hanya Dexie'}
-                </span>
-                <span className="hidden sm:inline xl:hidden text-[11px] font-mono whitespace-nowrap shrink-0">
-                  {isFirestoreActive ? '2/2 DB' : '1/2 DB'}
-                </span>
               </button>
 
               {/* Popover Card Info */}
@@ -403,7 +393,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
                 title="Buka Menu Pengaturan & Akun"
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition whitespace-nowrap shrink-0 ${
+                className={`p-2 rounded-xl border transition flex items-center justify-center shrink-0 ${
                   currentUser
                     ? userProfile?.role === 'owner'
                       ? 'bg-amber-950/40 border-amber-500/40 text-amber-300 hover:bg-amber-900/50 shadow-sm'
@@ -417,7 +407,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <img
                     src={currentUser.photoURL}
                     alt={getUserNameLabel(currentUser)}
-                    className={`w-4 h-4 rounded-full object-cover border shrink-0 ${
+                    className={`w-6 h-6 rounded-full object-cover border shrink-0 ${
                       userProfile?.role === 'owner'
                         ? 'border-amber-400/70'
                         : userProfile?.role === 'manager'
@@ -426,7 +416,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     }`}
                   />
                 ) : currentUser ? (
-                  <div className={`w-4 h-4 rounded-full font-black text-[10px] flex items-center justify-center leading-none shrink-0 ${
+                  <div className={`w-6 h-6 rounded-full font-black text-xs flex items-center justify-center leading-none shrink-0 ${
                     userProfile?.role === 'owner'
                       ? 'bg-amber-400 text-slate-950'
                       : userProfile?.role === 'manager'
@@ -436,23 +426,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {getUserInitial(currentUser)}
                   </div>
                 ) : (
-                  <LogIn className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                )}
-                
-                <span className="hidden sm:inline max-w-[80px] xl:max-w-[120px] truncate whitespace-nowrap shrink-0">
-                  {currentUser ? getUserNameLabel(currentUser) : 'Pengaturan'}
-                </span>
-
-                {userProfile?.role && (
-                  <span className={`hidden xl:inline text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase whitespace-nowrap shrink-0 ${
-                    userProfile.role === 'owner'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                      : userProfile.role === 'manager'
-                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                  }`}>
-                    {userProfile.role}
-                  </span>
+                  <LogIn className="w-4 h-4 text-emerald-400 shrink-0" />
                 )}
               </button>
 
@@ -655,20 +629,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Printer className="w-4 h-4" />
             Printer
-          </button>
-          <button
-            onClick={onOpenBackupModal}
-            className="flex flex-col items-center gap-1 text-xs py-1 px-2 rounded text-cyan-400 hover:text-white"
-          >
-            <Database className="w-4 h-4" />
-            Data
-          </button>
-          <button
-            onClick={onOpenSettingsModal}
-            className="flex flex-col items-center gap-1 text-xs py-1 px-2 rounded text-slate-400 hover:text-white"
-          >
-            <Settings className="w-4 h-4" />
-            Atur
           </button>
         </div>
       </div>

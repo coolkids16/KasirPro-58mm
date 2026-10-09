@@ -255,7 +255,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-6">
+    <div className="max-w-[1550px] mx-auto p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-6">
       
       {/* LEFT SECTION: Product Catalog Grid & Search */}
       <div className="flex-1 flex flex-col">
@@ -407,7 +407,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       </div>
 
       {/* RIGHT SECTION: Cart & Payment Checkout Panel */}
-      <div className="w-full lg:w-[410px] bg-slate-900 border border-slate-800 rounded-2xl flex flex-col shadow-xl overflow-hidden">
+      <div className="w-full lg:w-[440px] xl:w-[480px] bg-slate-900 border border-slate-800 rounded-2xl flex flex-col shadow-xl overflow-hidden">
         
         {/* Cart Header */}
         <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">

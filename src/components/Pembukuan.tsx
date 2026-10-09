@@ -180,14 +180,16 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       if (user) {
         unsubCf = subscribeCashFlows(
           async (remoteList) => {
-            if (remoteList && remoteList.length > 0) {
-              const mapped = remoteList
+            if (remoteList) {
+              const mapped = (remoteList || [])
                 .map(cf => ({ ...cf, timestamp: parseTimestamp(cf.timestamp) }))
                 .sort((a, b) => b.timestamp - a.timestamp);
               setCashFlows(mapped);
               try {
                 await db.cashFlows.clear();
-                await db.cashFlows.bulkAdd(mapped);
+                if (mapped.length > 0) {
+                  await db.cashFlows.bulkAdd(mapped);
+                }
               } catch (e) {
                 console.warn('Mirror cashflows error:', e);
               }
@@ -199,11 +201,14 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
         unsubDebts = subscribeDebts(
           async (remoteDebts) => {
-            if (remoteDebts && remoteDebts.length > 0) {
-              setDebts(remoteDebts.sort((a, b) => b.createdAt - a.createdAt));
+            if (remoteDebts) {
+              const sorted = (remoteDebts || []).sort((a, b) => b.createdAt - a.createdAt);
+              setDebts(sorted);
               try {
                 await db.debts.clear();
-                await db.debts.bulkAdd(remoteDebts);
+                if (sorted.length > 0) {
+                  await db.debts.bulkAdd(sorted);
+                }
               } catch (e) {
                 console.warn('Mirror debts error:', e);
               }
@@ -215,14 +220,16 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
         unsubTx = subscribeTransactions(
           async (remoteList) => {
-            if (remoteList && remoteList.length > 0) {
-              const mapped = remoteList
+            if (remoteList) {
+              const mapped = (remoteList || [])
                 .map(tx => ({ ...tx, timestamp: parseTimestamp(tx.timestamp) }))
                 .sort((a, b) => b.timestamp - a.timestamp);
               setPosTransactions(mapped);
               try {
                 await db.transactions.clear();
-                await db.transactions.bulkAdd(mapped);
+                if (mapped.length > 0) {
+                  await db.transactions.bulkAdd(mapped);
+                }
               } catch (e) {
                 console.warn('Mirror transactions error:', e);
               }
@@ -746,7 +753,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       try {
         await db.debts.update(editingDebt.id, updatedPayload);
         if (auth.currentUser) {
-          updateDebtInFirestore(editingDebt.firestoreId || editingDebt.id, updatedPayload).catch(console.warn);
+          await updateDebtInFirestore(editingDebt.firestoreId || editingDebt.id, updatedPayload, editingDebt.createdAt);
         }
         sounds.playSuccess();
         showToast(`✓ Catatan bon "${updatedPayload.customerName}" berhasil diperbarui!`);
@@ -789,7 +796,9 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     try {
       const localId = await db.debts.add(payload);
       if (auth.currentUser) {
-        saveDebtToFirestore({ ...payload, id: localId }, storeId || undefined).catch(console.warn);
+        const firestoreId = await saveDebtToFirestore({ ...payload, id: localId }, storeId || undefined);
+        payload.firestoreId = firestoreId;
+        await db.debts.update(localId, { firestoreId });
       }
       sounds.playSuccess();
       showToast(`✓ Catatan bon untuk "${payload.customerName}" tersimpan!`);
@@ -843,13 +852,17 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       });
 
       if (auth.currentUser) {
-        updateDebtInFirestore(activeDebtForInstallment.id, {
-          paidAmount: newPaid,
-          remainingAmount: newRemaining,
-          status: newStatus,
-          payments: updatedPayments,
-          updatedAt: Date.now()
-        }).catch(console.warn);
+        await updateDebtInFirestore(
+          activeDebtForInstallment.firestoreId || activeDebtForInstallment.id, 
+          {
+            paidAmount: newPaid,
+            remainingAmount: newRemaining,
+            status: newStatus,
+            payments: updatedPayments,
+            updatedAt: Date.now()
+          },
+          activeDebtForInstallment.createdAt
+        );
       }
 
       // Optionally record as cash income in pembukuan
@@ -903,13 +916,17 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
         });
 
         if (auth.currentUser) {
-          updateDebtInFirestore(debt.id, {
-            paidAmount: debt.totalAmount,
-            remainingAmount: 0,
-            status: 'lunas',
-            payments: [...(debt.payments || []), newPayment],
-            updatedAt: Date.now()
-          }).catch(console.warn);
+          await updateDebtInFirestore(
+            debt.firestoreId || debt.id,
+            {
+              paidAmount: debt.totalAmount,
+              remainingAmount: 0,
+              status: 'lunas',
+              payments: [...(debt.payments || []), newPayment],
+              updatedAt: Date.now()
+            },
+            debt.createdAt
+          );
         }
 
         // Record as cash flow

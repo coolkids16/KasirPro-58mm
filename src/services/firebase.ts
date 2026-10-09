@@ -1044,7 +1044,11 @@ export async function saveDebtToFirestore(debt: CustomerDebt, storeId?: string):
       payments: debt.payments || [],
       updatedAt: Date.now()
     };
-    if (debt.id && typeof debt.id === 'string') {
+    if (debt.firestoreId && typeof debt.firestoreId === 'string') {
+      await setDoc(doc(db, path, debt.firestoreId), payload, { merge: true });
+      return debt.firestoreId;
+    }
+    if (debt.id && typeof debt.id === 'string' && isNaN(Number(debt.id))) {
       await setDoc(doc(db, path, debt.id), payload, { merge: true });
       return debt.id;
     } else {
@@ -1056,12 +1060,26 @@ export async function saveDebtToFirestore(debt: CustomerDebt, storeId?: string):
   }
 }
 
-export async function updateDebtInFirestore(docId: string | number, partial: Partial<CustomerDebt>): Promise<void> {
+export async function updateDebtInFirestore(docId: string | number, partial: Partial<CustomerDebt>, originalCreatedAt?: number): Promise<void> {
   if (!auth.currentUser) return;
   const path = 'debts';
   try {
     if (typeof docId === 'string' && isNaN(Number(docId))) {
       await updateDoc(doc(db, path, docId), {
+        ...partial,
+        updatedAt: Date.now()
+      });
+      return;
+    }
+
+    // Fallback: Query by createdAt if docId is numeric or local
+    const q = originalCreatedAt
+      ? query(collection(db, path), where('createdAt', '==', originalCreatedAt))
+      : query(collection(db, path));
+    
+    const snaps = await getDocs(q);
+    for (const d of snaps.docs) {
+      await updateDoc(d.ref, {
         ...partial,
         updatedAt: Date.now()
       });
