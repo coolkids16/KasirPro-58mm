@@ -62,6 +62,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
   const [isPayoffModalOpen, setIsPayoffModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [mutationToDelete, setMutationToDelete] = useState<DebtMutation | null>(null);
 
   // Form States for "Catat Utang Baru"
   const [formCustomerName, setFormCustomerName] = useState('');
@@ -548,15 +549,15 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
   };
 
   // Handle Delete Mutation Row
-  const handleDeleteMutation = async (mutId: string) => {
+  const handleDeleteMutation = (mutId: string) => {
     if (!selectedCustomer) return;
     const targetMut = customerMutations.find(m => m.id === mutId);
     if (!targetMut) return;
+    setMutationToDelete(targetMut);
+  };
 
-    if (!window.confirm(`Hapus catatan transaksi ${targetMut.type === 'give' ? 'Berikan' : 'Terima'} sebesar Rp ${formatRupiah(targetMut.amount)}?`)) {
-      return;
-    }
-
+  const executeDeleteMutation = async (mutId: string) => {
+    if (!selectedCustomer) return;
     const updatedMutations = customerMutations.filter(m => m.id !== mutId);
     
     // Recalculate totals
@@ -591,7 +592,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
         );
       }
       sounds.playScanBeep();
-      showToast('✓ Riwayat mutasi berhasil dihapus');
+      showToast('✓ Catatan transaksi berhasil dihapus');
       onRefresh();
     } catch (err: any) {
       console.error(err);
@@ -1454,6 +1455,57 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
                   type="button"
                   onClick={handleDeleteCustomer}
                   className="flex-1 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs shadow-md shadow-rose-600/30"
+                >
+                  Ya, Hapus
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Konfirmasi Hapus Catatan Transaksi */}
+        {mutationToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-slate-900 border border-rose-500/40 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Hapus Catatan Transaksi?</h3>
+                    <p className="text-[11px] text-slate-400">Apakah Anda yakin ingin menghapus catatan transaksi ini?</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setMutationToDelete(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs space-y-1">
+                <p className="text-slate-400">Keterangan: <span className="text-white font-medium">{mutationToDelete.note || '-'}</span></p>
+                <p className="text-slate-400">Nominal: <span className="text-rose-400 font-mono font-bold">Rp {formatRupiah(mutationToDelete.amount)}</span></p>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMutationToDelete(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl font-medium text-xs"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const mutId = mutationToDelete.id;
+                    setMutationToDelete(null);
+                    await executeDeleteMutation(mutId);
+                  }}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl shadow-md transition text-xs"
                 >
                   Ya, Hapus
                 </button>

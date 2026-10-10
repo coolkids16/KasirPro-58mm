@@ -37,7 +37,7 @@ import {
   ShoppingBag
 } from 'lucide-react';
 import { db } from '../db/db';
-import { CashFlowRecord, CustomerDebt, DebtPayment, StoreSettings, Transaction } from '../types';
+import { CashFlowRecord, CustomerDebt, DebtPayment, DebtMutation, StoreSettings, Transaction } from '../types';
 import { formatRupiah, padCenter, padRow, padSeparator, EscPosEncoder } from '../utils/escpos';
 import { printerService } from '../services/printerService';
 import { sounds } from '../utils/audio';
@@ -303,10 +303,26 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   const [formCustomerName, setFormCustomerName] = useState<string>('');
   const [formDescription, setFormDescription] = useState<string>('');
   const [formAmount, setFormAmount] = useState<string>('');
+  const [formDpAmount, setFormDpAmount] = useState<string>('');
   const [formCost, setFormCost] = useState<string>('');
   const [formStatus, setFormStatus] = useState<'lunas' | 'belum_lunas'>('lunas');
   const [formPaymentMethod, setFormPaymentMethod] = useState<string>('Tunai');
   const [formDate, setFormDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+
+  // Helper to parse date string in local timezone
+  const parseLocalDateTime = useCallback((dateStr: string): number => {
+    if (!dateStr) return Date.now();
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const now = new Date();
+      return new Date(year, month, day, now.getHours(), now.getMinutes(), now.getSeconds()).getTime();
+    }
+    const parsed = Date.parse(dateStr);
+    return isNaN(parsed) ? Date.now() : parsed;
+  }, []);
 
   // Form states for Debt (Buku Piutang / Bon Pelanggan Murni)
   const [debtCustomerName, setDebtCustomerName] = useState<string>('');
@@ -398,14 +414,16 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     const incomeRecords = filteredCashFlows.filter(cf => cf.type === 'income');
     const manualIncomeTotal = incomeRecords.reduce((acc, cf) => acc + (cf.amount || 0), 0);
     const manualProfitTotal = incomeRecords.reduce((acc, cf) => acc + (cf.profit !== undefined ? cf.profit : (cf.amount - (cf.cost || 0))), 0);
+    const manualCostTotal = incomeRecords.reduce((acc, cf) => acc + (cf.cost || 0), 0);
 
-    // 3. Store Expenses
+    // 3. Store Expenses & Capital Cost
     const expenseRecords = filteredCashFlows.filter(cf => cf.type === 'expense');
-    const totalExpenses = expenseRecords.reduce((acc, cf) => acc + (cf.amount || 0), 0);
+    const operationalExpenses = expenseRecords.reduce((acc, cf) => acc + (cf.amount || 0), 0);
+    const totalExpenses = operationalExpenses + manualCostTotal;
 
     // 4. Combined Metrics
     const totalGrossRevenue = posTotalRevenue + manualIncomeTotal;
-    const netProfit = manualProfitTotal + posTotalRevenue - totalExpenses; // Estimasi laba bersih
+    const netProfit = totalGrossRevenue - totalExpenses; // Kas Masuk dikurangi Pengeluaran = Laba
 
     // 5. Debt metrics (All unpaid)
     const totalUnpaidDebts = debts
@@ -417,6 +435,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       posTotalRevenue,
       manualIncomeTotal,
       manualProfitTotal,
+      operationalExpenses,
+      manualCostTotal,
       totalExpenses,
       totalGrossRevenue,
       netProfit,
@@ -631,6 +651,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       setFormCategory('Transfer Uang');
       setFormDescription('');
       setFormAmount('');
+      setFormDpAmount('');
       setFormCost('');
       setFormStatus('lunas');
       setFormPaymentMethod('Tunai');
@@ -702,56 +723,125 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       return;
     }
 
-    // Handle debt creation for unpaid income (Buku Bon / Piutang)
+    // Handle debt creation for unpaid income (Buku Bon / Piutang) with optional DP AND record profit immediately
     if (formType === 'income' && formStatus === 'belum_lunas') {
       const customerName = formCustomerName.trim() || 'Pelanggan Umum';
+      const dpNum = parseFloat(formDpAmount) || 0;
+      const remainingDebt = Math.max(0, amountNum - dpNum);
 
       try {
-        // Hapus semua catatan bon lama yang menggunakan nama yang sama agar rapi & tidak duplikat
-        const normalizedName = customerName.toLowerCase();
-        const oldDebts = await db.debts
-          .filter(d => (d.customerName || '').trim().toLowerCase() === normalizedName)
-          .toArray();
-
-        for (const oldDebt of oldDebts) {
-          if (oldDebt.id) {
-            await db.debts.delete(oldDebt.id);
-          }
-          if (auth.currentUser) {
-            await deleteDebtFromFirestore(oldDebt);
-          }
-        }
-        if (auth.currentUser) {
-          await deleteDebtsByCustomerFromFirestore(customerName, storeId || undefined);
-        }
-        setDebts(prev => prev.filter(d => (d.customerName || '').trim().toLowerCase() !== normalizedName));
-
-        // Buatkan catatan bon baru murni yang sederhana
-        const debtPayload: CustomerDebt = {
-          customerName: customerName,
-          description: formDescription.trim() || formCategory,
-          totalAmount: amountNum,
-          paidAmount: 0,
-          remainingAmount: amountNum,
-          status: 'belum_lunas',
-          createdAt: formDate ? new Date(formDate).getTime() : Date.now(),
-          payments: [],
+        // 1. Save to cashFlows so profit is immediately acknowledged in today's profit report.
+        // Cash received in cash drawer today is dpNum (Uang Muka / Dibayar Sekarang).
+        const cfPayload: CashFlowRecord = {
+          type: formType,
+          category: formCategory,
+          description: formDescription.trim() || `${formCategory} (Bon a.n ${customerName})`,
+          amount: amountNum, // Total Harga Jual transaksi
+          paidAmount: dpNum, // Uang Muka / DP
+          dpAmount: dpNum,
+          status: remainingDebt === 0 ? 'lunas' : 'belum_lunas',
+          paymentMethod: formPaymentMethod,
+          timestamp: editingCashFlow?.timestamp || (formDate ? parseLocalDateTime(formDate) : Date.now()),
+          dateString: formDate || new Date().toISOString().split('T')[0],
           storeId: storeId || undefined,
-          updatedAt: Date.now()
+          createdAt: editingCashFlow?.createdAt || new Date().toISOString(),
+          cost: Number(costNum) || 0,
+          profit: Number(profitNum) || 0 // KEUNTUNGAN DICATAT UTUH DI AWAL!
         };
 
-        const localId = await db.debts.add(debtPayload);
-        if (auth.currentUser) {
-          const firestoreId = await saveDebtToFirestore({ ...debtPayload, id: localId }, storeId || undefined);
-          await db.debts.update(localId, { firestoreId });
+        if (editingCashFlow?.id) {
+          const { id: _, ...updateFields } = cfPayload;
+          await db.cashFlows.update(editingCashFlow.id, updateFields);
+          if (auth.currentUser) {
+            saveCashFlowToFirestore({ ...cfPayload, id: editingCashFlow.id }, storeId || undefined).catch(console.warn);
+          }
+        } else {
+          const localCfId = await db.cashFlows.add(cfPayload);
+          if (auth.currentUser) {
+            saveCashFlowToFirestore({ ...cfPayload, id: localCfId }, storeId || undefined).catch(console.warn);
+          }
         }
+
+        // 2. Add remaining debt to Buku Bon (db.debts) if remainingDebt > 0
+        if (remainingDebt > 0) {
+          const normalizedName = customerName.toLowerCase();
+          const existingDebt = await db.debts
+            .filter(d => (d.customerName || '').trim().toLowerCase() === normalizedName)
+            .first();
+
+          const debtDate = formDate || new Date().toISOString().split('T')[0];
+          const debtTimestamp = parseLocalDateTime(debtDate);
+          const noteText = formDescription.trim() 
+            ? `${formDescription.trim()} (Total: Rp ${formatRupiah(amountNum)}, DP: Rp ${formatRupiah(dpNum)})`
+            : `${formCategory} - Sisa Bon (Total: Rp ${formatRupiah(amountNum)}, DP: Rp ${formatRupiah(dpNum)})`;
+
+          const newMutation: DebtMutation = {
+            id: 'mut-' + Date.now(),
+            type: 'give',
+            amount: remainingDebt,
+            note: noteText,
+            timestamp: debtTimestamp,
+            dateString: debtDate
+          };
+
+          if (existingDebt && existingDebt.id) {
+            const existingMutations = existingDebt.mutations || [];
+            const updatedMutations = [newMutation, ...existingMutations];
+            const newTotal = (existingDebt.totalAmount || 0) + remainingDebt;
+            const currentPaid = existingDebt.paidAmount || 0;
+            const newRemaining = Math.max(0, newTotal - currentPaid);
+            const newStatus: 'belum_lunas' | 'cicilan' | 'lunas' = newRemaining === 0 ? 'lunas' : (currentPaid > 0 ? 'cicilan' : 'belum_lunas');
+            const desc = existingDebt.description ? `${existingDebt.description}, ${noteText}` : noteText;
+
+            const updateDebtPayload: Partial<CustomerDebt> = {
+              totalAmount: newTotal,
+              remainingAmount: newRemaining,
+              status: newStatus,
+              description: desc,
+              mutations: updatedMutations,
+              updatedAt: Date.now()
+            };
+
+            await db.debts.update(existingDebt.id, updateDebtPayload);
+            if (auth.currentUser) {
+              await updateDebtInFirestore(
+                existingDebt.firestoreId || existingDebt.id,
+                updateDebtPayload,
+                existingDebt.createdAt
+              );
+            }
+          } else {
+            const debtPayload: CustomerDebt = {
+              customerName: customerName,
+              description: noteText,
+              totalAmount: remainingDebt,
+              paidAmount: 0,
+              remainingAmount: remainingDebt,
+              status: 'belum_lunas',
+              debtCategory: 'pelanggan',
+              createdAt: debtTimestamp,
+              updatedAt: Date.now(),
+              payments: [],
+              mutations: [newMutation],
+              storeId: storeId || undefined
+            };
+
+            const localDebtId = await db.debts.add(debtPayload);
+            if (auth.currentUser) {
+              const firestoreId = await saveDebtToFirestore({ ...debtPayload, id: localDebtId }, storeId || undefined);
+              await db.debts.update(localDebtId, { firestoreId });
+            }
+          }
+        }
+
         sounds.playSuccess();
-        showToast(`✓ Catatan bon baru untuk "${customerName}" tersimpan di Buku Bon!`);
+        showToast(`✓ Keuntungan Rp ${formatRupiah(profitNum)} dicatat & bon "${customerName}" tersimpan!`);
         setIsIncomeModalOpen(false);
+        setEditingCashFlow(null);
         loadData();
       } catch (err: any) {
-        console.error('Error saving debt:', err);
-        alert('Gagal menyimpan catatan hutang: ' + err.message);
+        console.error('Error saving unpaid income / debt:', err);
+        alert('Gagal menyimpan transaksi: ' + err.message);
       }
       return;
     }
@@ -763,7 +853,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       amount: amountNum,
       status: formStatus,
       paymentMethod: formPaymentMethod,
-      timestamp: editingCashFlow?.timestamp || (formDate ? new Date(formDate).getTime() : Date.now()),
+      timestamp: editingCashFlow?.timestamp || (formDate ? parseLocalDateTime(formDate) : Date.now()),
       dateString: formDate || new Date().toISOString().split('T')[0],
       storeId: storeId || undefined,
       createdAt: editingCashFlow?.createdAt || new Date().toISOString()
@@ -1431,8 +1521,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 Rp {formatRupiah(metrics.totalExpenses)}
               </div>
               <div className="text-[11px] text-slate-500 flex items-center justify-between pt-1 border-t border-slate-800/80">
-                <span>Stok, Pulsa, & Operasional</span>
-                <span className="font-mono">{metrics.countExpense} transaksi</span>
+                <span>Ops: Rp {formatRupiah(metrics.operationalExpenses)} | Modal: Rp {formatRupiah(metrics.manualCostTotal)}</span>
+                <span className="font-mono">{metrics.countExpense} ops</span>
               </div>
             </div>
 
@@ -2187,39 +2277,49 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
               </div>
 
               {formStatus === 'belum_lunas' && formType === 'income' && (
-                <div>
-                  <label className="block text-slate-400 mb-1 font-medium">Nama Pelanggan</label>
-                  <CustomSelect
-                    value={isAddingNewCustomer ? 'new' : formCustomerName}
-                    onChange={(val) => {
-                      if (val === 'new') {
-                        setIsAddingNewCustomer(true);
-                        setFormCustomerName('');
-                      } else {
-                        setIsAddingNewCustomer(false);
-                        setFormCustomerName(val);
-                      }
-                    }}
-                    options={[
-                      ...Array.from(new Set(debts.map(d => d.customerName))).map(name => ({ label: name, value: name })),
-                      { label: '+ Tambah Pelanggan Baru', value: 'new' }
-                    ]}
-                  />
-                  {isAddingNewCustomer && (
-                    <input
-                      type="text"
-                      required
-                      placeholder="Masukkan nama baru"
-                      value={formCustomerName}
-                      onChange={e => setFormCustomerName(e.target.value)}
-                      className="w-full mt-2 px-3 py-2 bg-slate-950 border border-emerald-500/60 rounded-xl text-white focus:outline-none focus:border-emerald-500 font-semibold"
+                <div className="space-y-3 p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                  <div>
+                    <label className="block text-slate-400 mb-1 font-medium">Nama Pelanggan</label>
+                    <CustomSelect
+                      value={isAddingNewCustomer ? 'new' : formCustomerName}
+                      onChange={(val) => {
+                        if (val === 'new') {
+                          setIsAddingNewCustomer(true);
+                          setFormCustomerName('');
+                        } else {
+                          setIsAddingNewCustomer(false);
+                          setFormCustomerName(val);
+                        }
+                      }}
+                      options={[
+                        ...Array.from(new Set(debts.map(d => d.customerName))).map(name => ({ label: name, value: name })),
+                        { label: '+ Tambah Pelanggan Baru', value: 'new' }
+                      ]}
                     />
-                  )}
-                  {formCustomerName.trim() && debts.some(d => (d.customerName || '').trim().toLowerCase() === formCustomerName.trim().toLowerCase()) && (
-                    <p className="text-[10px] text-amber-400 mt-1.5 flex items-center gap-1 font-medium">
-                      <span>ℹ️ Bon lama pelanggan "{formCustomerName.trim()}" akan otomatis dihapus dan digantikan bon baru ini.</span>
-                    </p>
-                  )}
+                    {isAddingNewCustomer && (
+                      <input
+                        type="text"
+                        required
+                        placeholder="Masukkan nama baru"
+                        value={formCustomerName}
+                        onChange={e => setFormCustomerName(e.target.value)}
+                        className="w-full mt-2 px-3 py-2 bg-slate-950 border border-emerald-500/60 rounded-xl text-white focus:outline-none focus:border-emerald-500 font-semibold"
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 mb-1 font-medium">Uang Muka / DP yang Dibayar (Rp)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="Contoh: 50000 (0 jika belum bayar sama sekali)"
+                      value={formDpAmount}
+                      onChange={e => setFormDpAmount(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-amber-500/60 rounded-xl text-amber-400 font-mono font-bold focus:outline-none"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-0.5">Uang kas masuk hari ini. Sisa otomatis dicatat sebagai bon di Buku Bon.</p>
+                  </div>
                 </div>
               )}
 
@@ -2245,33 +2345,47 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                     onChange={e => setFormCost(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-slate-300 font-mono focus:outline-none"
                   />
-                  <p className="text-[10px] text-slate-500 mt-0.5">Saldo terpotong</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Modal / HPP</p>
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1 font-medium">Pemasukan Diterima (Rp)</label>
+                  <label className="block text-slate-400 mb-1 font-medium">
+                    {formStatus === 'belum_lunas' ? 'Total Harga Jual (Rp)' : 'Pemasukan Diterima (Rp)'}
+                  </label>
                   <input
                     type="number"
                     required
                     min={0}
-                    placeholder="Contoh: 105000"
+                    placeholder={formStatus === 'belum_lunas' ? 'Contoh: 150000' : 'Contoh: 105000'}
                     value={formAmount}
                     onChange={e => setFormAmount(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-950 border border-emerald-500/60 rounded-xl text-emerald-400 font-mono font-bold focus:outline-none"
                   />
-                  <p className="text-[10px] text-slate-500 mt-0.5">Uang dari pelanggan</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    {formStatus === 'belum_lunas' ? 'Total nilai transaksi keseluruhan' : 'Uang dari pelanggan'}
+                  </p>
                 </div>
               </div>
 
-              {/* Live Profit Preview */}
-              <div className="p-2.5 bg-slate-950 rounded-xl flex items-center justify-between text-xs border border-slate-800">
-                <span className="text-slate-400">Estimasi Keuntungan Bersih:</span>
-                <span className="font-bold text-emerald-400 font-mono text-sm">
-                  Rp {formatRupiah(Math.max(0, (parseFloat(formAmount) || 0) - (parseFloat(formCost) || 0)))}
-                </span>
+              {/* Live Profit & Bon Preview */}
+              <div className="p-3 bg-slate-950 rounded-xl space-y-1.5 text-xs border border-slate-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Estimasi Keuntungan Bersih (Masuk Laba):</span>
+                  <span className="font-bold text-emerald-400 font-mono text-sm">
+                    Rp {formatRupiah(Math.max(0, (parseFloat(formAmount) || 0) - (parseFloat(formCost) || 0)))}
+                  </span>
+                </div>
+                {formStatus === 'belum_lunas' && formType === 'income' && (
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-900">
+                    <span className="text-slate-400">Sisa Bon (Masuk Buku Bon):</span>
+                    <span className="font-bold text-amber-400 font-mono text-sm">
+                      Rp {formatRupiah(Math.max(0, (parseFloat(formAmount) || 0) - (parseFloat(formDpAmount) || 0)))}
+                    </span>
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-400 mb-1 font-medium">Metode Pembayaran</label>
                   <CustomSelect
@@ -2294,6 +2408,16 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                       { label: 'Lunas', value: 'lunas' },
                       { label: 'Belum Lunas', value: 'belum_lunas' }
                     ]}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1 font-medium">Tanggal</label>
+                  <input
+                    type="date"
+                    value={formDate}
+                    onChange={e => setFormDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none"
                   />
                 </div>
               </div>

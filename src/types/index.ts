@@ -149,6 +149,8 @@ export interface CashFlowRecord {
   dateString: string;
   storeId?: string;
   createdAt?: string;
+  paidAmount?: number;
+  dpAmount?: number;
 }
 
 export interface DebtPayment {
