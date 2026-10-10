@@ -5,17 +5,60 @@
 
 class SoundEffects {
   private audioCtx: AudioContext | null = null;
+  private hasInitializedTouchListener = false;
+
+  constructor() {
+    this.initTouchUnlock();
+  }
+
+  private initTouchUnlock() {
+    if (typeof window === 'undefined') return;
+    if (this.hasInitializedTouchListener) return;
+
+    const unlock = () => {
+      try {
+        const ctx = this.getContext();
+        if (ctx) {
+          if (ctx.state === 'suspended') {
+            ctx.resume();
+          }
+          // Play silent buffer to fully unlock Android WebView audio context
+          const buffer = ctx.createBuffer(1, 1, 22050);
+          const source = ctx.createBufferSource();
+          source.buffer = buffer;
+          source.connect(ctx.destination);
+          source.start(0);
+        }
+      } catch (e) {
+        // Ignore unlock errors
+      } finally {
+        window.removeEventListener('touchstart', unlock);
+        window.removeEventListener('click', unlock);
+        window.removeEventListener('keydown', unlock);
+      }
+    };
+
+    window.addEventListener('touchstart', unlock, { once: true, passive: true });
+    window.addEventListener('click', unlock, { once: true, passive: true });
+    window.addEventListener('keydown', unlock, { once: true, passive: true });
+    this.hasInitializedTouchListener = true;
+  }
 
   private getContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
-    if (!this.audioCtx) {
+    try {
       const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioCtxClass) {
+      if (!AudioCtxClass) return null;
+
+      if (!this.audioCtx || this.audioCtx.state === 'closed') {
         this.audioCtx = new AudioCtxClass();
       }
-    }
-    if (this.audioCtx && this.audioCtx.state === 'suspended') {
-      this.audioCtx.resume();
+
+      if (this.audioCtx && this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume();
+      }
+    } catch (e) {
+      console.warn('AudioContext initialization error:', e);
     }
     return this.audioCtx;
   }
@@ -23,10 +66,13 @@ class SoundEffects {
   /**
    * Crisp high-pitch beep for successful barcode scan (1200Hz, 0.08s)
    */
-  playScanBeep() {
+  async playScanBeep() {
     try {
       const ctx = this.getContext();
       if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
 
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -50,10 +96,13 @@ class SoundEffects {
   /**
    * Pleasant ascending two-tone chime for success / saved operations (587Hz -> 880Hz)
    */
-  playSuccess() {
+  async playSuccess() {
     try {
       const ctx = this.getContext();
       if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
 
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -78,10 +127,13 @@ class SoundEffects {
   /**
    * Low warning beep for unrecognized barcode (350Hz, 0.2s)
    */
-  playErrorBeep() {
+  async playErrorBeep() {
     try {
       const ctx = this.getContext();
       if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
 
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
