@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { CustomSelect } from './CustomSelect';
 import { 
   Package, 
@@ -172,6 +172,46 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   const [formBarcode, setFormBarcode] = useState('');
   const [formColor, setFormColor] = useState('#10B981');
 
+  // Modal / cost price states (Eceran vs Grosir/Dus vs Konversi Kg->Liter)
+  const [modalInputType, setModalInputType] = useState<'eceran' | 'grosir' | 'konversi'>('eceran');
+  const [formBuyPrice, setFormBuyPrice] = useState<number | string>('');
+  const [formBoxPrice, setFormBoxPrice] = useState<number | string>('');
+  const [formBoxQty, setFormBoxQty] = useState<number | string>('24');
+  const [formSackPrice, setFormSackPrice] = useState<number | string>('');
+  const [formSackWeight, setFormSackWeight] = useState<number | string>('50');
+  const [formConversionFactor, setFormConversionFactor] = useState<number | string>('1.25');
+
+  const calculatedCostPrice = useMemo(() => {
+    if (modalInputType === 'eceran') {
+      return Number(formBuyPrice) || 0;
+    } else if (modalInputType === 'grosir') {
+      const boxP = Number(formBoxPrice) || 0;
+      const boxQ = Number(formBoxQty) || 1;
+      return boxQ > 0 ? Math.round(boxP / boxQ) : 0;
+    } else {
+      const sackP = Number(formSackPrice) || 0;
+      const weightKg = Number(formSackWeight) || 0;
+      const factor = Number(formConversionFactor) || 1;
+      const totalLiter = weightKg * factor;
+      return totalLiter > 0 ? Math.round(sackP / totalLiter) : 0;
+    }
+  }, [modalInputType, formBuyPrice, formBoxPrice, formBoxQty, formSackPrice, formSackWeight, formConversionFactor]);
+
+  const calculatedConvertedStock = useMemo(() => {
+    if (modalInputType === 'konversi') {
+      const weightKg = Number(formSackWeight) || 0;
+      const factor = Number(formConversionFactor) || 1;
+      return Math.round((weightKg * factor) * 100) / 100;
+    }
+    return null;
+  }, [modalInputType, formSackWeight, formConversionFactor]);
+
+  useEffect(() => {
+    if (modalInputType === 'konversi' && calculatedConvertedStock !== null) {
+      setFormStock(String(calculatedConvertedStock));
+    }
+  }, [calculatedConvertedStock, modalInputType]);
+
   const handleBarcodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -214,6 +254,13 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     setCustomCategoryInput('');
     setFormBarcode('');
     setFormColor('#10B981');
+    setModalInputType('eceran');
+    setFormBuyPrice('');
+    setFormBoxPrice('');
+    setFormBoxQty('24');
+    setFormSackPrice('');
+    setFormSackWeight('50');
+    setFormConversionFactor('1.25');
     setIsModalOpen(true);
   };
 
@@ -228,6 +275,13 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     setCustomCategoryInput('');
     setFormBarcode(p.barcode || '');
     setFormColor(p.color || '#10B981');
+    setModalInputType('eceran');
+    setFormBuyPrice(p.costPrice !== undefined ? p.costPrice : '');
+    setFormBoxPrice('');
+    setFormBoxQty('24');
+    setFormSackPrice('');
+    setFormSackWeight('50');
+    setFormConversionFactor('1.25');
     setIsModalOpen(true);
   };
 
@@ -239,13 +293,23 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     const finalCategory = (isCustomCategory ? customCategoryInput.trim() : formCategory.trim()) || 'Makanan';
     saveCustomCategory(finalCategory);
 
+    const finalStock = modalInputType === 'konversi' && calculatedConvertedStock !== null 
+      ? calculatedConvertedStock 
+      : (Number(formStock) || 0);
+
+    const finalUnit = modalInputType === 'konversi' 
+      ? 'Liter' 
+      : (modalInputType === 'grosir' ? 'Dus' : 'Pcs');
+
     const productPayload: Product = {
       storeId: storeId || undefined,
       name: formName.trim(),
       sku: formSku.trim(),
       category: finalCategory,
       price: Number(formPrice) || 0,
-      stock: Number(formStock) || 0,
+      stock: finalStock,
+      costPrice: calculatedCostPrice,
+      unit: finalUnit,
       barcode: formBarcode.trim() || undefined,
       color: formColor
     };
@@ -594,8 +658,13 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                       </span>
                     </td>
 
-                    <td className="py-3.5 px-4 font-bold text-emerald-400 text-sm">
-                      Rp {formatRupiah(product.price)}
+                    <td className="py-3.5 px-4">
+                      <div className="font-bold text-emerald-400 text-sm">
+                        Rp {formatRupiah(product.price)}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono">
+                        Modal: Rp {formatRupiah(product.costPrice || 0)}
+                      </div>
                     </td>
 
                     <td className="py-3.5 px-4 text-center">
@@ -1000,12 +1069,152 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                     type="number"
                     required
                     min={0}
+                    step="any"
                     value={formStock}
                     onChange={e => setFormStock(e.target.value)}
                     placeholder="50"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono focus:outline-none focus:border-emerald-500"
                   />
                 </div>
+              </div>
+
+              {/* METODE INPUT MODAL: ECERAN VS GROSIR / PER DUS */}
+              <div className="space-y-2 p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-300 font-bold flex items-center gap-1.5">
+                    <span>Metode Input Modal / Harga Beli</span>
+                  </label>
+                  <div className="flex bg-slate-900 p-0.5 rounded-lg border border-slate-800 gap-0.5 overflow-x-auto">
+                    <button
+                      type="button"
+                      onClick={() => setModalInputType('eceran')}
+                      className={`px-2 py-1 rounded-md text-[11px] font-bold transition whitespace-nowrap ${
+                        modalInputType === 'eceran' ? 'bg-emerald-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Eceran
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalInputType('grosir')}
+                      className={`px-2 py-1 rounded-md text-[11px] font-bold transition whitespace-nowrap ${
+                        modalInputType === 'grosir' ? 'bg-emerald-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Grosir/Dus
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalInputType('konversi')}
+                      className={`px-2 py-1 rounded-md text-[11px] font-bold transition whitespace-nowrap ${
+                        modalInputType === 'konversi' ? 'bg-emerald-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Konversi Kg &rarr; Liter
+                    </button>
+                  </div>
+                </div>
+
+                {modalInputType === 'eceran' ? (
+                  <div>
+                    <label className="block text-slate-400 mb-1 font-medium">Harga Beli / Modal per Satuan (Rp)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formBuyPrice}
+                      onChange={e => setFormBuyPrice(e.target.value)}
+                      placeholder="15000"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-750 rounded-xl text-emerald-400 font-bold font-mono focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                ) : modalInputType === 'grosir' ? (
+                  <div className="space-y-2.5">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-slate-400 mb-1 font-medium">Harga Beli 1 Dus (Rp)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={formBoxPrice}
+                          onChange={e => setFormBoxPrice(e.target.value)}
+                          placeholder="48000"
+                          className="w-full px-3.5 py-2 bg-slate-900 border border-slate-750 rounded-xl text-emerald-400 font-bold font-mono focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 mb-1 font-medium">Isi per Dus (Pcs/Botol)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={formBoxQty}
+                          onChange={e => setFormBoxQty(e.target.value)}
+                          placeholder="24"
+                          className="w-full px-3.5 py-2 bg-slate-900 border border-slate-750 rounded-xl text-white font-bold font-mono focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-between text-xs">
+                      <span className="text-slate-300">Hasil Kalkulasi Modal per Pcs:</span>
+                      <span className="font-mono font-extrabold text-emerald-400 text-sm">
+                        Rp {formatRupiah(calculatedCostPrice)}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Harga Beli 1 Karung (Rp)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={formSackPrice}
+                        onChange={e => setFormSackPrice(e.target.value)}
+                        placeholder="600000"
+                        className="w-full px-3.5 py-2 bg-slate-900 border border-slate-750 rounded-xl text-emerald-400 font-bold font-mono focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-slate-400 mb-1 font-medium">Berat Karung (Kg)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.1"
+                          value={formSackWeight}
+                          onChange={e => setFormSackWeight(e.target.value)}
+                          placeholder="50"
+                          className="w-full px-3.5 py-2 bg-slate-900 border border-slate-750 rounded-xl text-white font-bold font-mono focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 mb-1 font-medium">Faktor Konversi (Liter/Kg)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={formConversionFactor}
+                          onChange={e => setFormConversionFactor(e.target.value)}
+                          placeholder="1.25"
+                          className="w-full px-3.5 py-2 bg-slate-900 border border-slate-750 rounded-xl text-white font-bold font-mono focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl space-y-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-300">Total Stok Konversi Liter:</span>
+                        <span className="font-mono font-bold text-emerald-300">
+                          {calculatedConvertedStock} Liter
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-emerald-500/20">
+                        <span className="text-slate-200 font-medium">Modal per Liter:</span>
+                        <span className="font-mono font-extrabold text-emerald-400 text-sm">
+                          Rp {formatRupiah(calculatedCostPrice)} / Liter
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* BARCODE INPUT DENGAN FISIK & KAMERA SCANNER */}

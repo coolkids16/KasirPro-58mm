@@ -133,7 +133,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
     setCart(prevCart => {
       const updated = [...prevCart];
       const item = updated[index];
-      const newQty = item.quantity + delta;
+      const newQty = Math.round((item.quantity + delta) * 1000) / 1000;
 
       if (newQty <= 0) {
         return updated.filter((_, i) => i !== index);
@@ -141,6 +141,21 @@ export const PosScreen: React.FC<PosScreenProps> = ({
 
       if (newQty > item.product.stock) {
         return updated; // Cannot exceed stock
+      }
+
+      updated[index] = { ...item, quantity: newQty };
+      return updated;
+    });
+  };
+
+  const setExactQuantity = (index: number, qty: number) => {
+    setCart(prevCart => {
+      const updated = [...prevCart];
+      const item = updated[index];
+      const newQty = Math.max(0.1, Math.round(qty * 1000) / 1000);
+
+      if (newQty > item.product.stock) {
+        return updated;
       }
 
       updated[index] = { ...item, quantity: newQty };
@@ -240,7 +255,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       // 2. Reduce product stock in Dexie & sync to Firestore
       for (const item of cart) {
         if (item.product.id) {
-          const newStock = Math.max(0, item.product.stock - item.quantity);
+          const newStock = Math.max(0, Math.round((item.product.stock - item.quantity) * 1000) / 1000);
           await db.products.update(item.product.id, { stock: newStock });
           try {
             await saveProductToFirestore({
@@ -463,47 +478,97 @@ export const PosScreen: React.FC<PosScreenProps> = ({
             cart.map((item, idx) => (
               <div
                 key={item.product.id || idx}
-                className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-2.5 flex items-center justify-between gap-3 text-xs"
+                className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 space-y-2 text-xs"
               >
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-white truncate">{item.product.name}</div>
-                  <div className="text-[11px] text-emerald-400">
-                    Rp {formatRupiah(item.product.price)}
-                  </div>
-                  {item.notes && (
-                    <div className="text-[10px] text-amber-400 italic">*{item.notes}</div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => updateQuantity(idx, -1)}
-                      className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white"
-                    >
-                      <Minus className="w-3.5 h-3.5" />
-                    </button>
-                    <span className="w-7 text-center font-bold text-white text-xs">
-                      {item.quantity}
-                    </span>
-                    <button
-                      onClick={() => updateQuantity(idx, 1)}
-                      className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-white truncate flex items-center gap-1.5">
+                      <span>{item.product.name}</span>
+                      {item.product.unit && (
+                        <span className="text-[10px] bg-slate-850 text-emerald-300 border border-slate-750 px-1.5 py-0.5 rounded font-mono">
+                          {item.product.unit}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-emerald-400 font-mono">
+                      Rp {formatRupiah(item.product.price)} / {item.product.unit || 'Pcs'}
+                    </div>
+                    {item.notes && (
+                      <div className="text-[10px] text-amber-400 italic">*{item.notes}</div>
+                    )}
                   </div>
 
-                  <div className="w-16 text-right font-bold text-slate-200">
+                  <div className="text-right font-bold text-slate-200 text-sm font-mono shrink-0">
                     {formatRupiah(item.product.price * item.quantity)}
                   </div>
 
                   <button
                     onClick={() => removeItem(idx)}
-                    className="text-slate-500 hover:text-rose-400 p-1"
+                    className="text-slate-500 hover:text-rose-400 p-1 shrink-0"
+                    title="Hapus item"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
+                </div>
+
+                {/* Quantity Control & Quick Buttons (+0.5 L, +1 L, +1.5 L, +2 L) */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/60">
+                  <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
+                    <button
+                      onClick={() => updateQuantity(idx, -0.5)}
+                      className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded"
+                      title="Kurangi 0.5"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0.1"
+                      max={item.product.stock}
+                      value={item.quantity}
+                      onChange={e => setExactQuantity(idx, Number(e.target.value) || 0)}
+                      className="w-14 text-center font-bold text-white bg-slate-950 border border-slate-800 rounded text-xs py-0.5 font-mono"
+                    />
+                    <button
+                      onClick={() => updateQuantity(idx, 0.5)}
+                      className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded"
+                      title="Tambah 0.5"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => updateQuantity(idx, 0.5)}
+                      className="px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-bold font-mono transition"
+                      title="Tambah 0.5"
+                    >
+                      +0.5{item.product.unit === 'Liter' ? 'L' : ''}
+                    </button>
+                    <button
+                      onClick={() => updateQuantity(idx, 1)}
+                      className="px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-bold font-mono transition"
+                      title="Tambah 1"
+                    >
+                      +1{item.product.unit === 'Liter' ? 'L' : ''}
+                    </button>
+                    <button
+                      onClick={() => updateQuantity(idx, 1.5)}
+                      className="px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-bold font-mono transition"
+                      title="Tambah 1.5"
+                    >
+                      +1.5{item.product.unit === 'Liter' ? 'L' : ''}
+                    </button>
+                    <button
+                      onClick={() => updateQuantity(idx, 2)}
+                      className="px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-bold font-mono transition"
+                      title="Tambah 2"
+                    >
+                      +2{item.product.unit === 'Liter' ? 'L' : ''}
+                    </button>
+                  </div>
                 </div>
               </div>
             ))

@@ -434,8 +434,14 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
   // Financial Metrics Calculation
   const metrics = useMemo(() => {
-    // 1. POS Sales Revenue & Profit
+    // 1. POS Sales Revenue & Cost (COGS)
     const posTotalRevenue = filteredPosTransactions.reduce((acc, tx) => acc + (tx.total || 0), 0);
+    const posTotalCost = filteredPosTransactions.reduce((acc, tx) => {
+      return acc + (tx.items || []).reduce((itemAcc, item) => {
+        const cost = item.product.costPrice !== undefined ? item.product.costPrice : 0;
+        return itemAcc + (cost * item.quantity);
+      }, 0);
+    }, 0);
 
     // 2. Manual Income (Luar Kasir)
     const incomeRecords = filteredCashFlows.filter(cf => cf.type === 'income');
@@ -443,14 +449,15 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     const manualProfitTotal = incomeRecords.reduce((acc, cf) => acc + (cf.profit !== undefined ? cf.profit : (cf.amount - (cf.cost || 0))), 0);
     const manualCostTotal = incomeRecords.reduce((acc, cf) => acc + (cf.cost || 0), 0);
 
-    // 3. Store Expenses & Capital Cost
+    // 3. Store Expenses & Total Cost of Goods Sold (COGS)
     const expenseRecords = filteredCashFlows.filter(cf => cf.type === 'expense');
     const operationalExpenses = expenseRecords.reduce((acc, cf) => acc + (cf.amount || 0), 0);
-    const totalExpenses = operationalExpenses + manualCostTotal;
+    const totalCOGS = manualCostTotal + posTotalCost;
+    const totalExpenses = operationalExpenses + totalCOGS;
 
     // 4. Combined Metrics
     const totalGrossRevenue = posTotalRevenue + manualIncomeTotal;
-    const netProfit = totalGrossRevenue - totalExpenses; // Kas Masuk dikurangi Pengeluaran = Laba
+    const netProfit = totalGrossRevenue - totalExpenses;
 
     // 5. Debt metrics (All unpaid)
     const totalUnpaidDebts = debts

@@ -52,6 +52,8 @@ export interface Product {
   barcode?: string;
   color?: string;
   description?: string;
+  costPrice?: number; // Modal per pcs / harga beli
+  unit?: string; // Satuan (Pcs, Dus, Liter, Kg, dll)
 }
 
 export interface CartItem {
