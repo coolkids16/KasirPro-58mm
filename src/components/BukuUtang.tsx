@@ -131,6 +131,47 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
 
+  const parseLocalDateTime = (dateStr: string): number => {
+    if (!dateStr) return Date.now();
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const now = new Date();
+      return new Date(year, month, day, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds()).getTime();
+    }
+    const parsed = Date.parse(dateStr);
+    return isNaN(parsed) ? Date.now() : parsed;
+  };
+
+  const formatShortDateTime = (timestamp: any): string => {
+    const timeNum = Number(timestamp) || Date.now();
+    const datePart = new Date(timeNum).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'short'
+    });
+    const timePart = new Date(timeNum).toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    return `${datePart}, ${timePart}`;
+  };
+
+  const formatDetailDateTime = (timestamp: any): string => {
+    const timeNum = Number(timestamp) || Date.now();
+    const datePart = new Date(timeNum).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+    const timePart = new Date(timeNum).toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    return `${datePart} • ${timePart}`;
+  };
+
   // Metrics: Utang Pelanggan vs Utang Saya
   const metrics = useMemo(() => {
     let totalUtangPelanggan = 0;
@@ -262,7 +303,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
     }
 
     const debtDate = formDate || new Date().toISOString().split('T')[0];
-    const debtTimestamp = new Date(debtDate).getTime() || Date.now();
+    const debtTimestamp = parseLocalDateTime(debtDate);
 
     const initialMutation: DebtMutation = {
       id: 'mut-' + Date.now(),
@@ -331,7 +372,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
       return;
     }
 
-    const ts = giveDate ? new Date(giveDate).getTime() : Date.now();
+    const ts = giveDate ? parseLocalDateTime(giveDate) : Date.now();
     const newMutation: DebtMutation = {
       id: 'mut-' + Date.now(),
       type: 'give',
@@ -400,7 +441,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
       return;
     }
 
-    const ts = takeDate ? new Date(takeDate).getTime() : Date.now();
+    const ts = takeDate ? parseLocalDateTime(takeDate) : Date.now();
     const newMutation: DebtMutation = {
       id: 'mut-' + Date.now(),
       type: 'take',
@@ -950,11 +991,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
                   {/* Info Date & Note */}
                   <div className="col-span-6 sm:col-span-5 pr-2">
                     <p className="text-[10px] font-mono text-slate-400">
-                      {new Date(mut.timestamp).toLocaleDateString('id-ID', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric'
-                      })} • {new Date(mut.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                      {formatDetailDateTime(mut.timestamp)}
                     </p>
                     <p className="font-semibold text-white text-xs mt-0.5 truncate">
                       {mut.note || (isTake ? 'Pembayaran Utang' : 'Bon Belanja')}

@@ -318,10 +318,37 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       const month = parseInt(parts[1], 10) - 1;
       const day = parseInt(parts[2], 10);
       const now = new Date();
-      return new Date(year, month, day, now.getHours(), now.getMinutes(), now.getSeconds()).getTime();
+      return new Date(year, month, day, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds()).getTime();
     }
     const parsed = Date.parse(dateStr);
     return isNaN(parsed) ? Date.now() : parsed;
+  }, []);
+
+  const formatShortDateTime = useCallback((timestamp: any): string => {
+    const timeNum = Number(timestamp) || Date.now();
+    const datePart = new Date(timeNum).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'short'
+    });
+    const timePart = new Date(timeNum).toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    return `${datePart}, ${timePart}`;
+  }, []);
+
+  const formatDetailDateTime = useCallback((timestamp: any): string => {
+    const timeNum = Number(timestamp) || Date.now();
+    const datePart = new Date(timeNum).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+    const timePart = new Date(timeNum).toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    return `${datePart} • ${timePart}`;
   }, []);
 
   // Form states for Debt (Buku Piutang / Bon Pelanggan Murni)
@@ -485,11 +512,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           status: cf.status,
           paymentMethod: cf.paymentMethod,
           timestamp: cf.timestamp,
-          dateString: cf.dateString || new Date(cf.timestamp).toLocaleDateString('id-ID', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric'
-          }),
+          dateString: formatShortDateTime(cf.timestamp),
           cashFlowRecord: cf
         });
       }
@@ -524,12 +547,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           status: 'lunas',
           paymentMethod: methodLabel,
           timestamp: tx.timestamp,
-          dateString: new Date(tx.timestamp).toLocaleString('id-ID', {
-            day: 'numeric',
-            month: 'short',
-            hour: '2-digit',
-            minute: '2-digit'
-          }),
+          dateString: formatShortDateTime(tx.timestamp),
           posTransaction: tx
         });
       }
@@ -571,7 +589,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           status: cf.status,
           paymentMethod: cf.paymentMethod || 'Tunai',
           timestamp: cf.timestamp,
-          dateString: cf.dateString || new Date(cf.timestamp).toLocaleDateString('id-ID'),
+          dateString: formatShortDateTime(cf.timestamp),
           cashFlowRecord: cf
         });
       }
@@ -603,12 +621,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           status: 'lunas',
           paymentMethod: methodLabel,
           timestamp: tx.timestamp,
-          dateString: new Date(tx.timestamp).toLocaleString('id-ID', {
-            day: 'numeric',
-            month: 'short',
-            hour: '2-digit',
-            minute: '2-digit'
-          }),
+          dateString: formatShortDateTime(tx.timestamp),
           posTransaction: tx
         });
       }
