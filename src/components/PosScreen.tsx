@@ -109,6 +109,17 @@ export const PosScreen: React.FC<PosScreenProps> = ({
   const addToCart = (product: Product) => {
     if (product.stock <= 0) return;
 
+    const modalCost = product.costPrice !== undefined 
+      ? Number(product.costPrice) 
+      : (product.modal !== undefined ? Number(product.modal) : (product.purchase_price !== undefined ? Number(product.purchase_price) : 0));
+
+    const productWithCost: Product = {
+      ...product,
+      costPrice: modalCost,
+      modal: modalCost,
+      purchase_price: modalCost
+    };
+
     setCart(prevCart => {
       const existingIndex = prevCart.findIndex(item => item.product.id === product.id);
       if (existingIndex > -1) {
@@ -119,11 +130,12 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         const updated = [...prevCart];
         updated[existingIndex] = {
           ...updated[existingIndex],
-          quantity: currentQty + 1
+          quantity: currentQty + 1,
+          product: productWithCost
         };
         return updated;
       } else {
-        return [...prevCart, { product, quantity: 1 }];
+        return [...prevCart, { product: productWithCost, quantity: 1 }];
       }
     });
   };
@@ -212,6 +224,13 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       const paid = paymentMethod === 'cash' ? cashGiven : grandTotal;
       const change = paymentMethod === 'cash' ? Math.max(0, cashGiven - grandTotal) : 0;
 
+      const totalCost = cart.reduce((sum, item) => {
+        const itemCost = item.product.costPrice !== undefined 
+          ? Number(item.product.costPrice) 
+          : (item.product.modal !== undefined ? Number(item.product.modal) : (item.product.purchase_price !== undefined ? Number(item.product.purchase_price) : 0));
+        return sum + (itemCost * item.quantity);
+      }, 0);
+
       const newTransaction: Transaction = {
         storeId: storeId || undefined,
         invoiceNumber,
@@ -221,6 +240,9 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         discount: discountAmount,
         tax,
         total: grandTotal,
+        totalCost,
+        modal: totalCost,
+        total_modal: totalCost,
         paidAmount: paid,
         changeAmount: change,
         paymentMethod,
@@ -258,8 +280,15 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           const newStock = Math.max(0, Math.round((item.product.stock - item.quantity) * 1000) / 1000);
           await db.products.update(item.product.id, { stock: newStock });
           try {
+            const itemCost = item.product.costPrice !== undefined 
+              ? Number(item.product.costPrice) 
+              : (item.product.modal !== undefined ? Number(item.product.modal) : (item.product.purchase_price !== undefined ? Number(item.product.purchase_price) : 0));
+
             await saveProductToFirestore({
               ...item.product,
+              costPrice: itemCost,
+              modal: itemCost,
+              purchase_price: itemCost,
               storeId: storeId || item.product.storeId,
               stock: newStock
             }, storeId || item.product.storeId);

@@ -181,26 +181,48 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   const [formSackWeight, setFormSackWeight] = useState<number | string>('50');
   const [formConversionFactor, setFormConversionFactor] = useState<number | string>('1.25');
 
+  const parseCurrencyNumber = (val: string | number): number => {
+    if (typeof val === 'number') return isNaN(val) ? 0 : val;
+    if (!val) return 0;
+    const cleaned = String(val).replace(/\./g, '').replace(/,/g, '');
+    const num = Number(cleaned);
+    return isNaN(num) ? 0 : num;
+  };
+
+  const parseFloatNumber = (val: string | number): number => {
+    if (typeof val === 'number') return isNaN(val) ? 0 : val;
+    if (!val) return 0;
+    const str = String(val).trim().replace(/,/g, '.');
+    const num = parseFloat(str);
+    return isNaN(num) ? 0 : num;
+  };
+
   const calculatedCostPrice = useMemo(() => {
     if (modalInputType === 'eceran') {
-      return Number(formBuyPrice) || 0;
+      return parseCurrencyNumber(formBuyPrice);
     } else if (modalInputType === 'grosir') {
-      const boxP = Number(formBoxPrice) || 0;
-      const boxQ = Number(formBoxQty) || 1;
-      return boxQ > 0 ? Math.round(boxP / boxQ) : 0;
+      const boxP = parseCurrencyNumber(formBoxPrice);
+      const boxQ = parseCurrencyNumber(formBoxQty) || 1;
+      return boxQ > 0 ? parseFloat((boxP / boxQ).toFixed(2)) : 0;
     } else {
-      const sackP = Number(formSackPrice) || 0;
-      const weightKg = Number(formSackWeight) || 0;
-      const factor = Number(formConversionFactor) || 1;
+      const sackP = parseCurrencyNumber(formSackPrice);
+      const weightKg = parseFloatNumber(formSackWeight);
+      const factor = parseFloatNumber(formConversionFactor) || 1.25;
       const totalLiter = weightKg * factor;
-      return totalLiter > 0 ? Math.round(sackP / totalLiter) : 0;
+      if (sackP > 0 && totalLiter > 0) {
+        return parseFloat((sackP / totalLiter).toFixed(2));
+      }
+      if (editingProduct?.costPrice || editingProduct?.modal || editingProduct?.purchase_price) {
+        return Number(editingProduct.costPrice || editingProduct.modal || editingProduct.purchase_price) || 0;
+      }
+      return 0;
     }
-  }, [modalInputType, formBuyPrice, formBoxPrice, formBoxQty, formSackPrice, formSackWeight, formConversionFactor]);
+  }, [modalInputType, formBuyPrice, formBoxPrice, formBoxQty, formSackPrice, formSackWeight, formConversionFactor, editingProduct]);
 
   const calculatedConvertedStock = useMemo(() => {
     if (modalInputType === 'konversi') {
-      const weightKg = Number(formSackWeight) || 0;
-      const factor = Number(formConversionFactor) || 1;
+      const weightKg = parseFloatNumber(formSackWeight);
+      const factor = parseFloatNumber(formConversionFactor) || 1;
       return Math.round((weightKg * factor) * 100) / 100;
     }
     return null;
@@ -275,13 +297,41 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     setCustomCategoryInput('');
     setFormBarcode(p.barcode || '');
     setFormColor(p.color || '#10B981');
-    setModalInputType('eceran');
-    setFormBuyPrice(p.costPrice !== undefined ? p.costPrice : '');
-    setFormBoxPrice('');
-    setFormBoxQty('24');
-    setFormSackPrice('');
-    setFormSackWeight('50');
-    setFormConversionFactor('1.25');
+
+    const costVal = p.costPrice !== undefined 
+      ? p.costPrice 
+      : (p.modal !== undefined ? p.modal : (p.purchase_price !== undefined ? p.purchase_price : ''));
+
+    if (p.unit === 'Liter') {
+      setModalInputType('konversi');
+      setFormSackWeight('25');
+      setFormConversionFactor('1.25');
+      if (costVal) {
+        setFormSackPrice(Math.round(Number(costVal) * 31.25));
+        setFormBuyPrice(costVal);
+      } else {
+        setFormSackPrice('');
+        setFormBuyPrice('');
+      }
+    } else if (p.unit === 'Dus') {
+      setModalInputType('grosir');
+      setFormBoxQty('24');
+      if (costVal) {
+        setFormBoxPrice(Math.round(Number(costVal) * 24));
+        setFormBuyPrice(costVal);
+      } else {
+        setFormBoxPrice('');
+        setFormBuyPrice('');
+      }
+    } else {
+      setModalInputType('eceran');
+      setFormBuyPrice(costVal !== undefined && costVal !== null ? costVal : '');
+      setFormBoxPrice('');
+      setFormBoxQty('24');
+      setFormSackPrice('');
+      setFormSackWeight('50');
+      setFormConversionFactor('1.25');
+    }
     setIsModalOpen(true);
   };
 
@@ -293,22 +343,48 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     const finalCategory = (isCustomCategory ? customCategoryInput.trim() : formCategory.trim()) || 'Makanan';
     saveCustomCategory(finalCategory);
 
+    // Calculate explicit modalPerLiter with validation
+    let modalPerLiter = 0;
+    if (modalInputType === 'konversi') {
+      const sackP = parseCurrencyNumber(formSackPrice);
+      const weightKg = parseFloatNumber(formSackWeight);
+      const factor = parseFloatNumber(formConversionFactor) || 1.25;
+      const totalLiter = weightKg * factor;
+      if (sackP > 0 && totalLiter > 0) {
+        modalPerLiter = parseFloat((sackP / totalLiter).toFixed(2));
+      } else if (editingProduct?.costPrice || editingProduct?.modal || editingProduct?.purchase_price) {
+        modalPerLiter = Number(editingProduct.costPrice || editingProduct.modal || editingProduct.purchase_price) || 0;
+      }
+    } else if (modalInputType === 'grosir') {
+      const boxP = parseCurrencyNumber(formBoxPrice);
+      const boxQ = parseCurrencyNumber(formBoxQty) || 1;
+      modalPerLiter = boxQ > 0 ? parseFloat((boxP / boxQ).toFixed(2)) : 0;
+    } else {
+      modalPerLiter = parseCurrencyNumber(formBuyPrice) || parseFloatNumber(formBuyPrice);
+    }
+
+    if (isNaN(modalPerLiter) || modalPerLiter < 0) {
+      modalPerLiter = 0;
+    }
+
     const finalStock = modalInputType === 'konversi' && calculatedConvertedStock !== null 
       ? calculatedConvertedStock 
-      : (Number(formStock) || 0);
+      : parseFloatNumber(formStock);
 
     const finalUnit = modalInputType === 'konversi' 
       ? 'Liter' 
-      : (modalInputType === 'grosir' ? 'Dus' : 'Pcs');
+      : (modalInputType === 'grosir' ? 'Dus' : (editingProduct?.unit || 'Pcs'));
 
     const productPayload: Product = {
       storeId: storeId || undefined,
       name: formName.trim(),
       sku: formSku.trim(),
       category: finalCategory,
-      price: Number(formPrice) || 0,
+      price: parseCurrencyNumber(formPrice),
       stock: finalStock,
-      costPrice: calculatedCostPrice,
+      costPrice: modalPerLiter,
+      modal: modalPerLiter,
+      purchase_price: modalPerLiter,
       unit: finalUnit,
       barcode: formBarcode.trim() || undefined,
       color: formColor
@@ -663,7 +739,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                         Rp {formatRupiah(product.price)}
                       </div>
                       <div className="text-[10px] text-slate-400 font-mono">
-                        Modal: Rp {formatRupiah(product.costPrice || 0)}
+                        Modal: Rp {formatRupiah(product.costPrice || (product as any).modal || (product as any).purchase_price || 0)}
                       </div>
                     </td>
 

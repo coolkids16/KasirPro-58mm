@@ -437,8 +437,16 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     // 1. POS Sales Revenue & Cost (COGS)
     const posTotalRevenue = filteredPosTransactions.reduce((acc, tx) => acc + (tx.total || 0), 0);
     const posTotalCost = filteredPosTransactions.reduce((acc, tx) => {
+      const directTxCost = tx.totalCost !== undefined ? tx.totalCost : (tx.modal !== undefined ? tx.modal : tx.total_modal);
+      if (directTxCost !== undefined) {
+        return acc + directTxCost;
+      }
       return acc + (tx.items || []).reduce((itemAcc, item) => {
-        const cost = item.product.costPrice !== undefined ? item.product.costPrice : 0;
+        const cost = item.product.costPrice !== undefined 
+          ? Number(item.product.costPrice) 
+          : ((item.product as any)?.modal !== undefined 
+            ? Number((item.product as any).modal) 
+            : (Number((item.product as any)?.purchase_price) || 0));
         return itemAcc + (cost * item.quantity);
       }, 0);
     }, 0);
@@ -544,6 +552,22 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
         const methodLabel = tx.paymentMethod === 'cash' ? 'Tunai' : (tx.paymentMethod === 'qris' ? 'QRIS' : 'Transfer');
 
+        const txCost = tx.totalCost !== undefined 
+          ? tx.totalCost 
+          : (tx.modal !== undefined 
+            ? tx.modal 
+            : (tx.total_modal !== undefined 
+              ? tx.total_modal 
+              : items.reduce((sum, i) => {
+                const itemCost = i?.product?.costPrice !== undefined 
+                  ? Number(i.product.costPrice) 
+                  : ((i?.product as any)?.modal !== undefined 
+                    ? Number((i.product as any).modal) 
+                    : (Number((i?.product as any)?.purchase_price) || 0));
+                return sum + (itemCost * (i?.quantity || 1));
+              }, 0)));
+        const txProfit = tx.total - txCost;
+
         list.push({
           id: `pos-${tx.id || tx.firestoreId || tx.invoiceNumber}`,
           source: 'pos',
@@ -551,6 +575,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           category: 'Kasir POS',
           description: desc,
           amount: tx.total,
+          cost: txCost,
+          profit: txProfit,
           status: 'lunas',
           paymentMethod: methodLabel,
           timestamp: tx.timestamp,
@@ -617,14 +643,30 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
         const itemsSummary = items.map(i => `${i?.product?.name || 'Produk'} (${i?.quantity || 1}x)`).join(', ');
         const methodLabel = tx.paymentMethod === 'cash' ? 'Tunai' : (tx.paymentMethod === 'qris' ? 'QRIS' : 'Transfer');
 
+        const txCost = tx.totalCost !== undefined 
+          ? tx.totalCost 
+          : (tx.modal !== undefined 
+            ? tx.modal 
+            : (tx.total_modal !== undefined 
+              ? tx.total_modal 
+              : items.reduce((sum, i) => {
+                const itemCost = i?.product?.costPrice !== undefined 
+                  ? Number(i.product.costPrice) 
+                  : ((i?.product as any)?.modal !== undefined 
+                    ? Number((i.product as any).modal) 
+                    : (Number((i?.product as any)?.purchase_price) || 0));
+                return sum + (itemCost * (i?.quantity || 1));
+              }, 0)));
+        const txProfit = tx.total - txCost;
+
         list.push({
           id: `pos-${tx.id || tx.firestoreId || tx.invoiceNumber}`,
           source: 'pos',
           category: 'Kasir POS',
           description: itemsSummary ? `Penjualan Kasir #${tx.invoiceNumber}: ${itemsSummary}` : `Penjualan Kasir #${tx.invoiceNumber}`,
-          cost: 0,
+          cost: txCost,
           amount: tx.total,
-          profit: tx.total,
+          profit: txProfit,
           status: 'lunas',
           paymentMethod: methodLabel,
           timestamp: tx.timestamp,
@@ -2077,7 +2119,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right font-mono text-slate-400 whitespace-nowrap">
-                          {isPos ? '-' : `Rp ${formatRupiah(item.cost || 0)}`}
+                          Rp {formatRupiah(item.cost || 0)}
                         </td>
                         <td className="py-3 px-4 text-right font-mono font-bold text-white whitespace-nowrap">
                           Rp {formatRupiah(item.amount)}

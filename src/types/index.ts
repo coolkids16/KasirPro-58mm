@@ -53,6 +53,8 @@ export interface Product {
   color?: string;
   description?: string;
   costPrice?: number; // Modal per pcs / harga beli
+  modal?: number; // Alias harga modal
+  purchase_price?: number; // Alias harga beli/modal
   unit?: string; // Satuan (Pcs, Dus, Liter, Kg, dll)
 }
 
@@ -75,6 +77,9 @@ export interface Transaction {
   discount: number;
   tax: number;
   total: number;
+  totalCost?: number;
+  modal?: number;
+  total_modal?: number;
   paidAmount: number;
   changeAmount: number;
   paymentMethod: PaymentMethod;

@@ -429,6 +429,10 @@ export function subscribeProducts(
           }).catch(console.warn);
         }
 
+        const costVal = data.costPrice !== undefined 
+          ? Number(data.costPrice) 
+          : (data.modal !== undefined ? Number(data.modal) : (data.purchase_price !== undefined ? Number(data.purchase_price) : 0));
+
         list.push({
           id: docSnap.id,
           firestoreId: docSnap.id,
@@ -437,6 +441,10 @@ export function subscribeProducts(
           sku: data.sku || '',
           price: Number(data.price) || 0,
           stock: Number(data.stock) || 0,
+          costPrice: costVal || 0,
+          modal: costVal || 0,
+          purchase_price: costVal || 0,
+          unit: data.unit || 'Pcs',
           category: data.category || 'Makanan',
           barcode: data.barcode || '',
           color: data.color || '#10B981',
@@ -476,12 +484,20 @@ export async function saveProductToFirestore(product: Product, storeId?: string)
       targetStoreId = 'default_store';
     }
 
+    const costVal = product.costPrice !== undefined 
+      ? Number(product.costPrice) 
+      : (product.modal !== undefined ? Number(product.modal) : (product.purchase_price !== undefined ? Number(product.purchase_price) : 0));
+
     const productData = {
       storeId: targetStoreId,
       name: product.name,
       sku: product.sku,
       price: Number(product.price) || 0,
       stock: Number(product.stock) || 0,
+      costPrice: costVal || 0,
+      modal: costVal || 0,
+      purchase_price: costVal || 0,
+      unit: product.unit || 'Pcs',
       category: product.category || 'Makanan',
       barcode: product.barcode || '',
       color: product.color || '#10B981',
@@ -621,12 +637,20 @@ export async function batchSaveProductsToFirestore(products: Product[], storeId?
       const docRef = p.firestoreId || (p.id && typeof p.id === 'string' && isNaN(Number(p.id)))
         ? doc(db, path, String(p.firestoreId || p.id)) 
         : doc(collection(db, path));
+      const costVal = p.costPrice !== undefined 
+        ? Number(p.costPrice) 
+        : (p.modal !== undefined ? Number(p.modal) : (p.purchase_price !== undefined ? Number(p.purchase_price) : 0));
+
       batch.set(docRef, {
         storeId: p.storeId || targetStoreId,
         name: p.name,
         sku: p.sku,
         price: Number(p.price) || 0,
         stock: Number(p.stock) || 0,
+        costPrice: costVal || 0,
+        modal: costVal || 0,
+        purchase_price: costVal || 0,
+        unit: p.unit || 'Pcs',
         category: p.category || 'Makanan',
         barcode: p.barcode || '',
         color: p.color || '#10B981',
