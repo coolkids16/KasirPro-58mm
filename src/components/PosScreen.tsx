@@ -15,12 +15,28 @@ import {
   Barcode,
   CheckCircle2
 } from 'lucide-react';
-import { Product, CartItem, PaymentMethod, Transaction, StoreSettings, CapitalRecord } from '../types';
+import { Product, CartItem, PaymentMethod, Transaction, StoreSettings } from '../types';
 import { db } from '../db/db';
-import { saveTransactionToFirestore, saveProductToFirestore, saveCapitalRecordToFirestore, auth } from '../services/firebase';
+import { saveTransactionToFirestore, saveProductToFirestore } from '../services/firebase';
 import { formatRupiah } from '../utils/escpos';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
 import { CameraBarcodeScannerModal } from './CameraBarcodeScannerModal';
+
+/**
+ * Generate a 100% unique, collision-proof invoice number.
+ * Format: INV-YYYYMMDD-HHMMSS-XXXX (e.g. INV-20261010-215802-A9F2)
+ */
+export const generateUniqueInvoiceNumber = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `INV-${year}${month}${day}-${hours}${minutes}${seconds}-${randomSuffix}`;
+};
 
 interface PosScreenProps {
   products: Product[];
@@ -220,7 +236,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
     setIsProcessing(true);
 
     try {
-      const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`;
+      const invoiceNumber = generateUniqueInvoiceNumber();
       const paid = paymentMethod === 'cash' ? cashGiven : grandTotal;
       const change = paymentMethod === 'cash' ? Math.max(0, cashGiven - grandTotal) : 0;
 
@@ -248,27 +264,6 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         paymentMethod,
         cashierName: settings.cashierName
       };
-
-      // Handle rounding adjustment
-      const roundingAdjustment = paid - grandTotal;
-      if (roundingAdjustment !== 0) {
-        const capitalPayload: CapitalRecord = {
-          type: roundingAdjustment > 0 ? 'add' : 'subtract',
-          amount: Math.abs(roundingAdjustment),
-          description: `Penyesuaian Pembulatan - ${invoiceNumber}`,
-          timestamp: Date.now(),
-          storeId: storeId || undefined
-        };
-        const capLocalId = await db.capital.add(capitalPayload);
-        if (auth.currentUser) {
-          try {
-            const firestoreId = await saveCapitalRecordToFirestore({ ...capitalPayload, id: capLocalId }, storeId || undefined);
-            await db.capital.update(capLocalId, { firestoreId });
-          } catch (e) {
-            console.warn('Failed to save rounding adjustment to Firestore:', e);
-          }
-        }
-      }
 
       // 1. Save transaction in Dexie IndexedDB
       const txId = await db.transactions.add(newTransaction);
