@@ -1,4 +1,5 @@
 import { Transaction, StoreSettings } from '../types';
+import { formatReceiptDateTime } from './timezone';
 
 export const ESC = 0x1b;
 export const GS = 0x1d;
@@ -277,16 +278,7 @@ export function generateReceiptText(
   lines.push(padSeparator('=', W));
 
   // Info Transaksi
-  const dateObj = new Date(transaction.timestamp);
-  const dateStr = dateObj.toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-  });
-  const timeStr = dateObj.toLocaleTimeString('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  const { dateStr, timeStr } = formatReceiptDateTime(transaction.timestamp, settings?.timezone);
 
   lines.push(padRow(`No: ${transaction.invoiceNumber}`, `${dateStr} ${timeStr}`, W));
   lines.push(padRow(`Kasir: ${transaction.cashierName}`, `Metode: ${transaction.paymentMethod.toUpperCase()}`, W));
@@ -530,16 +522,7 @@ export async function generateEscPosBinaryAsync(
 
   // 4. Info Transaksi
   encoder.align('left');
-  const dateObj = new Date(transaction.timestamp);
-  const dateStr = dateObj.toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-  });
-  const timeStr = dateObj.toLocaleTimeString('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  const { dateStr, timeStr } = formatReceiptDateTime(transaction.timestamp, settings?.timezone);
 
   encoder.twoColumn(`No: ${transaction.invoiceNumber}`, `${dateStr} ${timeStr}`, W);
   encoder.twoColumn(`Kasir: ${transaction.cashierName}`, `Metode: ${transaction.paymentMethod.toUpperCase()}`, W);
@@ -641,16 +624,7 @@ export function generateEscPosBinary(
   encoder.separator('=', W);
   encoder.align('left');
 
-  const dateObj = new Date(transaction.timestamp);
-  const dateStr = dateObj.toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-  });
-  const timeStr = dateObj.toLocaleTimeString('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  const { dateStr, timeStr } = formatReceiptDateTime(transaction.timestamp, settings?.timezone);
 
   encoder.twoColumn(`No: ${transaction.invoiceNumber}`, `${dateStr} ${timeStr}`, W);
   encoder.twoColumn(`Kasir: ${transaction.cashierName}`, `Metode: ${transaction.paymentMethod.toUpperCase()}`, W);

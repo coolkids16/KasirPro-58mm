@@ -41,6 +41,7 @@ import { CashFlowRecord, CustomerDebt, DebtPayment, DebtMutation, StoreSettings,
 import { formatRupiah, padCenter, padRow, padSeparator, EscPosEncoder } from '../utils/escpos';
 import { printerService } from '../services/printerService';
 import { sounds } from '../utils/audio';
+import { getTimezoneAbbr } from '../utils/timezone';
 import { 
   auth,
   saveCashFlowToFirestore, 
@@ -326,30 +327,36 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
   const formatShortDateTime = useCallback((timestamp: any): string => {
     const timeNum = Number(timestamp) || Date.now();
+    const tz = settings?.timezone || 'Asia/Jakarta';
     const datePart = new Date(timeNum).toLocaleDateString('id-ID', {
+      timeZone: tz,
       day: 'numeric',
       month: 'short'
     });
     const timePart = new Date(timeNum).toLocaleTimeString('id-ID', {
+      timeZone: tz,
       hour: '2-digit',
       minute: '2-digit'
     });
-    return `${datePart}, ${timePart}`;
-  }, []);
+    return `${datePart}, ${timePart} ${getTimezoneAbbr(tz)}`;
+  }, [settings?.timezone]);
 
   const formatDetailDateTime = useCallback((timestamp: any): string => {
     const timeNum = Number(timestamp) || Date.now();
+    const tz = settings?.timezone || 'Asia/Jakarta';
     const datePart = new Date(timeNum).toLocaleDateString('id-ID', {
+      timeZone: tz,
       day: 'numeric',
       month: 'short',
       year: 'numeric'
     });
     const timePart = new Date(timeNum).toLocaleTimeString('id-ID', {
+      timeZone: tz,
       hour: '2-digit',
       minute: '2-digit'
     });
-    return `${datePart} • ${timePart}`;
-  }, []);
+    return `${datePart} • ${timePart} ${getTimezoneAbbr(tz)}`;
+  }, [settings?.timezone]);
 
   // Form states for Debt (Buku Piutang / Bon Pelanggan Murni)
   const [debtCustomerName, setDebtCustomerName] = useState<string>('');

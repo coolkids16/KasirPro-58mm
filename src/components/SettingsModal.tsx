@@ -7,11 +7,14 @@ import {
   X,
   Upload,
   Trash2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Clock,
+  Globe
 } from 'lucide-react';
 import { StoreSettings } from '../types';
 import { saveStoreSettingsToFirestore, auth } from '../services/firebase';
 import { db } from '../db/db';
+import { TIMEZONE_OPTIONS, getCurrentTimePreview, DEFAULT_TIMEZONE } from '../utils/timezone';
 
 export interface SettingsModalProps {
   settings: StoreSettings;
@@ -31,6 +34,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [currentTimePreview, setCurrentTimePreview] = useState<string>('');
 
   // Sync formData whenever modal opens or settings change
   useEffect(() => {
@@ -38,6 +42,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setFormData({ ...settings });
     }
   }, [isOpen, settings]);
+
+  // Live clock preview for the selected timezone
+  useEffect(() => {
+    if (!isOpen) return;
+    const updatePreview = () => {
+      setCurrentTimePreview(getCurrentTimePreview(formData.timezone || DEFAULT_TIMEZONE));
+    };
+    updatePreview();
+    const interval = setInterval(updatePreview, 1000);
+    return () => clearInterval(interval);
+  }, [isOpen, formData.timezone]);
 
   if (!isOpen) return null;
 
@@ -309,6 +324,65 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   />
                 </div>
               )}
+            </div>
+
+            {/* Zona Waktu Toko (Timezone Setting) */}
+            <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-slate-200 font-medium">
+                  <Clock className="w-4 h-4 text-emerald-400" />
+                  Zona Waktu Operasional (Timezone)
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+                  {TIMEZONE_OPTIONS.find(t => t.value === (formData.timezone || DEFAULT_TIMEZONE))?.shortLabel || 'WIB'}
+                </span>
+              </div>
+
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Sesuaikan zona waktu untuk penanggalan struk kasir, riwayat transaksi, dan pembukuan agar selalu akurat tanpa terpengaruh jam perangkat.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {TIMEZONE_OPTIONS.map((tz) => {
+                  const isSelected = (formData.timezone || DEFAULT_TIMEZONE) === tz.value;
+                  return (
+                    <button
+                      key={tz.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, timezone: tz.value })}
+                      className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
+                        isSelected
+                          ? 'bg-emerald-500/15 border-emerald-500/60 text-white shadow-sm ring-1 ring-emerald-500/30'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-850'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-bold text-xs text-white flex items-center gap-1.5">
+                          {tz.shortLabel}
+                          {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>}
+                        </span>
+                        <span className="font-mono text-[10px] text-slate-400 font-semibold">
+                          {tz.offset}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-1 line-clamp-1">
+                        {tz.value === 'Asia/Jakarta' ? 'Barat (Jakarta)' : tz.value === 'Asia/Makassar' ? 'Tengah (Makassar)' : 'Timur (Jayapura)'}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Live Preview Jam Sekarang Sesuai Zona Waktu */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-1.5 text-slate-400">
+                  <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  <span>Waktu saat ini ({TIMEZONE_OPTIONS.find(t => t.value === (formData.timezone || DEFAULT_TIMEZONE))?.shortLabel || 'WIB'}):</span>
+                </div>
+                <div className="font-mono font-bold text-emerald-400">
+                  {currentTimePreview || '-'}
+                </div>
+              </div>
             </div>
           </div>
 

@@ -878,7 +878,9 @@ export function subscribeStoreSettings(
           cashierName: data.cashierName || DEFAULT_SETTINGS.cashierName,
           linuxDevicePath: data.linuxDevicePath || '/dev/usb/lp0',
           feedLines: data.feedLines !== undefined ? Number(data.feedLines) : 1,
-          enableAutoCut: Boolean(data.enableAutoCut)
+          enableAutoCut: Boolean(data.enableAutoCut),
+          compactMode: data.compactMode !== undefined ? Boolean(data.compactMode) : true,
+          timezone: data.timezone || DEFAULT_SETTINGS.timezone || 'Asia/Jakarta'
         };
         try {
           localStorage.setItem('kasirpro_settings', JSON.stringify(updatedSettings));
@@ -913,6 +915,8 @@ export async function saveStoreSettingsToFirestore(settings: StoreSettings): Pro
       linuxDevicePath: settings.linuxDevicePath || '/dev/usb/lp0',
       feedLines: settings.feedLines !== undefined ? Number(settings.feedLines) : 1,
       enableAutoCut: Boolean(settings.enableAutoCut),
+      compactMode: settings.compactMode !== undefined ? Boolean(settings.compactMode) : true,
+      timezone: settings.timezone || 'Asia/Jakarta',
       updatedAt: new Date().toISOString()
     };
     await setDoc(doc(db, 'settings', 'main'), payload, { merge: true });

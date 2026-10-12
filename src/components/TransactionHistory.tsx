@@ -36,6 +36,13 @@ import { Transaction, StoreSettings } from '../types';
 import { db } from '../db/db';
 import { deleteTransactionFromFirestore, subscribeTransactions, subscribeToAuthState } from '../services/firebase';
 import { formatRupiah } from '../utils/escpos';
+import { 
+  formatTransactionTableDateTime, 
+  formatTransactionDetailDateTime, 
+  getTimezoneAbbr,
+  getTimezoneOption,
+  getTimezoneDateParts
+} from '../utils/timezone';
 
 interface TransactionHistoryProps {
   settings: StoreSettings;
@@ -182,9 +189,8 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     }
 
     transactions.forEach(t => {
-      const d = new Date(t.timestamp);
-      if (d.getFullYear() === selectedYear && d.getMonth() === selectedMonth) {
-        const day = d.getDate();
+      const { year, month, day } = getTimezoneDateParts(t.timestamp, settings?.timezone);
+      if (year === selectedYear && month === selectedMonth) {
         if (map[day]) {
           map[day].totalSales += t.total;
           map[day].txCount += 1;
@@ -531,6 +537,12 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-400">
+            <span className="text-slate-500">Zona:</span>
+            <span className="font-mono font-bold text-emerald-400">{getTimezoneAbbr(settings?.timezone)}</span>
+            <span className="text-[10px] text-slate-500">({getTimezoneOption(settings?.timezone).offset})</span>
+          </div>
+
           {transactions.length > 0 && (
             <button
               onClick={() => setIsClearAllOpen(true)}
@@ -552,7 +564,9 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
               <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 font-semibold uppercase text-[10px] tracking-wider">
                 <tr>
                   <th className="py-3.5 px-4">Invoice</th>
-                  <th className="py-3.5 px-4">Waktu</th>
+                  <th className="py-3.5 px-4">
+                    Waktu <span className="text-emerald-400 font-mono text-[9px] lowercase font-normal">({getTimezoneAbbr(settings?.timezone)})</span>
+                  </th>
                   <th className="py-3.5 px-4">Metode</th>
                   <th className="py-3.5 px-4">Total</th>
                   <th className="py-3.5 px-4 text-right">Aksi</th>
@@ -561,12 +575,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
               <tbody className="divide-y divide-slate-800/60">
                 {filtered.map(tx => {
                   const isSelected = selectedTx?.invoiceNumber === tx.invoiceNumber;
-                  const dateFormatted = new Date(tx.timestamp).toLocaleString('id-ID', {
-                    day: 'numeric',
-                    month: 'short',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  });
+                  const dateFormatted = formatTransactionTableDateTime(tx.timestamp, settings?.timezone);
 
                   return (
                     <tr
@@ -655,8 +664,8 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
               <div className="mt-4 space-y-3 text-xs">
                 <div className="flex justify-between text-slate-400">
                   <span>Waktu Transaksi</span>
-                  <span className="text-white">
-                    {new Date(selectedTx.timestamp).toLocaleString('id-ID')}
+                  <span className="text-white font-mono">
+                    {formatTransactionDetailDateTime(selectedTx.timestamp, settings?.timezone)}
                   </span>
                 </div>
                 <div className="flex justify-between text-slate-400">

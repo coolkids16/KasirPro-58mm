@@ -104,6 +104,7 @@ export interface StoreSettings {
   feedLines?: number; // Jumlah baris feed kosong di akhir (default: 1)
   enableAutoCut?: boolean; // Kirim perintah auto-cutter GS V (default: false untuk 58mm sobek manual)
   compactMode?: boolean; // Mode ringkas hemat kertas
+  timezone?: string; // Zona waktu: 'Asia/Jakarta' (WIB), 'Asia/Makassar' (WITA), 'Asia/Jayapura' (WIT)
 }
 
 export type PrinterConnectionType = 

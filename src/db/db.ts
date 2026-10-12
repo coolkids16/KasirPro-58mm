@@ -58,7 +58,8 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   linuxDevicePath: '/dev/usb/lp0', // Target default Linux CachyOS
   feedLines: 1, // Default 1 baris (sangat hemat kertas)
   enableAutoCut: false, // Default false (kebanyakan 58mm sobek manual)
-  compactMode: true // Mode struk ringkas
+  compactMode: true, // Mode struk ringkas
+  timezone: 'Asia/Jakarta' // Default WIB (Waktu Indonesia Barat)
 };
 
 export const INITIAL_PRODUCTS: Omit<Product, 'id'>[] = [
