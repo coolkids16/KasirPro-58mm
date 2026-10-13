@@ -505,7 +505,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       className="w-full flex items-center gap-2.5 p-2 rounded-xl text-slate-200 hover:text-white hover:bg-slate-800 transition font-medium text-left"
                     >
                       <Settings className="w-4 h-4 text-slate-400 shrink-0" />
-                      <span>Pengaturan Toko & Printer</span>
+                      <span>Pengaturan Toko</span>
                     </button>
 
                     {/* 3. Backup & Restore */}
@@ -530,7 +530,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         className="w-full flex items-center gap-2.5 p-2 rounded-xl text-slate-200 hover:text-white hover:bg-slate-800 transition font-medium text-left"
                       >
                         <Users className="w-4 h-4 text-indigo-400 shrink-0" />
-                        <span>Kelola Staf Toko (Staf)</span>
+                        <span>Kelola Staf Toko</span>
                       </button>
                     )}
 

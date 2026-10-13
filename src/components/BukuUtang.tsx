@@ -25,6 +25,7 @@ import { EscPosEncoder } from '../utils/escpos';
 import { db } from '../db/db';
 import { auth, saveDebtToFirestore, updateDebtInFirestore, deleteDebtFromFirestore } from '../services/firebase';
 import { CustomerDebt, DebtPayment, DebtMutation, StoreSettings } from '../types';
+import { getLocalDateString, getLocalYesterdayDateString } from '../utils/timezone';
 
 interface BukuUtangProps {
   debts: CustomerDebt[];
@@ -69,20 +70,20 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
   const [formCustomerPhone, setFormCustomerPhone] = useState('');
   const [formAmount, setFormAmount] = useState('');
   const [formDescription, setFormDescription] = useState('');
-  const [formDate, setFormDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [formDate, setFormDate] = useState(() => getLocalDateString());
   const [formDueDate, setFormDueDate] = useState('');
   const [formCategory, setFormCategory] = useState<'pelanggan' | 'saya'>('pelanggan');
 
   // Form States for "Berikan" (Add Debt on selected customer)
   const [giveAmount, setGiveAmount] = useState('');
   const [giveNote, setGiveNote] = useState('');
-  const [giveDate, setGiveDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [giveDate, setGiveDate] = useState(() => getLocalDateString());
   const [giveDueDate, setGiveDueDate] = useState('');
 
   // Form States for "Terima" (Record Payment on selected customer)
   const [takeAmount, setTakeAmount] = useState('');
   const [takeNote, setTakeNote] = useState('');
-  const [takeDate, setTakeDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [takeDate, setTakeDate] = useState(() => getLocalDateString());
 
   // Form State for Due Date
   const [tempDueDate, setTempDueDate] = useState('');
@@ -179,7 +180,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
     let totalUtangSaya = 0;
     let countSayaUnpaid = 0;
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateString();
 
     debts.forEach(d => {
       const isSaya = d.debtCategory === 'saya';
@@ -210,7 +211,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
   // Filtered debts for the list view
   const filteredDebts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
 
     return debts
       .filter(d => {
@@ -267,7 +268,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
       amount: selectedCustomer.totalAmount || 0,
       note: selectedCustomer.description || 'Pencatatan Utang Awal',
       timestamp: selectedCustomer.createdAt || Date.now(),
-      dateString: new Date(selectedCustomer.createdAt || Date.now()).toISOString().split('T')[0]
+      dateString: getLocalDateString(selectedCustomer.createdAt || Date.now())
     });
 
     // Each payment as Take
@@ -279,7 +280,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
           amount: p.amount,
           note: p.note || 'Pembayaran / Cicilan',
           timestamp: p.timestamp || Date.now(),
-          dateString: new Date(p.timestamp || Date.now()).toISOString().split('T')[0]
+          dateString: getLocalDateString(p.timestamp || Date.now())
         });
       });
     }
@@ -302,7 +303,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
       return;
     }
 
-    const debtDate = formDate || new Date().toISOString().split('T')[0];
+    const debtDate = formDate || getLocalDateString();
     const debtTimestamp = parseLocalDateTime(debtDate);
 
     const initialMutation: DebtMutation = {
@@ -350,7 +351,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
       setFormAmount('');
       setFormDescription('');
       setFormDueDate('');
-      setFormDate(new Date().toISOString().split('T')[0]);
+      setFormDate(getLocalDateString());
       setIsNewDebtModalOpen(false);
 
       onRefresh();
@@ -379,7 +380,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
       amount: amt,
       note: giveNote.trim() || 'Tambah Bon',
       timestamp: ts,
-      dateString: giveDate || new Date().toISOString().split('T')[0]
+      dateString: giveDate || getLocalDateString()
     };
 
     const existingMutations = customerMutations;
@@ -448,7 +449,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
       amount: amt,
       note: takeNote.trim() || 'Pembayaran Cicilan',
       timestamp: ts,
-      dateString: takeDate || new Date().toISOString().split('T')[0]
+      dateString: takeDate || getLocalDateString()
     };
 
     const newPayment: DebtPayment = {
@@ -517,7 +518,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
       amount: remaining,
       note: 'Pelunasan Total Utang',
       timestamp: ts,
-      dateString: new Date().toISOString().split('T')[0]
+      dateString: getLocalDateString()
     };
 
     const newPayment: DebtPayment = {
@@ -1137,19 +1138,23 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
                       <div className="flex items-center gap-1 text-[10px]">
                         <button
                           type="button"
-                          onClick={() => setGiveDate(new Date().toISOString().split('T')[0])}
-                          className="px-1 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition"
+                          onClick={() => setGiveDate(getLocalDateString())}
+                          className={`px-1 py-0.5 rounded transition ${
+                            giveDate === getLocalDateString()
+                              ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/40'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                          }`}
                         >
                           Hari Ini
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            const d = new Date();
-                            d.setDate(d.getDate() - 1);
-                            setGiveDate(d.toISOString().split('T')[0]);
-                          }}
-                          className="px-1 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition"
+                          onClick={() => setGiveDate(getLocalYesterdayDateString())}
+                          className={`px-1 py-0.5 rounded transition ${
+                            giveDate === getLocalYesterdayDateString()
+                              ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/40'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                          }`}
                         >
                           Kemarin
                         </button>
@@ -1263,19 +1268,23 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
                     <div className="flex items-center gap-1 text-[10px]">
                       <button
                         type="button"
-                        onClick={() => setTakeDate(new Date().toISOString().split('T')[0])}
-                        className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition"
+                        onClick={() => setTakeDate(getLocalDateString())}
+                        className={`px-1.5 py-0.5 rounded transition ${
+                          takeDate === getLocalDateString()
+                            ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/40'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        }`}
                       >
                         Hari Ini
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          const d = new Date();
-                          d.setDate(d.getDate() - 1);
-                          setTakeDate(d.toISOString().split('T')[0]);
-                        }}
-                        className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition"
+                        onClick={() => setTakeDate(getLocalYesterdayDateString())}
+                        className={`px-1.5 py-0.5 rounded transition ${
+                          takeDate === getLocalYesterdayDateString()
+                            ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/40'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        }`}
                       >
                         Kemarin
                       </button>
@@ -1910,9 +1919,9 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
                     <div className="flex items-center gap-1 text-[10px]">
                       <button
                         type="button"
-                        onClick={() => setFormDate(new Date().toISOString().split('T')[0])}
+                        onClick={() => setFormDate(getLocalDateString())}
                         className={`px-1.5 py-0.5 rounded transition ${
-                          formDate === new Date().toISOString().split('T')[0]
+                          formDate === getLocalDateString()
                             ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/40'
                             : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
                         }`}
@@ -1921,12 +1930,12 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          const d = new Date();
-                          d.setDate(d.getDate() - 1);
-                          setFormDate(d.toISOString().split('T')[0]);
-                        }}
-                        className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition"
+                        onClick={() => setFormDate(getLocalYesterdayDateString())}
+                        className={`px-1.5 py-0.5 rounded transition ${
+                          formDate === getLocalYesterdayDateString()
+                            ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/40'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        }`}
                       >
                         Kemarin
                       </button>

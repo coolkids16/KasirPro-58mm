@@ -1,4 +1,5 @@
 import { Product, Transaction, StoreSettings, CashFlowRecord, CustomerDebt } from '../types';
+import { getLocalDateString } from './timezone';
 
 export interface FullBackupData {
   version: string;
@@ -40,7 +41,7 @@ export function exportFullBackupJson(
     cashFlows,
     debts
   };
-  const dateStr = new Date().toISOString().slice(0, 10);
+  const dateStr = getLocalDateString();
   downloadFile(
     JSON.stringify(backup, null, 2),
     `kasirpro_full_backup_${dateStr}.json`,
@@ -49,7 +50,7 @@ export function exportFullBackupJson(
 }
 
 export function exportProductsJson(products: Product[]) {
-  const dateStr = new Date().toISOString().slice(0, 10);
+  const dateStr = getLocalDateString();
   downloadFile(
     JSON.stringify(products, null, 2),
     `produk_stok_kasirpro_${dateStr}.json`,
@@ -58,7 +59,7 @@ export function exportProductsJson(products: Product[]) {
 }
 
 export function exportTransactionsJson(transactions: Transaction[]) {
-  const dateStr = new Date().toISOString().slice(0, 10);
+  const dateStr = getLocalDateString();
   downloadFile(
     JSON.stringify(transactions, null, 2),
     `riwayat_penjualan_kasirpro_${dateStr}.json`,
@@ -80,7 +81,7 @@ export function exportProductsCsv(products: Product[]) {
   ]);
 
   const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
-  const dateStr = new Date().toISOString().slice(0, 10);
+  const dateStr = getLocalDateString();
   downloadFile(
     csvContent,
     `katalog_produk_stok_${dateStr}.csv`,
@@ -125,7 +126,7 @@ export function exportTransactionsCsv(transactions: Transaction[]) {
   });
 
   const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
-  const dateStr = new Date().toISOString().slice(0, 10);
+  const dateStr = getLocalDateString();
   downloadFile(
     csvContent,
     `laporan_riwayat_penjualan_${dateStr}.csv`,

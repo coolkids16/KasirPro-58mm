@@ -54,6 +54,29 @@ export const getTimezoneOption = (timeZone: string = DEFAULT_TIMEZONE): Timezone
 };
 
 /**
+ * Returns local date string in YYYY-MM-DD format based on local client device time
+ * or a specific Date object / timestamp.
+ * Prevents UTC offset bug where .toISOString().slice(0, 10) shifts to yesterday before 07:00 WIB.
+ */
+export const getLocalDateString = (d: Date | number = new Date()): string => {
+  const dateObj = typeof d === 'number' ? new Date(d) : d;
+  if (isNaN(dateObj.getTime())) return '';
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+/**
+ * Returns yesterday's local date string in YYYY-MM-DD format based on local client device time.
+ */
+export const getLocalYesterdayDateString = (): string => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return getLocalDateString(d);
+};
+
+/**
  * Format timestamp into short date & time for table rows.
  * Example: "12 Okt, 14:30 WIB"
  */

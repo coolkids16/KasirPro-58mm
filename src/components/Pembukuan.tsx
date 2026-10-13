@@ -41,7 +41,7 @@ import { CashFlowRecord, CustomerDebt, DebtPayment, DebtMutation, StoreSettings,
 import { formatRupiah, padCenter, padRow, padSeparator, EscPosEncoder } from '../utils/escpos';
 import { printerService } from '../services/printerService';
 import { sounds } from '../utils/audio';
-import { getTimezoneAbbr } from '../utils/timezone';
+import { getTimezoneAbbr, getLocalDateString, getLocalYesterdayDateString } from '../utils/timezone';
 import { 
   auth,
   saveCashFlowToFirestore, 
@@ -83,9 +83,9 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   const [customStartDate, setCustomStartDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
-    return d.toISOString().split('T')[0];
+    return getLocalDateString(d);
   });
-  const [customEndDate, setCustomEndDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [customEndDate, setCustomEndDate] = useState<string>(() => getLocalDateString());
 
   // Data states from Dexie
   const [cashFlows, setCashFlows] = useState<CashFlowRecord[]>([]);
@@ -308,7 +308,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   const [formCost, setFormCost] = useState<string>('');
   const [formStatus, setFormStatus] = useState<'lunas' | 'belum_lunas'>('lunas');
   const [formPaymentMethod, setFormPaymentMethod] = useState<string>('Tunai');
-  const [formDate, setFormDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [formDate, setFormDate] = useState<string>(() => getLocalDateString());
 
   // Helper to parse date string in local timezone
   const parseLocalDateTime = useCallback((dateStr: string): number => {
@@ -724,7 +724,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       setFormCost('');
       setFormStatus('lunas');
       setFormPaymentMethod('Tunai');
-      setFormDate(new Date().toISOString().split('T')[0]);
+      setFormDate(getLocalDateString());
     }
     setFormCustomerName('');
     setIsAddingNewCustomer(false);
@@ -750,7 +750,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       setFormCost('');
       setFormStatus('lunas');
       setFormPaymentMethod('Kas Toko');
-      setFormDate(new Date().toISOString().split('T')[0]);
+      setFormDate(getLocalDateString());
     }
     setIsExpenseModalOpen(true);
   };
@@ -811,7 +811,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           status: remainingDebt === 0 ? 'lunas' : 'belum_lunas',
           paymentMethod: formPaymentMethod,
           timestamp: editingCashFlow?.timestamp || (formDate ? parseLocalDateTime(formDate) : Date.now()),
-          dateString: formDate || new Date().toISOString().split('T')[0],
+          dateString: formDate || getLocalDateString(),
           storeId: storeId || undefined,
           createdAt: editingCashFlow?.createdAt || new Date().toISOString(),
           cost: Number(costNum) || 0,
@@ -838,7 +838,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
             .filter(d => (d.customerName || '').trim().toLowerCase() === normalizedName)
             .first();
 
-          const debtDate = formDate || new Date().toISOString().split('T')[0];
+          const debtDate = formDate || getLocalDateString();
           const debtTimestamp = parseLocalDateTime(debtDate);
           const noteText = formDescription.trim() 
             ? `${formDescription.trim()} (Total: Rp ${formatRupiah(amountNum)}, DP: Rp ${formatRupiah(dpNum)})`
@@ -923,7 +923,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       status: formStatus,
       paymentMethod: formPaymentMethod,
       timestamp: editingCashFlow?.timestamp || (formDate ? parseLocalDateTime(formDate) : Date.now()),
-      dateString: formDate || new Date().toISOString().split('T')[0],
+      dateString: formDate || getLocalDateString(),
       storeId: storeId || undefined,
       createdAt: editingCashFlow?.createdAt || new Date().toISOString()
     };
@@ -1102,7 +1102,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           status: 'lunas',
           paymentMethod: 'Tunai',
           timestamp: Date.now(),
-          dateString: new Date().toISOString().split('T')[0],
+          dateString: getLocalDateString(),
           storeId: storeId || undefined
         };
         const cfId = await db.cashFlows.add(cfPayload);
@@ -1188,7 +1188,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
         status: 'lunas',
         paymentMethod: 'Tunai',
         timestamp: Date.now(),
-        dateString: new Date().toISOString().split('T')[0],
+        dateString: getLocalDateString(),
         storeId: storeId || undefined
       };
       const cfId = await db.cashFlows.add(cfPayload);
@@ -1257,7 +1257,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
         status: 'lunas',
         paymentMethod: 'Tunai',
         timestamp: Date.now(),
-        dateString: new Date().toISOString().split('T')[0],
+        dateString: getLocalDateString(),
         storeId: storeId || undefined
       };
       const cfId = await db.cashFlows.add(cfPayload);
@@ -2481,7 +2481,33 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1 font-medium">Tanggal</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-400 font-medium">Tanggal</label>
+                    <div className="flex items-center gap-1 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => setFormDate(getLocalDateString())}
+                        className={`px-1.5 py-0.5 rounded transition ${
+                          formDate === getLocalDateString()
+                            ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/40'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        }`}
+                      >
+                        Hari Ini
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormDate(getLocalYesterdayDateString())}
+                        className={`px-1.5 py-0.5 rounded transition ${
+                          formDate === getLocalYesterdayDateString()
+                            ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/40'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        }`}
+                      >
+                        Kemarin
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="date"
                     value={formDate}
@@ -2597,7 +2623,33 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1 font-medium">Tanggal</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-400 font-medium">Tanggal</label>
+                    <div className="flex items-center gap-1 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => setFormDate(getLocalDateString())}
+                        className={`px-1.5 py-0.5 rounded transition ${
+                          formDate === getLocalDateString()
+                            ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/40'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        }`}
+                      >
+                        Hari Ini
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormDate(getLocalYesterdayDateString())}
+                        className={`px-1.5 py-0.5 rounded transition ${
+                          formDate === getLocalYesterdayDateString()
+                            ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/40'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        }`}
+                      >
+                        Kemarin
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="date"
                     value={formDate}

@@ -35,6 +35,7 @@ import {
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Product, Transaction, StoreSettings, UserRole, UserProfile, Store, CustomTemplate, CashFlowRecord, CustomerDebt, CapitalRecord } from '../types';
 import { INITIAL_PRODUCTS, DEFAULT_SETTINGS } from '../db/db';
+import { getLocalDateString } from '../utils/timezone';
 
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
@@ -985,7 +986,7 @@ export async function saveCashFlowToFirestore(cf: CashFlowRecord, storeId?: stri
       status: cf.status,
       paymentMethod: cf.paymentMethod || 'Tunai',
       timestamp: cf.timestamp || Date.now(),
-      dateString: cf.dateString || new Date().toISOString().split('T')[0],
+      dateString: cf.dateString || getLocalDateString(),
       createdAt: cf.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
