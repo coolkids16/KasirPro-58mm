@@ -315,7 +315,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
   };
 
   return (
-    <div className="max-w-[1550px] mx-auto p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-6">
+    <div className="min-h-screen w-full max-w-[1550px] mx-auto p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-6 overflow-y-auto pb-24 sm:pb-28 lg:pb-16 scroll-smooth">
       
       {/* LEFT SECTION: Product Catalog Grid & Search */}
       <div className="flex-1 flex flex-col">
@@ -397,7 +397,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         </div>
 
         {/* Product Cards Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5 overflow-y-auto max-h-[calc(100vh-280px)] pr-1">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5 overflow-y-auto max-h-[460px] lg:max-h-[calc(100vh-280px)] pr-1 elegant-scrollbar overscroll-contain scroll-smooth">
           {filteredProducts.map(product => {
             const outOfStock = product.stock <= 0;
             const inCart = cart.find(i => i.product.id === product.id);
@@ -467,7 +467,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       </div>
 
       {/* RIGHT SECTION: Cart & Payment Checkout Panel */}
-      <div className="w-full lg:w-[440px] xl:w-[480px] bg-slate-900 border border-slate-800 rounded-2xl flex flex-col shadow-xl overflow-hidden">
+      <div className="w-full lg:w-[440px] xl:w-[480px] bg-slate-900 border border-slate-800 rounded-2xl flex flex-col shadow-xl overflow-hidden lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto scroll-smooth">
         
         {/* Cart Header */}
         <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
@@ -491,7 +491,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         </div>
 
         {/* Cart Items List */}
-        <div className="flex-1 p-3 overflow-y-auto max-h-[300px] min-h-[180px] space-y-2">
+        <div className="flex-1 p-3 overflow-y-auto max-h-[260px] sm:max-h-[320px] min-h-[160px] space-y-2 overscroll-contain elegant-scrollbar scroll-smooth">
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-500 py-10">
               <ShoppingBag className="w-10 h-10 mb-2 opacity-30" />
@@ -652,7 +652,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         </div>
 
         {/* Payment Methods & Cash Register Input */}
-        <div className="p-4 border-t border-slate-800 space-y-3 bg-slate-900">
+        <div className="p-4 sm:p-5 border-t border-slate-800 space-y-3.5 bg-slate-900 pb-8 sm:pb-10">
           <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => handleSelectPaymentMethod('cash')}
@@ -762,14 +762,16 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           )}
 
           {/* Action Button: Checkout & Print */}
-          <button
-            onClick={handleCheckout}
-            disabled={cart.length === 0 || isProcessing || (paymentMethod === 'cash' && cashGiven < grandTotal)}
-            className="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-40 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 text-sm transition-all"
-          >
-            <ReceiptText className="w-4 h-4" />
-            {isProcessing ? 'Menyimpan...' : 'Bayar & Cetak Struk 58mm'}
-          </button>
+          <div className="pt-2 pb-3 sm:pb-5">
+            <button
+              onClick={handleCheckout}
+              disabled={cart.length === 0 || isProcessing || (paymentMethod === 'cash' && cashGiven < grandTotal)}
+              className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-40 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 text-sm transition-all active:scale-[0.99]"
+            >
+              <ReceiptText className="w-4 h-4" />
+              {isProcessing ? 'Menyimpan...' : 'Bayar & Cetak Struk 58mm'}
+            </button>
+          </div>
         </div>
       </div>
 
