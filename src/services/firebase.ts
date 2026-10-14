@@ -41,9 +41,9 @@ import { getLocalDateString } from '../utils/timezone';
 const app = initializeApp(firebaseConfig);
 
 // Connect to configured firestoreDatabaseId (or default database for custom personal Firebase project)
-// Force HTTP Long Polling to completely bypass Tauri/WebKitGTK WebSocket sandbox restrictions on Linux/Android
+// Use experimentalAutoDetectLongPolling to allow WebSockets in browsers/preview while seamlessly falling back in sandboxes
 export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true
+  experimentalAutoDetectLongPolling: true
 }, (firebaseConfig as any).firestoreDatabaseId && (firebaseConfig as any).firestoreDatabaseId !== '(default)'
   ? (firebaseConfig as any).firestoreDatabaseId
   : undefined);
@@ -103,12 +103,16 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 /**
- * Validate initial connection to Firestore as required by system directives
+ * Validate initial connection to Firestore as required by system directives.
+ * Only attempts server probe when authenticated to prevent unauthorized connection hanging.
  */
 export async function validateFirestoreConnection(): Promise<boolean> {
+  if (!auth.currentUser) {
+    return false;
+  }
   try {
     const timeoutPromise = new Promise<never>((_, reject) => 
-      setTimeout(() => reject(new Error('Connection timeout')), 1500)
+      setTimeout(() => reject(new Error('Connection timeout')), 3000)
     );
     await Promise.race([
       getDocFromServer(doc(db, 'settings', 'test-connection')),

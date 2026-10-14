@@ -315,15 +315,15 @@ export const PosScreen: React.FC<PosScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen w-full max-w-[1550px] mx-auto p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-6 overflow-y-auto pb-24 sm:pb-28 lg:pb-16 scroll-smooth">
+    <div className="min-h-screen w-full max-w-[1550px] mx-auto p-2.5 sm:p-3.5 md:p-4 lg:p-6 flex flex-col lg:flex-row gap-3 sm:gap-4 lg:gap-6 overflow-y-auto pb-20 sm:pb-24 lg:pb-16 scroll-smooth">
       
       {/* LEFT SECTION: Product Catalog Grid & Search */}
       <div className="flex-1 flex flex-col">
         {/* Top Controls: Search & Category Filter */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-5 shadow-sm space-y-3 relative">
-          <div className="flex items-center gap-2.5">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl sm:rounded-2xl p-2.5 sm:p-3.5 lg:p-4 mb-3 sm:mb-4 shadow-sm space-y-2.5 sm:space-y-3 relative">
+          <div className="flex items-center gap-2 sm:gap-2.5">
             <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Cari produk / pindai barcode (Tekan Enter)..."
@@ -343,7 +343,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                     }
                   }
                 }}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                className="w-full pl-9 pr-3 sm:pl-10 sm:pr-4 py-2 sm:py-2.5 bg-slate-950 border border-slate-750 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
               />
               {searchQuery && (
                 <button
@@ -359,9 +359,9 @@ export const PosScreen: React.FC<PosScreenProps> = ({
             <button
               onClick={() => setIsCameraScannerOpen(true)}
               title="Buka Pindai Kamera Barcode (Android / Kamera Web)"
-              className="px-3.5 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shrink-0 shadow-sm"
+              className="px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shrink-0 shadow-sm"
             >
-              <Camera className="w-4 h-4" />
+              <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="hidden sm:inline">Pindai Kamera</span>
             </button>
 
@@ -376,14 +376,14 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           </div>
 
           {/* Category Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-4 pt-1 elegant-scrollbar">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2.5 pt-0.5 elegant-scrollbar">
             {categories.map(cat => {
               const active = selectedCategory === cat;
               return (
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                  className={`px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all ${
                     active
                       ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
                       : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-750'
@@ -396,8 +396,8 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           </div>
         </div>
 
-        {/* Product Cards Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5 overflow-y-auto max-h-[460px] lg:max-h-[calc(100vh-280px)] pr-1 elegant-scrollbar overscroll-contain scroll-smooth">
+        {/* Product Cards Grid: 1 column on narrow mobile, 2 columns on 768p/tablets, 3-4 columns on larger desktops */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2.5 sm:gap-3 lg:gap-3.5 overflow-y-auto max-h-[420px] sm:max-h-[460px] lg:max-h-[calc(100vh-260px)] pr-1 elegant-scrollbar overscroll-contain scroll-smooth">
           {filteredProducts.map(product => {
             const outOfStock = product.stock <= 0;
             const inCart = cart.find(i => i.product.id === product.id);
@@ -406,7 +406,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
               <div
                 key={product.id}
                 onClick={() => !outOfStock && addToCart(product)}
-                className={`relative group bg-slate-900 border rounded-2xl p-3.5 flex flex-col justify-between transition-all select-none cursor-pointer ${
+                className={`relative group bg-slate-900 border rounded-xl sm:rounded-2xl p-2.5 sm:p-3.5 flex flex-col justify-between transition-all select-none cursor-pointer ${
                   outOfStock
                     ? 'border-slate-800 opacity-50 cursor-not-allowed'
                     : inCart
@@ -416,16 +416,16 @@ export const PosScreen: React.FC<PosScreenProps> = ({
               >
                 {/* Visual Category Accent bar */}
                 <div 
-                  className="h-1.5 w-10 rounded-full mb-2"
+                  className="h-1.5 w-8 sm:w-10 rounded-full mb-1.5 sm:mb-2"
                   style={{ backgroundColor: product.color || '#10B981' }}
                 />
 
                 <div>
                   <div className="flex items-start justify-between gap-1 mb-1">
-                    <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded truncate max-w-[120px]">
                       {product.sku}
                     </span>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                    <span className={`text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-full shrink-0 ${
                       outOfStock
                         ? 'bg-rose-500/20 text-rose-400'
                         : product.stock < 10
@@ -436,18 +436,18 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                     </span>
                   </div>
 
-                  <h4 className="font-semibold text-white text-sm line-clamp-2 leading-snug group-hover:text-emerald-300 transition-colors">
+                  <h4 className="font-semibold text-white text-xs sm:text-sm line-clamp-2 leading-snug group-hover:text-emerald-300 transition-colors">
                     {product.name}
                   </h4>
                 </div>
 
-                <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                  <div className="font-bold text-emerald-400 text-sm">
+                <div className="mt-2.5 sm:mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                  <div className="font-bold text-emerald-400 text-xs sm:text-sm">
                     Rp {formatRupiah(product.price)}
                   </div>
 
                   {inCart && (
-                    <span className="w-6 h-6 rounded-full bg-emerald-500 text-white font-bold text-xs flex items-center justify-center shadow">
+                    <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-emerald-500 text-white font-bold text-[11px] sm:text-xs flex items-center justify-center shadow">
                       {inCart.quantity}
                     </span>
                   )}
@@ -467,14 +467,14 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       </div>
 
       {/* RIGHT SECTION: Cart & Payment Checkout Panel */}
-      <div className="w-full lg:w-[440px] xl:w-[480px] bg-slate-900 border border-slate-800 rounded-2xl flex flex-col shadow-xl overflow-hidden lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto scroll-smooth">
+      <div className="w-full lg:w-[420px] xl:w-[460px] bg-slate-900 border border-slate-800 rounded-xl sm:rounded-2xl flex flex-col shadow-xl overflow-hidden lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto scroll-smooth">
         
         {/* Cart Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
+        <div className="p-3 sm:p-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
           <div className="flex items-center gap-2">
             <ShoppingBag className="w-4 h-4 text-emerald-400" />
-            <h3 className="font-bold text-white text-sm">Keranjang Pesanan</h3>
-            <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-0.5 rounded-full font-bold">
+            <h3 className="font-bold text-white text-xs sm:text-sm">Keranjang Pesanan</h3>
+            <span className="bg-emerald-500/20 text-emerald-400 text-[11px] sm:text-xs px-2 py-0.5 rounded-full font-bold">
               {cart.reduce((s, i) => s + i.quantity, 0)}
             </span>
           </div>
@@ -482,7 +482,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           {cart.length > 0 && (
             <button
               onClick={clearCart}
-              className="text-xs text-slate-400 hover:text-rose-400 flex items-center gap-1 transition"
+              className="text-[11px] sm:text-xs text-slate-400 hover:text-rose-400 flex items-center gap-1 transition"
             >
               <Trash2 className="w-3.5 h-3.5" />
               Kosongkan
@@ -491,30 +491,30 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         </div>
 
         {/* Cart Items List */}
-        <div className="flex-1 p-3 overflow-y-auto max-h-[260px] sm:max-h-[320px] min-h-[160px] space-y-2 overscroll-contain elegant-scrollbar scroll-smooth">
+        <div className="flex-1 p-2.5 sm:p-3 overflow-y-auto max-h-[220px] sm:max-h-[280px] min-h-[140px] space-y-1.5 sm:space-y-2 overscroll-contain elegant-scrollbar scroll-smooth">
           {cart.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-slate-500 py-10">
-              <ShoppingBag className="w-10 h-10 mb-2 opacity-30" />
+            <div className="h-full flex flex-col items-center justify-center text-slate-500 py-8">
+              <ShoppingBag className="w-9 h-9 mb-2 opacity-30" />
               <p className="text-xs">Keranjang masih kosong</p>
-              <p className="text-[11px] text-slate-600">Klik produk di sebelah kiri untuk menambahkan</p>
+              <p className="text-[11px] text-slate-600">Klik produk di atas/kiri untuk menambahkan</p>
             </div>
           ) : (
             cart.map((item, idx) => (
               <div
                 key={item.product.id || idx}
-                className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 space-y-2 text-xs"
+                className="bg-slate-950/60 border border-slate-800/80 rounded-lg sm:rounded-xl p-2 sm:p-2.5 space-y-1.5 text-xs"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-white truncate flex items-center gap-1.5">
-                      <span>{item.product.name}</span>
+                    <div className="font-semibold text-white truncate flex items-center gap-1.5 text-xs sm:text-sm">
+                      <span className="truncate">{item.product.name}</span>
                       {item.product.unit && (
-                        <span className="text-[10px] bg-slate-850 text-emerald-300 border border-slate-750 px-1.5 py-0.5 rounded font-mono">
+                        <span className="text-[9px] sm:text-[10px] bg-slate-850 text-emerald-300 border border-slate-750 px-1 py-0.5 rounded font-mono shrink-0">
                           {item.product.unit}
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-emerald-400 font-mono">
+                    <div className="text-[10px] sm:text-[11px] text-emerald-400 font-mono">
                       Rp {formatRupiah(item.product.price)} / {item.product.unit || 'Pcs'}
                     </div>
                     {item.notes && (
@@ -522,7 +522,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                     )}
                   </div>
 
-                  <div className="text-right font-bold text-slate-200 text-sm font-mono shrink-0">
+                  <div className="text-right font-bold text-slate-200 text-xs sm:text-sm font-mono shrink-0">
                     {formatRupiah(item.product.price * item.quantity)}
                   </div>
 
@@ -531,16 +531,16 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                     className="text-slate-500 hover:text-rose-400 p-1 shrink-0"
                     title="Hapus item"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
                 {/* Quantity Control & Quick Buttons (+0.5 L, +1 L, +1.5 L, +2 L) */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/60">
+                <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-800/60">
                   <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
                     <button
                       onClick={() => updateQuantity(idx, -0.5)}
-                      className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded"
+                      className="p-0.5 sm:p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded"
                       title="Kurangi 0.5"
                     >
                       <Minus className="w-3 h-3" />
@@ -552,11 +552,11 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                       max={item.product.stock}
                       value={item.quantity}
                       onChange={e => setExactQuantity(idx, Number(e.target.value) || 0)}
-                      className="w-14 text-center font-bold text-white bg-slate-950 border border-slate-800 rounded text-xs py-0.5 font-mono"
+                      className="w-12 sm:w-14 text-center font-bold text-white bg-slate-950 border border-slate-800 rounded text-xs py-0.5 font-mono"
                     />
                     <button
                       onClick={() => updateQuantity(idx, 0.5)}
-                      className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded"
+                      className="p-0.5 sm:p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded"
                       title="Tambah 0.5"
                     >
                       <Plus className="w-3 h-3" />
@@ -566,28 +566,28 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => updateQuantity(idx, 0.5)}
-                      className="px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-bold font-mono transition"
+                      className="px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[9px] sm:text-[10px] font-bold font-mono transition"
                       title="Tambah 0.5"
                     >
                       +0.5{item.product.unit === 'Liter' ? 'L' : ''}
                     </button>
                     <button
                       onClick={() => updateQuantity(idx, 1)}
-                      className="px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-bold font-mono transition"
+                      className="px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[9px] sm:text-[10px] font-bold font-mono transition"
                       title="Tambah 1"
                     >
                       +1{item.product.unit === 'Liter' ? 'L' : ''}
                     </button>
                     <button
                       onClick={() => updateQuantity(idx, 1.5)}
-                      className="px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-bold font-mono transition"
+                      className="px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[9px] sm:text-[10px] font-bold font-mono transition"
                       title="Tambah 1.5"
                     >
                       +1.5{item.product.unit === 'Liter' ? 'L' : ''}
                     </button>
                     <button
                       onClick={() => updateQuantity(idx, 2)}
-                      className="px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-bold font-mono transition"
+                      className="px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[9px] sm:text-[10px] font-bold font-mono transition"
                       title="Tambah 2"
                     >
                       +2{item.product.unit === 'Liter' ? 'L' : ''}
@@ -600,10 +600,10 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         </div>
 
         {/* Calculations & Discounts */}
-        <div className="p-4 border-t border-slate-800/80 bg-slate-900/40 dark:bg-slate-950/50 space-y-2 text-xs">
+        <div className="p-3 sm:p-3.5 border-t border-slate-800/80 bg-slate-900/40 dark:bg-slate-950/50 space-y-1.5 text-xs">
           <div className="flex justify-between text-slate-400">
             <span>Subtotal</span>
-            <span className="text-white">Rp {formatRupiah(subtotal)}</span>
+            <span className="text-white font-mono">Rp {formatRupiah(subtotal)}</span>
           </div>
 
           {/* Discount Toggle */}
@@ -616,7 +616,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
               {discountAmount > 0 ? `Diskon: Rp ${formatRupiah(discountAmount)}` : '+ Tambah Diskon'}
             </button>
             {discountAmount > 0 && (
-              <span className="text-rose-400">-Rp {formatRupiah(discountAmount)}</span>
+              <span className="text-rose-400 font-mono">-Rp {formatRupiah(discountAmount)}</span>
             )}
           </div>
 
@@ -627,11 +627,11 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                 placeholder="Jumlah potongan (Rp)"
                 value={discountAmount || ''}
                 onChange={e => setDiscountAmount(Math.max(0, Number(e.target.value)))}
-                className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-750 rounded-lg text-xs text-white"
+                className="flex-1 px-2.5 py-1.5 bg-slate-900 border border-slate-750 rounded-lg text-xs text-white"
               />
               <button
                 onClick={() => setDiscountAmount(0)}
-                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px]"
+                className="px-2 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-lg text-[10px]"
               >
                 Reset
               </button>
@@ -641,22 +641,22 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           {settings.enableTax && (
             <div className="flex justify-between text-slate-400">
               <span>PPN ({settings.taxRate}%)</span>
-              <span className="text-white">Rp {formatRupiah(tax)}</span>
+              <span className="text-white font-mono">Rp {formatRupiah(tax)}</span>
             </div>
           )}
 
-          <div className="flex justify-between text-sm font-extrabold text-white pt-2 border-t border-slate-800">
+          <div className="flex justify-between text-xs sm:text-sm font-extrabold text-white pt-1.5 border-t border-slate-800">
             <span>Total Belanja</span>
-            <span className="text-emerald-400 text-base">Rp {formatRupiah(grandTotal)}</span>
+            <span className="text-emerald-400 text-sm sm:text-base font-mono">Rp {formatRupiah(grandTotal)}</span>
           </div>
         </div>
 
         {/* Payment Methods & Cash Register Input */}
-        <div className="p-4 sm:p-5 border-t border-slate-800 space-y-3.5 bg-slate-900 pb-8 sm:pb-10">
-          <div className="grid grid-cols-3 gap-2">
+        <div className="p-3 sm:p-4 border-t border-slate-800 space-y-2.5 sm:space-y-3 bg-slate-900 pb-6 sm:pb-8">
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
             <button
               onClick={() => handleSelectPaymentMethod('cash')}
-              className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+              className={`py-1.5 sm:py-2 px-2 sm:px-3 rounded-lg sm:rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
                 paymentMethod === 'cash'
                   ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
                   : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
@@ -668,7 +668,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
 
             <button
               onClick={() => handleSelectPaymentMethod('qris')}
-              className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+              className={`py-1.5 sm:py-2 px-2 sm:px-3 rounded-lg sm:rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
                 paymentMethod === 'qris'
                   ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
                   : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
@@ -680,7 +680,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
 
             <button
               onClick={() => handleSelectPaymentMethod('transfer')}
-              className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+              className={`py-1.5 sm:py-2 px-2 sm:px-3 rounded-lg sm:rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
                 paymentMethod === 'transfer'
                   ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
                   : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
@@ -695,9 +695,9 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           {paymentMethod === 'cash' && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 w-24">Uang Diterima:</span>
+                <span className="text-[11px] sm:text-xs text-slate-400 w-24 shrink-0">Uang Diterima:</span>
                 <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 font-bold">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500 font-bold">
                     Rp
                   </span>
                   <input
@@ -708,51 +708,55 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                       setCashGiven(Number(e.target.value) || 0);
                     }}
                     placeholder={grandTotal.toString()}
-                    className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-750 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:border-emerald-500"
+                    className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-750 rounded-lg sm:rounded-xl text-xs sm:text-sm font-mono font-bold text-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
               </div>
 
               {/* Quick Cash Suggestions */}
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-4 gap-1 sm:gap-1.5">
                 <button
                   type="button"
                   onClick={() => handleQuickCash(grandTotal)}
-                  className="py-1 px-2 bg-slate-800 hover:bg-slate-750 text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition"
+                  className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate"
+                  title="Uang Pas"
                 >
                   Uang Pas
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickCash(20000)}
-                  className="py-1 px-2 bg-slate-800 hover:bg-slate-750 text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition"
+                  className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate font-mono"
+                  title="20.000"
                 >
                   20.000
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickCash(50000)}
-                  className="py-1 px-2 bg-slate-800 hover:bg-slate-750 text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition"
+                  className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate font-mono"
+                  title="50.000"
                 >
                   50.000
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickCash(100000)}
-                  className="py-1 px-2 bg-slate-800 hover:bg-slate-750 text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition"
+                  className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate font-mono"
+                  title="100.000"
                 >
                   100.000
                 </button>
               </div>
 
               {/* Kembalian Banner */}
-              <div className={`p-2 rounded-xl flex items-center justify-between text-xs font-semibold ${
+              <div className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl flex items-center justify-between text-xs font-semibold ${
                 cashGiven >= grandTotal
                   ? 'bg-emerald-950/60 border border-emerald-500/30 text-emerald-300'
                   : 'bg-rose-950/60 border border-rose-500/30 text-rose-300'
               }`}>
                 <span>Kembalian:</span>
-                <span className="font-mono font-bold text-sm">
+                <span className="font-mono font-bold text-xs sm:text-sm">
                   {cashGiven >= grandTotal
                     ? `Rp ${formatRupiah(changeAmount)}`
                     : `Kurang Rp ${formatRupiah(grandTotal - cashGiven)}`}
@@ -762,14 +766,14 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           )}
 
           {/* Action Button: Checkout & Print */}
-          <div className="pt-2 pb-3 sm:pb-5">
+          <div className="pt-1 pb-2 sm:pb-3">
             <button
               onClick={handleCheckout}
               disabled={cart.length === 0 || isProcessing || (paymentMethod === 'cash' && cashGiven < grandTotal)}
-              className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-40 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 text-sm transition-all active:scale-[0.99]"
+              className="w-full py-2.5 sm:py-3 px-3 sm:px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-40 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 text-xs sm:text-sm transition-all active:scale-[0.99]"
             >
-              <ReceiptText className="w-4 h-4" />
-              {isProcessing ? 'Menyimpan...' : 'Bayar & Cetak Struk 58mm'}
+              <ReceiptText className="w-4 h-4 shrink-0" />
+              <span>{isProcessing ? 'Menyimpan...' : 'Bayar & Cetak Struk 58mm'}</span>
             </button>
           </div>
         </div>
