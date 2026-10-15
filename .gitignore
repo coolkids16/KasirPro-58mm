@@ -1,8 +1,34 @@
+# Dependencies
 node_modules/
-build/
+bun.lock
+
+# Build outputs
 dist/
-coverage/
+dist-electron/
+build/
+*.apk
+*.aab
+
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/gen/
+
+# Capacitor / Android build artifacts & IDE files
+android/
+android/app/build/
+android/.gradle/
+android/.idea/
+android/captures/
+android/gradlew
+android/gradlew.bat
+
+# OS / Editor junk
 .DS_Store
 *.log
-.env*
-!.env.example
+.vscode/
+# Abaikan folder android hasil generate Capacitor
+android/
+
+# Abaikan schema dan aset icon otomatis Tauri
+src-tauri/gen/
+src-tauri/icons/

@@ -30,7 +30,7 @@ fn detect_usb_details(device_path: &str) -> (Option<String>, Option<String>, Str
         let vid = fs::read_to_string(&vid_path).ok().map(|s| s.trim().to_string());
         let pid = fs::read_to_string(&pid_path).ok().map(|s| s.trim().to_string());
 
-        if let (Some(ref v), Some(ref p)) = (&vid, &pid) {
+        if let (Some(v), Some(p)) = (&vid, &pid) {
             return (
                 Some(v.clone()),
                 Some(p.clone()),
