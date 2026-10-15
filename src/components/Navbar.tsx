@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Store, 
   Package, 
@@ -59,10 +60,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [showSyncInfo, setShowSyncInfo] = useState<boolean>(false);
-  const syncPopoverRef = useRef<HTMLDivElement>(null);
 
   const [showProfileMenu, setShowProfileMenu] = useState<boolean>(false);
-  const menuPopoverRef = useRef<HTMLDivElement>(null);
 
   // Helper to extract display label & initial for signed in user
   const getUserNameLabel = (user: FirebaseUser | null): string => {
@@ -97,42 +96,12 @@ export const Navbar: React.FC<NavbarProps> = ({
     };
   }, []);
 
-  // Close popover when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (syncPopoverRef.current && !syncPopoverRef.current.contains(event.target as Node)) {
-        setShowSyncInfo(false);
-      }
-    };
-    if (showSyncInfo) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showSyncInfo]);
-
-  // Close profile menu popover when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuPopoverRef.current && !menuPopoverRef.current.contains(event.target as Node)) {
-        setShowProfileMenu(false);
-      }
-    };
-    if (showProfileMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showProfileMenu]);
-
   // Firestore sync is active when user is signed in AND device is online
   const isFirestoreActive = Boolean(currentUser && isOnline);
 
   return (
-    <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
-      <div className="max-w-[1550px] mx-auto px-4 sm:px-6 lg:px-8">
+    <header className="w-full max-w-full overflow-hidden bg-slate-900 border-b border-slate-800 sticky top-0 z-30">
+      <div className="w-full max-w-full mx-auto px-2 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Left: Brand + Nav Tabs group sitting closely together */}
           <div className="flex items-center gap-3 lg:gap-4">
@@ -163,7 +132,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             {/* Navigation Tabs aligned closely to the left */}
-            <nav className="hidden md:flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800 shrink-0 ml-2 sm:ml-3">
+            <nav className="hidden lg:flex [@media(orientation:portrait)]:!hidden items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800 shrink-0 ml-2 sm:ml-3">
               <button
                 onClick={() => setActiveTab('pos')}
                 className={`flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
@@ -246,7 +215,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Right: Consolidated Quick Actions & Status */}
           <div className="flex items-center gap-2 lg:gap-3 shrink-0">
             {/* Live Sync Status Pill Indicator */}
-            <div className="relative" ref={syncPopoverRef}>
+            <div className="relative">
               <button
                 onClick={() => setShowSyncInfo(!showSyncInfo)}
                 title="Status Database & Sinkronisasi (Klik untuk rincian)"
@@ -282,8 +251,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               {/* Popover Card Info */}
-              {showSyncInfo && (
-                <div className="absolute right-0 mt-2 w-80 p-4 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 text-xs space-y-3 animate-in fade-in">
+              {showSyncInfo && createPortal(
+                <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+                  onClick={() => setShowSyncInfo(false)}
+                >
+                  <div
+                    className="relative z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full mx-4 p-4 text-xs space-y-3 animate-in fade-in"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Status Sinkronisasi Database"
+                    onClick={event => event.stopPropagation()}
+                  >
                   <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
                     <span className="font-bold text-white flex items-center gap-1.5 text-xs whitespace-nowrap">
                       <Database className="w-4 h-4 text-emerald-400" />
@@ -384,12 +363,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </div>
                     )}
                   </div>
-                </div>
+                  </div>
+                </div>,
+                document.body
               )}
             </div>
 
             {/* Unified User & Settings Dropdown Menu Button */}
-            <div className="relative" ref={menuPopoverRef}>
+            <div className="relative">
               <button
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
                 title="Buka Menu Pengaturan & Akun"
@@ -431,8 +412,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               {/* Dropdown Menu Card */}
-              {showProfileMenu && (
-                <div className="absolute right-0 mt-2 w-72 p-3 bg-slate-900 border border-slate-750 rounded-2xl shadow-2xl z-50 text-xs space-y-2 animate-in fade-in zoom-in-95 duration-100">
+              {showProfileMenu && createPortal(
+                <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+                  onClick={() => setShowProfileMenu(false)}
+                >
+                  <div
+                    className="relative z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full mx-4 p-3 text-xs space-y-2 animate-in fade-in zoom-in-95 duration-100"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Menu akun dan pengaturan"
+                    onClick={event => event.stopPropagation()}
+                  >
                   {/* User Profile Header Section */}
                   <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-3">
                     {currentUser?.photoURL ? (
@@ -564,7 +555,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                       {runtimeEnv}
                     </span>
                   </div>
-                </div>
+                  </div>
+                </div>,
+                document.body
               )}
             </div>
 
@@ -575,10 +568,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Mobile Navigation Bar */}
-        <div className="md:hidden flex items-center justify-around py-2 border-t border-slate-800">
+        <nav className="flex lg:hidden [@media(orientation:portrait)]:!flex items-center justify-start gap-1 py-2 border-t border-slate-800 overflow-x-auto no-scrollbar whitespace-nowrap">
           <button
             onClick={() => setActiveTab('pos')}
-            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded ${
+            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded shrink-0 ${
               activeTab === 'pos' ? 'text-emerald-400 font-bold' : 'text-slate-400'
             }`}
           >
@@ -587,7 +580,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('products')}
-            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded ${
+            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded shrink-0 ${
               activeTab === 'products' ? 'text-emerald-400 font-bold' : 'text-slate-400'
             }`}
           >
@@ -596,7 +589,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('transactions')}
-            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded ${
+            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded shrink-0 ${
               activeTab === 'transactions' ? 'text-emerald-400 font-bold' : 'text-slate-400'
             }`}
           >
@@ -605,7 +598,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('pembukuan')}
-            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded ${
+            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded shrink-0 ${
               activeTab === 'pembukuan' ? 'text-emerald-400 font-bold' : 'text-slate-400'
             }`}
           >
@@ -614,7 +607,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('strukscan')}
-            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded ${
+            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded shrink-0 ${
               activeTab === 'strukscan' ? 'text-emerald-400 font-bold' : 'text-slate-400'
             }`}
           >
@@ -623,14 +616,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('printer')}
-            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded ${
+            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded shrink-0 ${
               activeTab === 'printer' ? 'text-emerald-400 font-bold' : 'text-slate-400'
             }`}
           >
             <Printer className="w-4 h-4" />
             Printer
           </button>
-        </div>
+        </nav>
       </div>
     </header>
   );

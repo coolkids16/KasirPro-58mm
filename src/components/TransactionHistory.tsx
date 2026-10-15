@@ -318,7 +318,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+    <div className="w-full max-w-full mx-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
       {/* Toast Notification */}
       {toastMsg && (
         <div className="p-3.5 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs flex items-center gap-2 shadow-lg">
@@ -328,7 +328,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       )}
 
       {/* Metrics Banner */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 [@media(orientation:portrait)]:grid-cols-1 gap-4">
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
             <TrendingUp className="w-6 h-6" />
@@ -452,7 +452,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         </div>
 
         {/* Monthly Summary Badges */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 text-xs">
           <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-xl">
             <span className="text-slate-400 text-[11px] block">Penjualan Bulan Ini</span>
             <strong className="text-emerald-400 font-bold text-sm sm:text-base font-mono">
@@ -524,7 +524,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       </div>
 
       {/* Search & Actions Toolbar */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -536,7 +536,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-400">
             <span className="text-slate-500">Zona:</span>
             <span className="font-mono font-bold text-emerald-400">{getTimezoneAbbr(settings?.timezone)}</span>
@@ -556,10 +556,10 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Transactions Table (Left 2 Columns) */}
-        <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+          <div className="w-full overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 font-semibold uppercase text-[10px] tracking-wider">
                 <tr>
@@ -730,7 +730,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
             <div className="mt-6 pt-3 border-t border-slate-800 flex items-center gap-2">
               <button
                 onClick={() => onSelectTransactionToPrint(selectedTx)}
-                className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition"
+                className="w-full sm:w-auto flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition"
               >
                 <Printer className="w-4 h-4" />
                 Cetak Struk 58mm
@@ -750,7 +750,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       {/* IN-APP CONFIRMATION MODAL: DELETE SINGLE TRANSACTION */}
       {txToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center space-y-4">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 text-center space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto border border-rose-500/20">
               <Trash2 className="w-6 h-6" />
             </div>
@@ -786,7 +786,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       {/* IN-APP CONFIRMATION MODAL: CLEAR ALL TRANSACTIONS */}
       {isClearAllOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center space-y-4">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 text-center space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto border border-rose-500/20">
               <AlertCircle className="w-6 h-6" />
             </div>

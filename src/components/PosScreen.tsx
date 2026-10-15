@@ -315,7 +315,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen w-full max-w-[1550px] mx-auto p-2.5 sm:p-3.5 md:p-4 lg:p-6 flex flex-col lg:flex-row gap-3 sm:gap-4 lg:gap-6 overflow-y-auto pb-20 sm:pb-24 lg:pb-16 scroll-smooth">
+    <div className="min-h-screen w-full max-w-full mx-auto p-2.5 sm:p-3.5 md:p-4 lg:p-6 flex flex-col lg:flex-row [@media(orientation:portrait)]:flex-col gap-3 sm:gap-4 lg:gap-6 overflow-y-auto pb-20 sm:pb-24 lg:pb-16 scroll-smooth">
       
       {/* LEFT SECTION: Product Catalog Grid & Search */}
       <div className="flex-1 flex flex-col">
@@ -376,14 +376,14 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           </div>
 
           {/* Category Pills */}
-          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2.5 pt-0.5 elegant-scrollbar">
+          <div className="flex flex-nowrap items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2.5 pt-0.5 elegant-scrollbar">
             {categories.map(cat => {
               const active = selectedCategory === cat;
               return (
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all ${
+                  className={`shrink-0 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all ${
                     active
                       ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
                       : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-750'
@@ -396,8 +396,8 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           </div>
         </div>
 
-        {/* Product Cards Grid: 1 column on narrow mobile, 2 columns on 768p/tablets, 3-4 columns on larger desktops */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2.5 sm:gap-3 lg:gap-3.5 overflow-y-auto max-h-[420px] sm:max-h-[460px] lg:max-h-[calc(100vh-260px)] pr-1 elegant-scrollbar overscroll-contain scroll-smooth">
+        {/* Product Cards Grid: two columns on phones, with denser grids on wide screens */}
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-3 2xl:grid-cols-4 lg:gap-3.5 overflow-y-auto max-h-[420px] sm:max-h-[460px] lg:max-h-[calc(100vh-260px)] pr-1 elegant-scrollbar overscroll-contain scroll-smooth">
           {filteredProducts.map(product => {
             const outOfStock = product.stock <= 0;
             const inCart = cart.find(i => i.product.id === product.id);
@@ -406,7 +406,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
               <div
                 key={product.id}
                 onClick={() => !outOfStock && addToCart(product)}
-                className={`relative group bg-slate-900 border rounded-xl sm:rounded-2xl p-2.5 sm:p-3.5 flex flex-col justify-between transition-all select-none cursor-pointer ${
+                className={`relative group w-full min-w-0 bg-slate-900 border rounded-xl sm:rounded-2xl p-2.5 sm:p-3.5 flex flex-col justify-between transition-all select-none cursor-pointer ${
                   outOfStock
                     ? 'border-slate-800 opacity-50 cursor-not-allowed'
                     : inCart
@@ -436,13 +436,13 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                     </span>
                   </div>
 
-                  <h4 className="font-semibold text-white text-xs sm:text-sm line-clamp-2 leading-snug group-hover:text-emerald-300 transition-colors">
+                  <h4 className="min-w-0 break-words font-semibold text-white text-xs sm:text-sm leading-snug group-hover:text-emerald-300 transition-colors">
                     {product.name}
                   </h4>
                 </div>
 
-                <div className="mt-2.5 sm:mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                  <div className="font-bold text-emerald-400 text-xs sm:text-sm">
+                <div className="mt-2.5 sm:mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                  <div className="min-w-0 break-words font-bold text-emerald-400 text-xs sm:text-sm">
                     Rp {formatRupiah(product.price)}
                   </div>
 
@@ -467,7 +467,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       </div>
 
       {/* RIGHT SECTION: Cart & Payment Checkout Panel */}
-      <div className="w-full lg:w-[420px] xl:w-[460px] bg-slate-900 border border-slate-800 rounded-xl sm:rounded-2xl flex flex-col shadow-xl overflow-hidden lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto scroll-smooth">
+      <div className="w-full lg:w-[420px] xl:w-[460px] [@media(orientation:portrait)]:w-full bg-slate-900 border border-slate-800 rounded-xl sm:rounded-2xl flex flex-col shadow-xl overflow-hidden lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto scroll-smooth">
         
         {/* Cart Header */}
         <div className="p-3 sm:p-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
@@ -621,7 +621,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           </div>
 
           {showDiscountInput && (
-            <div className="flex items-center gap-2 pt-1 pb-1">
+            <div className="flex flex-col sm:flex-row gap-2 pt-1 pb-1">
               <input
                 type="number"
                 placeholder="Jumlah potongan (Rp)"
@@ -714,7 +714,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
               </div>
 
               {/* Quick Cash Suggestions */}
-              <div className="grid grid-cols-4 gap-1 sm:gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button
                   type="button"
                   onClick={() => handleQuickCash(grandTotal)}

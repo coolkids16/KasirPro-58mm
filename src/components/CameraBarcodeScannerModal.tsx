@@ -314,7 +314,7 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
           {/* Laser Scanning Animation Overlay */}
           {isScanning && (
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-              <div className="w-[260px] h-[180px] border-2 border-emerald-400/70 rounded-2xl relative shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+              <div className="w-[min(260px,100%)] h-[180px] border-2 border-emerald-400/70 rounded-2xl relative shadow-[0_0_20px_rgba(16,185,129,0.3)]">
                 {/* Corner Accents */}
                 <div className="absolute -top-1 -left-1 w-5 h-5 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg" />
                 <div className="absolute -top-1 -right-1 w-5 h-5 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg" />
@@ -329,7 +329,7 @@ export const CameraBarcodeScannerModal: React.FC<CameraBarcodeScannerModalProps>
 
           {/* Camera Error Message */}
           {errorMessage && (
-            <div className="absolute inset-0 p-6 bg-slate-950/95 flex flex-col items-center justify-center text-center z-20">
+            <div className="absolute inset-0 p-3 sm:p-4 lg:p-6 bg-slate-950/95 flex flex-col items-center justify-center text-center z-20">
               <AlertCircle className="w-10 h-10 text-rose-400 mb-2" />
               <p className="text-xs text-rose-300 font-semibold mb-3 max-w-xs">{errorMessage}</p>
               <button

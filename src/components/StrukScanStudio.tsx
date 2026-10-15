@@ -1110,7 +1110,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-3 sm:p-5 lg:p-6 space-y-5 text-slate-100">
+    <div className="w-full max-w-full mx-auto p-2 sm:p-4 lg:p-6 space-y-4 sm:space-y-5 text-slate-100">
       <input 
         type="file" 
         ref={fileInputRef} 
@@ -1217,7 +1217,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 [@media(orientation:portrait)]:grid-cols-1 gap-3">
             {history.map(item => (
               <div
                 key={item.id}
@@ -1362,7 +1362,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                 <div
                   ref={receiptCardRef}
                   className={`bg-white text-slate-900 font-mono text-[11px] leading-tight p-4 shadow-2xl rounded-sm ${
-                    paperWidth === '58mm' ? 'w-[280px]' : 'w-[360px]'
+                    paperWidth === '58mm' ? 'w-[min(280px,100%)]' : 'w-[min(360px,100%)]'
                   }`}
                   style={{
                     fontFamily: '"Courier New", Courier, monospace',
@@ -1586,7 +1586,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
           {/* RIGHT COLUMN: STRUCTURED EDITOR (7 COLS) */}
           <div className="lg:col-span-7 space-y-5">
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-4 space-y-4 sm:space-y-5 overflow-hidden">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
                 <div className="flex items-center gap-2">
                   <SlidersHorizontal className="w-5 h-5 text-emerald-400" />
@@ -1761,13 +1761,13 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
 
               {/* 3. RINCIAN INFO TAMBAHAN (KEY-VALUE PAIRS METADATA) */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row [@media(orientation:portrait)]:!flex-col items-start sm:items-center justify-between gap-2">
                   <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
                     Rincian Info Tambahan ({data.metadata.length})
                   </span>
                   <button
                     onClick={handleAddMetadataRow}
-                    className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold flex items-center gap-1 transition"
+                    className="w-full sm:w-auto [@media(orientation:portrait)]:!w-full px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Tambah
@@ -1944,7 +1944,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
 
               {/* 4. RINCIAN ITEM BELANJA (SINGLE ITEM CATEGORY NOMINAL) */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row [@media(orientation:portrait)]:!flex-col items-start sm:items-center justify-between gap-2">
                   <div>
                     <span className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
                       Rincian Item Belanja / Category Nominal ({data.items.length})
@@ -1955,7 +1955,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                   </div>
                   <button
                     onClick={handleAddItemRow}
-                    className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold flex items-center gap-1 transition"
+                    className="w-full sm:w-auto [@media(orientation:portrait)]:!w-full px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Tambah Item
@@ -1984,9 +1984,9 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                         )}
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 [@media(orientation:portrait)]:!grid-cols-1 gap-2 text-sm">
                         <div>
-                          <label className="block text-[10px] text-slate-500 mb-0.5">Kuantitas (Qty)</label>
+                          <label className="block text-xs text-slate-500 mb-0.5">Kuantitas (Qty)</label>
                           <input
                             type="number"
                             min={1}
@@ -1997,7 +1997,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                         </div>
 
                         <div>
-                          <label className="block text-[10px] text-slate-500 mb-0.5">Harga Nominal (Rp)</label>
+                          <label className="block text-xs text-slate-500 mb-0.5">Harga Nominal (Rp)</label>
                           <input
                             type="number"
                             min={0}
@@ -2008,7 +2008,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                         </div>
 
                         <div>
-                          <label className="block text-[10px] text-slate-500 mb-0.5">Subtotal Baris</label>
+                          <label className="block text-xs text-slate-500 mb-0.5">Subtotal Baris</label>
                           <div className="w-full px-2.5 py-1.5 bg-slate-900/60 border border-slate-800 rounded-lg text-emerald-300 font-mono font-bold">
                             Rp {formatRupiah(it.total)}
                           </div>
@@ -2021,7 +2021,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
 
               {/* 5. TOTAL, BIAYA LAYANAN, METODE PEMBAYARAN & NOMINAL BAYAR/KEMBALIAN */}
               <div className="p-4 bg-emerald-950/20 border border-emerald-500/30 rounded-xl space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 [@media(orientation:portrait)]:!grid-cols-1 gap-3 text-sm">
                   <div>
                     <label className="block text-slate-400 mb-1 font-medium">Biaya Admin / Service Charge (Rp):</label>
                     <input
@@ -2042,7 +2042,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
 
                   <div>
                     <label className="block text-slate-400 mb-1 font-medium">TOTAL BELANJA / BAYAR (Rp):</label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row [@media(orientation:portrait)]:!flex-col items-stretch sm:items-center gap-2">
                       <input
                         type="number"
                         value={data.total}
@@ -2050,11 +2050,11 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                           const val = Number(e.target.value) || 0;
                           updateData(prev => ({ ...prev, total: val }));
                         }}
-                        className="flex-1 px-3 py-2 bg-slate-950 border border-emerald-500 rounded-xl text-emerald-400 font-extrabold text-base font-mono focus:outline-none"
+                        className="min-w-0 w-full sm:flex-1 px-3 py-2 bg-slate-950 border border-emerald-500 rounded-xl text-emerald-400 font-extrabold text-base font-mono focus:outline-none"
                       />
                       <button
                         onClick={handleRecalculate}
-                        className="px-3 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs shrink-0"
+                        className="w-full sm:w-auto [@media(orientation:portrait)]:!w-full self-end px-3 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-sm shrink-0"
                         title="Hitung Ulang Otomatis dari Subtotal + Admin"
                       >
                         Hitung
@@ -2064,7 +2064,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                 </div>
 
                 {/* NOMINAL DITERIMA & KEMBALIAN (PINDAH DI BAWAH BIAYA ADMIN & TOTAL BELANJA) */}
-                <div className="pt-2 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="pt-2 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-2 [@media(orientation:portrait)]:!grid-cols-1 gap-3 text-sm">
                   <div>
                     <label className="block text-slate-400 mb-1 font-medium">Nominal Diterima / Bayar (Rp):</label>
                     <input

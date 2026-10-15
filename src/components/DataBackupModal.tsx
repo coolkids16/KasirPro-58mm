@@ -406,7 +406,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
 
         {/* TAB 1: EKSPOR DATA */}
         {activeTab === 'export' && (
-          <div className="p-6 space-y-5 text-xs">
+          <div className="p-3 sm:p-4 lg:p-6 space-y-5 text-xs">
             {/* Option 1: Full Unified Backup */}
             <div className="p-4 bg-gradient-to-r from-emerald-950/50 via-slate-950 to-slate-950 border border-emerald-500/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-start gap-3">
@@ -521,11 +521,11 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
 
         {/* TAB 2: IMPOR DATA */}
         {activeTab === 'import' && (
-          <div className="p-6 space-y-5 text-xs">
+          <div className="p-3 sm:p-4 lg:p-6 space-y-5 text-xs">
             {/* File Dropzone Area */}
             <div 
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-slate-700 hover:border-emerald-500/50 bg-slate-950 p-6 rounded-2xl text-center cursor-pointer transition space-y-2 group"
+              className="border-2 border-dashed border-slate-700 hover:border-emerald-500/50 bg-slate-950 p-3 sm:p-4 lg:p-6 rounded-2xl text-center cursor-pointer transition space-y-2 group"
             >
               <input
                 ref={fileInputRef}
@@ -622,7 +622,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
 
         {/* TAB 3: SINKRONISASI CLOUD FIRESTORE */}
         {activeTab === 'cloud' && (
-          <div className="p-6 space-y-5 text-xs">
+          <div className="p-3 sm:p-4 lg:p-6 space-y-5 text-xs">
             {/* Status Connection Card */}
             <div className={`p-4 rounded-2xl border flex items-start gap-3.5 ${
               auth.currentUser

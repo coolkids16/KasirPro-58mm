@@ -863,7 +863,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
               <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                 Total Sisa Utang Aktif
               </span>
-              <div className={`text-3xl sm:text-4xl font-black font-mono tracking-tight ${
+              <div className={`text-xl sm:text-2xl lg:text-3xl font-black font-mono tracking-tight ${
                 isPaid ? 'text-emerald-400' : 'text-rose-400'
               }`}>
                 Rp {formatRupiah(selectedCustomer.remainingAmount)}
@@ -914,7 +914,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
               </div>
             </div>
             {isDue && (
-              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-500 text-white animate-pulse">
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-500 text-white">
                 Lewat!
               </span>
             )}
@@ -979,7 +979,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
           </div>
 
           {/* Rows */}
-          <div className="divide-y divide-slate-850 max-h-[500px] overflow-y-auto">
+          <div className="divide-y divide-slate-850 max-h-[500px] overflow-y-auto transform-gpu contain-paint">
             {customerMutations.map((mut) => {
               const isTake = mut.type === 'take';
               const isGive = mut.type === 'give';
@@ -1046,7 +1046,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
         {/* =========================================================================
             FIXED BOTTOM DOCK: TWO BIG ACTION BUTTONS (BERIKAN & TERIMA)
             ========================================================================= */}
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/90 backdrop-blur-md border-t border-slate-800 p-3 sm:p-4 shadow-2xl">
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950 border-t border-slate-800 p-3 sm:p-4 shadow-md">
           <div className="max-w-4xl mx-auto grid grid-cols-2 gap-3">
             {/* Tombol Merah: Berikan (Tambah Utang) */}
             <button
@@ -1078,8 +1078,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
         {/* Modal: "Berikan" (Tambah Utang Baru Pada Pelanggan Ini) */}
         {isGiveModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-slate-900 border border-rose-500/40 w-full max-w-sm rounded-3xl shadow-2xl p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
+            <div className="bg-slate-900 border border-rose-500/40 w-full max-w-sm rounded-3xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
@@ -1200,8 +1200,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
         {/* Modal: "Terima" (Catat Pembayaran / Cicilan) */}
         {isTakeModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-slate-900 border border-emerald-500/40 w-full max-w-sm rounded-3xl shadow-2xl p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
+            <div className="bg-slate-900 border border-emerald-500/40 w-full max-w-sm rounded-3xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
@@ -1330,8 +1330,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
         {/* Modal: Atur Jatuh Tempo */}
         {isDueDateModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl shadow-2xl p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
+            <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-emerald-400" />
                 Atur Tanggal Jatuh Tempo
@@ -1383,8 +1383,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
         {/* Modal: Konfirmasi Lunaskan */}
         {isPayoffModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-slate-900 border border-emerald-500/40 w-full max-w-sm rounded-3xl shadow-2xl p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
+            <div className="bg-slate-900 border border-emerald-500/40 w-full max-w-sm rounded-3xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
               <div className="flex items-center gap-2.5 pb-2 border-b border-slate-800">
                 <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
                   <CheckCircle2 className="w-5 h-5" />
@@ -1428,8 +1428,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
         {/* Modal: Bagikan Laporan */}
         {isShareModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl shadow-2xl p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
+            <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
               <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <Share2 className="w-4 h-4 text-cyan-400" />
@@ -1478,8 +1478,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
         {/* Modal: Hapus Pelanggan */}
         {isDeleteModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-slate-900 border border-rose-500/40 w-full max-w-sm rounded-3xl shadow-2xl p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
+            <div className="bg-slate-900 border border-rose-500/40 w-full max-w-sm rounded-3xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
               <div className="flex items-center gap-2.5 text-rose-400 pb-2 border-b border-slate-800">
                 <Trash2 className="w-5 h-5" />
                 <h3 className="text-base font-bold text-white">Hapus Pelanggan?</h3>
@@ -1511,8 +1511,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
         {/* Modal: Konfirmasi Hapus Catatan Transaksi */}
         {mutationToDelete && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-slate-900 border border-rose-500/40 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
+            <div className="bg-slate-900 border border-rose-500/40 w-full max-w-md rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center gap-2.5">
                   <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
@@ -1603,7 +1603,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
               <ArrowDownLeft className="w-5 h-5" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-rose-400 mt-3">
+          <div className="text-xl sm:text-2xl lg:text-3xl font-black font-mono text-rose-400 mt-3">
             Rp {formatRupiah(metrics.totalUtangPelanggan)}
           </div>
           <div className="mt-2 text-xs flex items-center gap-1.5 text-slate-400">
@@ -1632,7 +1632,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
               <ArrowUpRight className="w-5 h-5" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400 mt-3">
+          <div className="text-xl sm:text-2xl lg:text-3xl font-black font-mono text-amber-400 mt-3">
             Rp {formatRupiah(metrics.totalUtangSaya)}
           </div>
           <div className="mt-2 text-xs flex items-center gap-1.5 text-slate-400">
@@ -1710,11 +1710,11 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
             <div
               key={customer.id || customer.firestoreId}
               onClick={() => setSelectedCustomerId(customer.id || customer.firestoreId)}
-              className="bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-850/60 p-4 rounded-2xl transition cursor-pointer flex items-center justify-between gap-3 shadow-sm group"
+              className="bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-850/60 p-4 rounded-2xl transition cursor-pointer flex items-center justify-between gap-3 group"
             >
               {/* Left: Avatar with Initials & Info */}
               <div className="flex items-center gap-3.5 min-w-0">
-                <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${getAvatarColor(customer.customerName)} flex items-center justify-center text-white font-extrabold text-base shadow-md shrink-0`}>
+                <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${getAvatarColor(customer.customerName)} flex items-center justify-center text-white font-extrabold text-base shrink-0`}>
                   {getInitials(customer.customerName)}
                 </div>
 
@@ -1772,7 +1772,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
         })}
 
         {filteredDebts.length === 0 && (
-          <div className="py-16 text-center text-slate-500 bg-slate-900/60 border border-slate-800 rounded-3xl p-6">
+          <div className="py-16 text-center text-slate-500 bg-slate-900/60 border border-slate-800 rounded-3xl p-3 sm:p-4 lg:p-6">
             <User className="w-10 h-10 mx-auto mb-2 opacity-30 text-slate-400" />
             <p className="text-sm font-bold text-slate-300">
               Tidak ada data {activeCategory === 'pelanggan' ? 'utang pelanggan' : 'utang saya'}.
@@ -1809,8 +1809,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
           MODAL: CATAT UTANG BARU (+ Catat Utang)
           ========================================================================= */}
       {isNewDebtModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-3xl shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-3xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-500 text-slate-950 font-black flex items-center justify-center">

@@ -266,7 +266,7 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen ${theme} ${theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-slate-950 text-slate-100'} flex flex-col font-sans`}>
+    <div className={`box-border w-full max-w-full h-screen overflow-hidden ${theme} ${theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-slate-950 text-slate-100'} flex flex-col font-sans`}>
       {/* Top Navbar */}
       <Navbar
         activeTab={activeTab}
@@ -286,7 +286,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 pb-16 md:pb-6">
+      <main className="box-border w-full max-w-full min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-2 sm:px-4 py-3 pb-16 md:pb-6">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="w-10 h-10 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mb-4" />

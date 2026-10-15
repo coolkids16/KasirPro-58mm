@@ -55,7 +55,7 @@ export const RoleProtectedRoute: React.FC<RoleProtectedRouteProps> = ({
 
   if (isLoadingRole) {
     return (
-      <div className="min-h-[50vh] flex flex-col items-center justify-center p-6">
+      <div className="min-h-[50vh] flex flex-col items-center justify-center p-3 sm:p-4 lg:p-6">
         <div className="w-8 h-8 border-3 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mb-3" />
         <p className="text-xs text-slate-400 font-mono">Memverifikasi otorisasi akun...</p>
       </div>
@@ -64,7 +64,7 @@ export const RoleProtectedRoute: React.FC<RoleProtectedRouteProps> = ({
 
   if (!currentUser) {
     return (
-      <div className="min-h-[50vh] flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto">
+      <div className="min-h-[50vh] flex flex-col items-center justify-center p-3 sm:p-4 lg:p-6 text-center max-w-md mx-auto">
         <div className="w-14 h-14 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-2xl flex items-center justify-center mb-4">
           <Lock className="w-7 h-7" />
         </div>
@@ -78,7 +78,7 @@ export const RoleProtectedRoute: React.FC<RoleProtectedRouteProps> = ({
 
   if (!role || !allowedRoles.includes(role)) {
     return (
-      <div className="min-h-[50vh] flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto">
+      <div className="min-h-[50vh] flex flex-col items-center justify-center p-3 sm:p-4 lg:p-6 text-center max-w-md mx-auto">
         <div className="w-14 h-14 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-2xl flex items-center justify-center mb-4">
           <ShieldAlert className="w-7 h-7" />
         </div>

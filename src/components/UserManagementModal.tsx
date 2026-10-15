@@ -178,7 +178,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
         </div>
 
         {/* Content Area */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
+        <div className="p-3 sm:p-4 lg:p-6 overflow-y-auto space-y-4 sm:space-y-6 flex-1">
           {/* Notification */}
           {errorMessage && (
             <div className="p-3 bg-rose-950/60 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-center gap-2">

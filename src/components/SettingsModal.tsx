@@ -171,7 +171,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSave} className="p-6 space-y-4 text-xs">
+        <form onSubmit={handleSave} className="p-3 sm:p-4 lg:p-6 space-y-4 text-xs">
           {saveSuccess && (
             <div className="p-3 bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 rounded-xl flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />

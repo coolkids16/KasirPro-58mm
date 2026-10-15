@@ -71,6 +71,20 @@ interface PembukuanProps {
 type PeriodFilter = 'today' | 'this_month' | 'all' | 'custom';
 type PembukuanSubTab = 'dashboard' | 'income' | 'expense' | 'debts';
 
+interface IncomeFormItem {
+  id: string;
+  keterangan: string;
+  modal: number;
+  pemasukan: number;
+}
+
+const createIncomeFormItem = (): IncomeFormItem => ({
+  id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  keterangan: '',
+  modal: 0,
+  pemasukan: 0
+});
+
 export const Pembukuan: React.FC<PembukuanProps> = ({
   settings,
   storeId,
@@ -304,6 +318,12 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   const [formCustomerName, setFormCustomerName] = useState<string>('');
   const [formDescription, setFormDescription] = useState<string>('');
   const [formAmount, setFormAmount] = useState<string>('');
+  const [incomeItems, setIncomeItems] = useState<IncomeFormItem[]>([createIncomeFormItem()]);
+  const incomeTotals = useMemo(() => incomeItems.reduce((totals, item) => ({
+    modal: totals.modal + (Number(item.modal) || 0),
+    pemasukan: totals.pemasukan + (Number(item.pemasukan) || 0)
+  }), { modal: 0, pemasukan: 0 }), [incomeItems]);
+  const incomeProfit = incomeTotals.pemasukan - incomeTotals.modal;
   const [formDpAmount, setFormDpAmount] = useState<string>('');
   const [formCost, setFormCost] = useState<string>('');
   const [formStatus, setFormStatus] = useState<'lunas' | 'belum_lunas'>('lunas');
@@ -712,6 +732,12 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       setFormDescription(item.description);
       setFormAmount(item.amount.toString());
       setFormCost((item.cost || 0).toString());
+      setIncomeItems([{
+        ...createIncomeFormItem(),
+        keterangan: item.description,
+        modal: item.cost || 0,
+        pemasukan: item.amount
+      }]);
       setFormStatus(item.status);
       setFormPaymentMethod(item.paymentMethod || 'Tunai');
       setFormDate(item.dateString);
@@ -722,6 +748,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       setFormAmount('');
       setFormDpAmount('');
       setFormCost('');
+      setIncomeItems([createIncomeFormItem()]);
       setFormStatus('lunas');
       setFormPaymentMethod('Tunai');
       setFormDate(getLocalDateString());
@@ -783,9 +810,13 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   // Save Income / Expense
   const handleSaveCashFlow = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amountNum = parseFloat(formAmount) || 0;
-    const costNum = parseFloat(formCost) || 0;
-    const profitNum = formType === 'income' ? Math.max(0, amountNum - costNum) : 0;
+    const amountNum = formType === 'income' ? incomeTotals.pemasukan : (parseFloat(formAmount) || 0);
+    const costNum = formType === 'income' ? incomeTotals.modal : (parseFloat(formCost) || 0);
+    const profitNum = formType === 'income' ? amountNum - costNum : 0;
+    const incomeDescription = incomeItems
+      .map(item => item.keterangan.trim())
+      .filter(Boolean)
+      .join('; ');
 
     if (amountNum <= 0) {
       alert('Nominal harus lebih dari 0');
@@ -804,7 +835,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
         const cfPayload: CashFlowRecord = {
           type: formType,
           category: formCategory,
-          description: formDescription.trim() || `${formCategory} (Bon a.n ${customerName})`,
+          description: incomeDescription || formDescription.trim() || `${formCategory} (Bon a.n ${customerName})`,
           amount: amountNum, // Total Harga Jual transaksi
           paidAmount: dpNum, // Uang Muka / DP
           dpAmount: dpNum,
@@ -840,8 +871,9 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
           const debtDate = formDate || getLocalDateString();
           const debtTimestamp = parseLocalDateTime(debtDate);
-          const noteText = formDescription.trim() 
-            ? `${formDescription.trim()} (Total: Rp ${formatRupiah(amountNum)}, DP: Rp ${formatRupiah(dpNum)})`
+          const noteDescription = incomeDescription || formDescription.trim();
+          const noteText = noteDescription
+            ? `${noteDescription} (Total: Rp ${formatRupiah(amountNum)}, DP: Rp ${formatRupiah(dpNum)})`
             : `${formCategory} - Sisa Bon (Total: Rp ${formatRupiah(amountNum)}, DP: Rp ${formatRupiah(dpNum)})`;
 
           const newMutation: DebtMutation = {
@@ -918,7 +950,9 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     const payload: CashFlowRecord = {
       type: formType,
       category: formCategory,
-      description: formDescription.trim() || formCategory,
+      description: formType === 'income'
+        ? (incomeDescription || formDescription.trim() || formCategory)
+        : (formDescription.trim() || formCategory),
       amount: amountNum,
       status: formStatus,
       paymentMethod: formPaymentMethod,
@@ -945,7 +979,9 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
         if (auth.currentUser) {
           saveCashFlowToFirestore({ ...payload, id: localId }, storeId || undefined).catch(console.warn);
         }
-        showToast(`✓ Berhasil mencatat ${formType === 'income' ? 'kas masuk' : 'kas keluar'}!`);
+        showToast(formType === 'income'
+          ? `✓ ${incomeItems.length} rincian pemasukan tersimpan. Total Rp ${formatRupiah(amountNum)}.`
+          : '✓ Berhasil mencatat kas keluar!');
       }
       sounds.playSuccess();
       setIsIncomeModalOpen(false);
@@ -1404,7 +1440,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+    <div className="w-full max-w-full mx-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
       
       {/* Floating Action Toast */}
       {toastMessage && (
@@ -1557,12 +1593,12 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
       {/* ---------------- 1. SUB-TAB: RINGKASAN & ARUS KAS (DASHBOARD) ---------------- */}
       {activeSubTab === 'dashboard' && (
-        <div className="space-y-6">
+        <div className="dashboard-scroll-content space-y-6">
           {/* 4 Financial Stat Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 [@media(orientation:portrait)]:grid-cols-1 gap-4">
             
             {/* 1. Total Pemasukan Kotor */}
-            <div className="bg-slate-900 border border-slate-800 p-4.5 rounded-2xl shadow-sm space-y-2">
+            <div className="bg-slate-900 border border-slate-800 p-4.5 rounded-2xl space-y-2">
               <div className="flex items-center justify-between text-slate-400">
                 <span className="text-xs font-semibold uppercase tracking-wider">Total Kas Masuk</span>
                 <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
@@ -1579,7 +1615,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
             </div>
 
             {/* 2. Total Pengeluaran */}
-            <div className="bg-slate-900 border border-slate-800 p-4.5 rounded-2xl shadow-sm space-y-2">
+            <div className="bg-slate-900 border border-slate-800 p-4.5 rounded-2xl space-y-2">
               <div className="flex items-center justify-between text-slate-400">
                 <span className="text-xs font-semibold uppercase tracking-wider">Total Pengeluaran</span>
                 <div className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center">
@@ -1596,7 +1632,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
             </div>
 
             {/* 3. Laba Bersih (Keuntungan) */}
-            <div className="bg-slate-900 border border-slate-800 p-4.5 rounded-2xl shadow-sm space-y-2">
+            <div className="bg-slate-900 border border-slate-800 p-4.5 rounded-2xl space-y-2">
               <div className="flex items-center justify-between text-slate-400">
                 <span className="text-xs font-semibold uppercase tracking-wider">Keuntungan / Laba</span>
                 <div className="w-8 h-8 rounded-xl bg-teal-500/10 text-teal-400 flex items-center justify-center">
@@ -1615,10 +1651,10 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
             {/* 4. Buku Bon / Piutang Belum Lunas */}
             <div 
               onClick={() => setActiveSubTab('debts')}
-              className="bg-slate-900 border border-slate-800 hover:border-amber-500/50 p-4.5 rounded-2xl shadow-sm space-y-2 cursor-pointer transition group"
+              className="bg-slate-900 border border-slate-800 hover:border-amber-500/50 p-4.5 rounded-2xl space-y-2 cursor-pointer group"
             >
               <div className="flex items-center justify-between text-slate-400">
-                <span className="text-xs font-semibold uppercase tracking-wider group-hover:text-amber-400 transition">Utang Pelanggan (Piutang)</span>
+                <span className="text-xs font-semibold uppercase tracking-wider group-hover:text-amber-400">Utang Pelanggan (Piutang)</span>
                 <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
                   <ArrowDownLeft className="w-4 h-4" />
                 </div>
@@ -1634,10 +1670,10 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           </div>
 
           {/* Quick Flow Breakdown & Recent Activity */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             {/* Left 2 Cols: Arus Kas Terbaru */}
-            <div id="arus-transaksi-keuangan" className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-sm scroll-mt-20">
+            <div id="arus-transaksi-keuangan" className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 scroll-mt-20">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2.5 flex-wrap">
@@ -1647,7 +1683,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                     </h3>
                     {metrics.countPos > 0 && (
                       <span className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                         {metrics.countPos} Kasir POS Terhubung
                       </span>
                     )}
@@ -1750,7 +1786,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 </button>
               </div>
 
-              <div className="space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-[440px] overflow-y-auto overscroll-contain pr-1">
                 {unifiedRecentTransactions.length === 0 ? (
                   <div className="py-12 text-center text-slate-500 text-xs">
                     {dashboardFilter === 'pos'
@@ -1762,14 +1798,14 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                       : 'Belum ada catatan keuangan atau transaksi kasir di periode ini.'}
                   </div>
                 ) : (
-                  unifiedRecentTransactions.slice(0, 30).map(item => {
+                  unifiedRecentTransactions.slice(0, 12).map(item => {
                     const isPos = item.source === 'pos';
                     const isIncome = item.type === 'income';
 
                     return (
                       <div
                         key={item.id}
-                        className={`p-3 bg-slate-950 border rounded-xl flex items-center justify-between gap-3 text-xs transition ${
+                        className={`p-3 bg-slate-950 border rounded-xl flex items-center justify-between gap-3 text-xs ${
                           isPos
                             ? 'border-emerald-500/25 hover:border-emerald-500/50 bg-emerald-950/10'
                             : 'border-slate-800 hover:border-slate-750'
@@ -1838,7 +1874,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => onSelectTransactionToPrint(item.posTransaction!)}
-                                  className="p-1.5 bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 rounded-lg transition"
+                                  className="p-1.5 bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 rounded-lg"
                                   title="Lihat & Cetak Struk 58mm"
                                 >
                                   <Printer className="w-3.5 h-3.5" />
@@ -1849,7 +1885,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => item.cashFlowRecord && (isIncome ? handleOpenIncomeModal(item.cashFlowRecord) : handleOpenExpenseModal(item.cashFlowRecord))}
-                                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
+                                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg"
                                   title="Edit Transaksi"
                                 >
                                   <Edit3 className="w-3.5 h-3.5" />
@@ -1857,7 +1893,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => item.cashFlowRecord && setCashFlowToDelete(item.cashFlowRecord)}
-                                  className="p-1.5 bg-slate-800 hover:bg-rose-950/80 text-slate-400 hover:text-rose-400 rounded-lg transition"
+                                  className="p-1.5 bg-slate-800 hover:bg-rose-950/80 text-slate-400 hover:text-rose-400 rounded-lg"
                                   title="Hapus Transaksi untuk Koreksi"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -1874,7 +1910,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
             </div>
 
             {/* Right 1 Col: Quick Tips & Shortcut Bon Belum Lunas */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-sm flex flex-col justify-between">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -1890,7 +1926,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 </div>
                 <p className="text-xs text-slate-400 mb-3">Pelanggan yang masih memiliki sisa bon belanja.</p>
 
-                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-[300px] overflow-y-auto overscroll-contain pr-1">
                   {debts.filter(d => d.status !== 'lunas').length === 0 ? (
                     <div className="py-8 text-center text-slate-500 text-xs">
                       🎉 Tidak ada hutang pelanggan yang belum lunas.
@@ -2086,8 +2122,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           </div>
 
           {/* Income Records Table */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+            <div className="w-full overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 font-semibold uppercase text-[10px] tracking-wider">
                   <tr>
@@ -2235,8 +2271,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           </div>
 
           {/* Expense Records Table */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+            <div className="w-full overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 font-semibold uppercase text-[10px] tracking-wider">
                   <tr>
@@ -2313,8 +2349,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
       {/* ================= MODAL: TAMBAH / EDIT PEMASUKAN ================= */}
       {isIncomeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-3xl max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
@@ -2392,69 +2428,101 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 </div>
               )}
 
-              <div>
-                <label className="block text-slate-400 mb-1 font-medium">Keterangan (Opsional)</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Kirim uang BCA a.n Budi 100rb (Opsional)"
-                  value={formDescription}
-                  onChange={e => setFormDescription(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none focus:border-emerald-500 font-semibold"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1 font-medium">Biaya Modal (Rp)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="Contoh: 100000"
-                    value={formCost}
-                    onChange={e => setFormCost(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-slate-300 font-mono focus:outline-none"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-0.5">Modal / HPP</p>
+              <section className="space-y-3" aria-label="Rincian item pemasukan">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-bold text-white">Rincian Item Transaksi</h4>
+                    <p className="text-xs text-slate-400">Tambahkan satu atau beberapa layanan dalam satu catatan pemasukan.</p>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-slate-400 mb-1 font-medium">
-                    {formStatus === 'belum_lunas' ? 'Total Harga Jual (Rp)' : 'Pemasukan Diterima (Rp)'}
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    placeholder={formStatus === 'belum_lunas' ? 'Contoh: 150000' : 'Contoh: 105000'}
-                    value={formAmount}
-                    onChange={e => setFormAmount(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-emerald-500/60 rounded-xl text-emerald-400 font-mono font-bold focus:outline-none"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-0.5">
-                    {formStatus === 'belum_lunas' ? 'Total nilai transaksi keseluruhan' : 'Uang dari pelanggan'}
-                  </p>
+                <div className="space-y-2.5">
+                  {incomeItems.map((item, index) => (
+                    <div key={item.id} className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] [@media(orientation:portrait)]:!grid-cols-1 items-end gap-2.5 p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                      <div>
+                        <label className="block text-slate-400 mb-1 font-medium">Keterangan singkat</label>
+                        <input
+                          type="text"
+                          placeholder={`Contoh: Layanan ${index + 1}`}
+                          value={item.keterangan}
+                          onChange={e => setIncomeItems(prev => prev.map(row => row.id === item.id ? { ...row, keterangan: e.target.value } : row))}
+                          className="w-full min-w-0 px-3 py-2 bg-slate-900 border border-slate-750 rounded-xl text-sm text-white focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 mb-1 font-medium">Biaya Modal (Rp)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.modal}
+                          onChange={e => setIncomeItems(prev => prev.map(row => row.id === item.id ? { ...row, modal: Number(e.target.value) || 0 } : row))}
+                          className="w-full min-w-0 px-3 py-2 bg-slate-900 border border-slate-750 rounded-xl text-sm text-slate-200 font-mono focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 mb-1 font-medium">
+                          {formStatus === 'belum_lunas' ? 'Harga Jual (Rp)' : 'Pemasukan (Rp)'}
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.pemasukan}
+                          onChange={e => setIncomeItems(prev => prev.map(row => row.id === item.id ? { ...row, pemasukan: Number(e.target.value) || 0 } : row))}
+                          className="w-full min-w-0 px-3 py-2 bg-slate-900 border border-emerald-500/60 rounded-xl text-sm text-emerald-400 font-mono font-bold focus:outline-none"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIncomeItems(prev => {
+                          const remaining = prev.filter(row => row.id !== item.id);
+                          return remaining.length ? remaining : [createIncomeFormItem()];
+                        })}
+                        className="w-full lg:w-auto [@media(orientation:portrait)]:!w-full px-3 py-2 bg-rose-950/60 hover:bg-rose-900/60 border border-rose-500/40 text-rose-300 rounded-xl text-sm font-semibold transition"
+                        title="Hapus item transaksi"
+                      >
+                        <span className="inline-flex items-center justify-center gap-1.5"><Trash2 className="w-4 h-4" />Hapus Item</span>
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              </div>
 
-              {/* Live Profit & Bon Preview */}
-              <div className="p-3 bg-slate-950 rounded-xl space-y-1.5 text-xs border border-slate-800">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Estimasi Keuntungan Bersih (Masuk Laba):</span>
-                  <span className="font-bold text-emerald-400 font-mono text-sm">
-                    Rp {formatRupiah(Math.max(0, (parseFloat(formAmount) || 0) - (parseFloat(formCost) || 0)))}
+                <button
+                  type="button"
+                  onClick={() => setIncomeItems(prev => [...prev, createIncomeFormItem()])}
+                  className="w-full sm:w-auto px-3.5 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition"
+                >
+                  <Plus className="w-4 h-4" />
+                  + Tambah Item Transaksi
+                </button>
+              </section>
+
+              {/* Live totals */}
+              <div className="p-3 bg-slate-950 rounded-xl space-y-2 text-sm border border-slate-800">
+                <div className="flex items-center justify-between gap-3 text-slate-400">
+                  <span>Total Modal</span>
+                  <span className="font-semibold text-white font-mono">Rp {formatRupiah(incomeTotals.modal)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-slate-400">
+                  <span>Total Pemasukan</span>
+                  <span className="font-semibold text-white font-mono">Rp {formatRupiah(incomeTotals.pemasukan)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
+                  <span className="text-slate-300">Estimasi Keuntungan Bersih</span>
+                  <span className={`font-bold font-mono ${incomeProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    Rp {formatRupiah(incomeProfit)}
                   </span>
                 </div>
                 {formStatus === 'belum_lunas' && formType === 'income' && (
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-900">
+                  <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
                     <span className="text-slate-400">Sisa Bon (Masuk Buku Bon):</span>
                     <span className="font-bold text-amber-400 font-mono text-sm">
-                      Rp {formatRupiah(Math.max(0, (parseFloat(formAmount) || 0) - (parseFloat(formDpAmount) || 0)))}
+                      Rp {formatRupiah(Math.max(0, incomeTotals.pemasukan - (parseFloat(formDpAmount) || 0)))}
                     </span>
                   </div>
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-400 mb-1 font-medium">Metode Pembayaran</label>
                   <CustomSelect
@@ -2517,7 +2585,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+              <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
                 {editingCashFlow ? (
                   <button
                     type="button"
@@ -2529,7 +2597,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                     <span>Hapus Catatan Ini</span>
                   </button>
                 ) : <div />}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <button
                     type="button"
                     onClick={() => setIsIncomeModalOpen(false)}
@@ -2539,7 +2607,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl shadow-md transition"
+                    className="w-full sm:w-auto px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl shadow-md transition"
                   >
                     Simpan Pemasukan
                   </button>
@@ -2552,8 +2620,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
       {/* ================= MODAL: TAMBAH / EDIT PENGELUARAN ================= */}
       {isExpenseModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
@@ -2608,7 +2676,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-400 mb-1 font-medium">Sumber Dana</label>
                   <CustomSelect
@@ -2659,7 +2727,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+              <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
                 {editingCashFlow ? (
                   <button
                     type="button"
@@ -2671,7 +2739,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                     <span>Hapus Catatan Ini</span>
                   </button>
                 ) : <div />}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <button
                     type="button"
                     onClick={() => setIsExpenseModalOpen(false)}
@@ -2681,7 +2749,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl shadow-md transition"
+                    className="w-full sm:w-auto px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl shadow-md transition"
                   >
                     Simpan Pengeluaran
                   </button>
@@ -2694,8 +2762,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
       {/* ================= MODAL: KONFIRMASI HAPUS TRANSAKSI PEMBUKUAN ================= */}
       {cashFlowToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-slate-900 border border-rose-500/40 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
+          <div className="bg-slate-900 border border-rose-500/40 w-full max-w-md rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
@@ -2769,8 +2837,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
       {/* ================= MODAL: KONFIRMASI HAPUS SEMUA DATA ================= */}
       {isConfirmClearAllOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-slate-900 border border-rose-500/40 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
+          <div className="bg-slate-900 border border-rose-500/40 w-full max-w-md rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">

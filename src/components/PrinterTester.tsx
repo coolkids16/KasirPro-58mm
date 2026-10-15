@@ -396,9 +396,9 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+    <div className="w-full max-w-full mx-auto p-2 sm:p-4 lg:p-8 space-y-4 sm:space-y-6">
       {/* Top Banner */}
-      <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-slate-900 border border-slate-800 p-3 sm:p-4 lg:p-6 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
@@ -425,7 +425,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
       </div>
 
       {/* Linux Hardware Target Card */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-cyan-500/30 p-6 rounded-2xl shadow-xl">
+      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-cyan-500/30 p-3 sm:p-4 lg:p-6 rounded-2xl shadow-xl">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
           <div>
             <div className="flex items-center gap-2">
@@ -497,7 +497,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
       </div>
 
       {/* Connection Drivers Panel */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 [@media(orientation:portrait)]:grid-cols-1 gap-4">
         <div className={`border p-5 rounded-2xl flex flex-col justify-between transition ${
           selectedMethod === 'tauri_raw' 
             ? 'bg-slate-900 border-cyan-500 shadow-md shadow-cyan-500/10' 
@@ -707,7 +707,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Left Column: Quick Action Test Buttons */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-4 lg:p-6 space-y-4">
           <h3 className="font-bold text-white text-sm flex items-center gap-2 pb-3 border-b border-slate-800">
             <Zap className="w-4 h-4 text-emerald-400" />
             Tombol Uji Perintah ESC/POS Cepat
@@ -800,7 +800,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
         </div>
 
         {/* Right Column: FORMAT STRUK 58MM CONFIGURATION (Migrated & Integrated) */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-4 lg:p-6 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <h3 className="font-bold text-white text-sm flex items-center gap-2">
               <Receipt className="w-4 h-4 text-emerald-400" />

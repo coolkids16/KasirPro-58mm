@@ -191,14 +191,14 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
       <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden my-6 flex flex-col md:flex-row">
         
         {/* Left Side: Realistic 58mm Thermal Paper Simulator */}
-        <div className="bg-slate-950 p-6 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-800">
+        <div className="bg-slate-950 p-3 sm:p-4 lg:p-6 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-800">
           <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
             Simulasi Kertas Thermal 58mm (32 Karakter)
           </div>
 
           {/* Paper Container */}
-          <div className="w-[280px] bg-[#fdfdf9] text-zinc-900 shadow-2xl rounded-sm p-4 relative font-mono text-[11px] leading-snug border-t-8 border-b-8 border-dashed border-zinc-300">
+          <div className="w-[min(280px,100%)] max-w-full mx-auto bg-[#fdfdf9] text-zinc-900 shadow-2xl rounded-sm p-4 relative font-mono text-[11px] leading-snug border-t-8 border-b-8 border-dashed border-zinc-300">
             {/* 32-character boundary ruler hint */}
             <div className="text-[9px] text-zinc-400 text-center border-b border-zinc-200 pb-1 mb-2 font-mono select-none">
               |..5...10...15...20...25...30.32|
@@ -228,7 +228,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         </div>
 
         {/* Right Side: Printing Actions & Drivers */}
-        <div className="p-6 flex-1 flex flex-col justify-between">
+        <div className="p-3 sm:p-4 lg:p-6 flex-1 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div>
