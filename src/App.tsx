@@ -20,7 +20,6 @@ import {
   subscribeStoreSettings, 
   saveStoreSettingsToFirestore,
   validateFirestoreConnection,
-  seedProductsIfEmpty,
   saveProductToFirestore,
   setActiveStoreId 
 } from './services/firebase';
@@ -114,7 +113,7 @@ export default function App() {
     } catch (e) {}
     db.settings.put({ ...newSettings, id: 'main' }).catch(console.warn);
     if (currentUser) {
-      saveStoreSettingsToFirestore(newSettings).catch(console.warn);
+      saveStoreSettingsToFirestore({ ...newSettings, storeId: storeId || undefined }, storeId || undefined).catch(console.warn);
     }
     printerService.setDevicePath(newSettings.linuxDevicePath || '/dev/usb/lp0');
   };
@@ -179,18 +178,11 @@ export default function App() {
             console.warn('Error mirroring products to Dexie:', e);
           }
         } else {
-          // If Firestore currently has 0 products for this store:
-          // Check local Dexie first (DO NOT wipe local Dexie!)
+          // Keep the local cache available as a backup; uploading it is an explicit user action.
           try {
             const localProducts = await db.products.toArray();
             if (localProducts && localProducts.length > 0) {
               setProducts(localProducts);
-              // Auto-sync local products to Firestore under this storeId so all staff can see them
-              if (storeId && (isOwner || isManager)) {
-                for (const p of localProducts) {
-                  await saveProductToFirestore({ ...p, storeId }, storeId);
-                }
-              }
             } else {
               // If both Firestore and local Dexie are truly empty:
               // For Owner, initialize INITIAL_PRODUCTS so the store has inventory!
@@ -233,7 +225,8 @@ export default function App() {
       },
       () => {
         loadSettingsLocal();
-      }
+      },
+      storeId || undefined
     );
 
     return () => {
@@ -349,6 +342,7 @@ export default function App() {
                 runtimeEnv={runtimeEnv}
                 settings={settings}
                 onUpdateSettings={handleUpdateSettings}
+                storeId={storeId}
               />
             )}
           </>
@@ -391,6 +385,7 @@ export default function App() {
         onUpdateSettings={handleUpdateSettings}
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
+        storeId={storeId}
         onOpenBackupModal={() => setIsBackupModalOpen(true)}
       />
 
@@ -400,6 +395,8 @@ export default function App() {
         onClose={() => setIsBackupModalOpen(false)}
         products={products}
         settings={settings}
+        storeId={storeId}
+        role={role}
         onDataImported={handleDataImported}
       />
     </div>

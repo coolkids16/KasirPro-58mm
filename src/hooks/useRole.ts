@@ -20,12 +20,20 @@ export function useRole() {
 
   useEffect(() => {
     let unsubProfile: (() => void) | null = null;
+    let activeUid: string | null = null;
 
     const unsubAuth = subscribeToAuthState((user) => {
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+      activeUid = user?.uid || null;
       setCurrentUser(user);
+      setUserProfile(null);
       if (user) {
         setIsLoadingRole(true);
         unsubProfile = subscribeUserProfile(user.uid, (profile) => {
+          if (activeUid !== user.uid) return;
           setUserProfile(profile);
           setActiveStoreId(profile?.storeId || null);
           setIsLoadingRole(false);
@@ -38,6 +46,7 @@ export function useRole() {
     });
 
     return () => {
+      activeUid = null;
       unsubAuth();
       if (unsubProfile) unsubProfile();
     };

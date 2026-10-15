@@ -18,7 +18,7 @@ import {
   Cloud,
   RefreshCw
 } from 'lucide-react';
-import { Product, Transaction, StoreSettings, CashFlowRecord, CustomerDebt } from '../types';
+import { Product, Transaction, StoreSettings, CashFlowRecord, CustomerDebt, UserRole } from '../types';
 import { db } from '../db/db';
 import { 
   batchSaveProductsToFirestore, 
@@ -26,6 +26,7 @@ import {
   saveStoreSettingsToFirestore,
   batchSaveCashFlowsToFirestore,
   batchSaveDebtsToFirestore,
+  syncPendingDeletesToFirestore,
   auth
 } from '../services/firebase';
 import { 
@@ -43,6 +44,8 @@ export interface DataBackupModalProps {
   onClose: () => void;
   products: Product[];
   settings: StoreSettings;
+  storeId?: string | null;
+  role?: UserRole | null;
   onDataImported: () => void;
 }
 
@@ -51,6 +54,8 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
   onClose,
   products,
   settings,
+  storeId,
+  role,
   onDataImported
 }) => {
   const [activeTab, setActiveTab] = useState<'export' | 'import' | 'cloud'>('export');
@@ -68,22 +73,44 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
       });
       return;
     }
+    if (!storeId) {
+      setStatusMessage({ type: 'error', text: 'Profil akun belum memiliki Store ID. Data lokal tidak diunggah agar tidak masuk ke toko yang salah.' });
+      return;
+    }
 
     setIsProcessing(true);
     setStatusMessage(null);
     try {
-      const [pCount, txCount, cfCount, dCount] = await Promise.all([
-        batchSaveProductsToFirestore(products),
-        batchSaveTransactionsToFirestore(allTransactions),
-        batchSaveCashFlowsToFirestore(allCashFlows),
-        batchSaveDebtsToFirestore(allDebts),
-        saveStoreSettingsToFirestore(settings)
+      const [localProducts, localTransactions, localCashFlows, localDebts] = await Promise.all([
+        db.products.toArray(),
+        db.transactions.toArray(),
+        db.cashFlows.toArray(),
+        db.debts.toArray()
+      ]);
+      const unsynced = <T extends { id?: any; firestoreId?: string; syncPending?: boolean }>(rows: T[]) =>
+        rows.filter(row => row.syncPending === true || !row.firestoreId);
+      const pendingProducts = unsynced(localProducts).map(item => ({ ...item, storeId }));
+      const pendingTransactions = unsynced(localTransactions).map(item => ({ ...item, storeId }));
+      const pendingCashFlows = unsynced(localCashFlows).map(item => ({ ...item, storeId }));
+      const pendingDebts = unsynced(localDebts).map(item => ({ ...item, storeId }));
+      const pendingDeleteResult = await syncPendingDeletesToFirestore(storeId);
+      const [syncedProducts, syncedTransactions, syncedCashFlows, syncedDebts] = await Promise.all([
+        batchSaveProductsToFirestore(pendingProducts, storeId),
+        batchSaveTransactionsToFirestore(pendingTransactions, storeId),
+        batchSaveCashFlowsToFirestore(pendingCashFlows, storeId),
+        batchSaveDebtsToFirestore(pendingDebts, storeId),
+        role === 'owner'
+          ? saveStoreSettingsToFirestore({ ...settings, storeId }, storeId)
+          : Promise.resolve()
       ]);
 
       setStatusMessage({
         type: 'success',
-        text: `Sukses! Berhasil mengunggah ${pCount} produk, ${txCount} transaksi, ${cfCount} pembukuan, dan ${dCount} catatan bon ke Firebase Firestore!`
+        text: `Sinkron Firestore selesai: ${pendingDeleteResult.deletedCount} penghapusan, ${syncedProducts} produk, ${syncedTransactions} transaksi, ${syncedCashFlows} pembukuan, ${syncedDebts} bon.${pendingDeleteResult.blockedCount ? ` ${pendingDeleteResult.blockedCount} penghapusan menunggu owner/manager.` : ''}`
       });
+      setAllTransactions(localTransactions);
+      setAllCashFlows(localCashFlows);
+      setAllDebts(localDebts);
       onDataImported();
     } catch (err: any) {
       console.error('Cloud sync error:', err);
@@ -241,7 +268,9 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
         }
 
         // Save to Firestore
-        await batchSaveProductsToFirestore(parsedData.rawProducts);
+        if (auth.currentUser && storeId && (role === 'owner' || role === 'manager')) {
+          await batchSaveProductsToFirestore(parsedData.rawProducts.map(item => ({ ...item, storeId })), storeId);
+        }
         importedProductsCount = parsedData.rawProducts.length;
       }
 
@@ -260,14 +289,18 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
         }
 
         // Save to Firestore
-        await batchSaveTransactionsToFirestore(parsedData.rawTransactions);
+        if (auth.currentUser && storeId) {
+          await batchSaveTransactionsToFirestore(parsedData.rawTransactions.map(item => ({ ...item, storeId })), storeId);
+        }
         importedTxsCount = parsedData.rawTransactions.length;
       }
 
       // 3. Process Settings if available
       if (parsedData.rawSettings) {
         await db.settings.put({ ...parsedData.rawSettings, id: 'main' });
-        await saveStoreSettingsToFirestore(parsedData.rawSettings);
+        if (auth.currentUser && storeId && role === 'owner') {
+          await saveStoreSettingsToFirestore({ ...parsedData.rawSettings, storeId }, storeId);
+        }
       }
 
       // 4. Process Cash Flows if available
@@ -275,9 +308,14 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
         if (importMode === 'replace') {
           await db.cashFlows.clear();
         }
+        const importedCashFlows: CashFlowRecord[] = [];
         for (const cf of parsedData.rawCashFlows) {
           const { id, ...rest } = cf;
-          await db.cashFlows.add(rest as any);
+          const localId = await db.cashFlows.add({ ...rest, storeId: storeId || undefined, syncPending: true } as any);
+          importedCashFlows.push({ ...rest, id: localId, storeId: storeId || undefined, syncPending: true } as CashFlowRecord);
+        }
+        if (auth.currentUser && storeId) {
+          await batchSaveCashFlowsToFirestore(importedCashFlows, storeId);
         }
       }
 
@@ -286,15 +324,22 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
         if (importMode === 'replace') {
           await db.debts.clear();
         }
+        const importedDebts: CustomerDebt[] = [];
         for (const d of parsedData.rawDebts) {
           const { id, ...rest } = d;
-          await db.debts.add(rest as any);
+          const localId = await db.debts.add({ ...rest, storeId: storeId || undefined, syncPending: true } as any);
+          importedDebts.push({ ...rest, id: localId, storeId: storeId || undefined, syncPending: true } as CustomerDebt);
+        }
+        if (auth.currentUser && storeId) {
+          await batchSaveDebtsToFirestore(importedDebts, storeId);
         }
       }
 
       setStatusMessage({
         type: 'success',
-        text: `Berhasil mengimpor ${importedProductsCount} produk dan ${importedTxsCount} transaksi ke sistem lokal dan Cloud Firestore!`
+        text: auth.currentUser && storeId
+          ? `Berhasil mengimpor ${importedProductsCount} produk dan ${importedTxsCount} transaksi ke cache lokal dan menyinkronkan ke Firestore toko aktif.`
+          : `Berhasil mengimpor ${importedProductsCount} produk dan ${importedTxsCount} transaksi ke backup lokal. Login lalu gunakan Sinkron Manual untuk mengunggah ke Firestore.`
       });
 
       // Clear file selection
@@ -690,7 +735,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
               <div className="flex items-center justify-between">
                 <div>
                   <h5 className="font-bold text-white text-xs">Sinkronkan Semua Data Lokal ke Cloud Firestore</h5>
-                  <p className="text-[11px] text-slate-400">Unggah seluruh produk, transaksi, pembukuan kas, dan bon pelanggan ke database cloud Firebase.</p>
+                  <p className="text-[11px] text-slate-400">Unggah perubahan lokal yang belum tersinkron ke toko aktif. Data Firestore yang sudah tersinkron tidak ditimpa.</p>
                 </div>
               </div>
 

@@ -402,7 +402,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
         }
 
         // 2. Firestore load
-        const firestoreTemplates = await getReceiptTemplatesFromFirestore();
+        const firestoreTemplates = await getReceiptTemplatesFromFirestore(storeId || undefined);
         if (firestoreTemplates && firestoreTemplates.length > 0 && isMounted) {
           setTemplates(prev => {
             const map = new Map<string, CustomTemplate>();
@@ -421,7 +421,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
 
     loadStoredTemplates();
     return () => { isMounted = false; };
-  }, []);
+  }, [storeId]);
 
   const handleSaveCustomTemplate = async () => {
     if (!templateNameInput.trim()) {
@@ -500,7 +500,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
     } catch (e) {}
 
     try {
-      await deleteReceiptTemplateFromFirestore(id);
+      await deleteReceiptTemplateFromFirestore(id, storeId || undefined);
     } catch (e) {}
 
     if (selectedTemplateId === id) {

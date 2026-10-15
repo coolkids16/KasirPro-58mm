@@ -1,139 +1,173 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isSignedIn() {
+    function signedIn() {
       return request.auth != null;
     }
 
-    function currentUserDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
     }
 
-    function getUserData() {
-      return currentUserDoc().data;
+    function hasProfile() {
+      return signedIn() && exists(userPath(request.auth.uid));
     }
 
-    function getUserRole() {
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        ? getUserData().role 
-        : null;
+    function profile() {
+      return get(userPath(request.auth.uid)).data;
     }
 
-    function getUserStoreId() {
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        ? getUserData().storeId 
-        : null;
+    function userRole() {
+      return hasProfile() ? profile().role : null;
     }
 
-    function isOwner() {
-      return getUserRole() == 'owner';
+    function userStoreId() {
+      return hasProfile() ? profile().storeId : null;
     }
 
-    function isManager() {
-      return getUserRole() == 'manager';
+    function memberOf(storeId) {
+      return hasProfile() && storeId is string && userStoreId() == storeId;
     }
 
-    function isCashier() {
-      return getUserRole() == 'cashier';
+    function ownerOf(storeId) {
+      return memberOf(storeId) && userRole() == 'owner'
+        && get(/databases/$(database)/documents/stores/$(storeId)).data.ownerId == request.auth.uid;
     }
 
-    function belongsToStore(storeId) {
-      return isSignedIn() && getUserStoreId() == storeId;
+    function managerOrOwner() {
+      return hasProfile() && userRole() in ['owner', 'manager'];
     }
 
-    // Default deny all
+    function sameStoreAfterWrite(storeId) {
+      return request.resource.data.storeId == storeId && memberOf(storeId);
+    }
+
+    // Default deny.
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Stores collection
+    // A first-time user may create only a store owned by their own Auth UID.
     match /stores/{storeId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (resource.data.ownerId == request.auth.uid || (isOwner() && belongsToStore(storeId)));
-    }
-
-    // Users collection
-    // - Owner can create manager/cashier in same store
-    // - User can read their own profile or users in the same store
-    match /users/{userId} {
-      allow read: if isSignedIn() && (
-        request.auth.uid == userId || 
-        belongsToStore(resource.data.storeId)
+      allow create: if signedIn()
+        && request.resource.data.id == storeId
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.keys().hasOnly(['id', 'name', 'ownerId', 'address', 'phone', 'createdAt']);
+      allow read: if signedIn() && (
+        resource.data.ownerId == request.auth.uid || memberOf(storeId)
       );
-      // New user registering themselves (first owner) or owner registering subordinate
-      allow create: if isSignedIn() && (
-        request.auth.uid == userId || 
-        (isOwner() && belongsToStore(request.resource.data.storeId))
-      );
-      // Update: user can update own profile, or owner can update staff in their store
-      allow update: if isSignedIn() && (
-        request.auth.uid == userId || 
-        (isOwner() && belongsToStore(resource.data.storeId))
-      );
-      // Delete: owner can delete manager/cashier in their store (cannot delete self)
-      allow delete: if isSignedIn() && isOwner() && belongsToStore(resource.data.storeId) && request.auth.uid != userId;
-    }
-
-    // Products catalog (scoped by storeId)
-    // - All roles in store can read products
-    // - Owner & Manager can create, update, delete products
-    // - Cashier can update products (stock reduction on sale)
-    match /products/{productId} {
-      allow read: if isSignedIn();
-      allow create, delete: if isSignedIn() && (
-        isOwner() || isManager()
-      );
-      allow update: if isSignedIn() && (
-        isOwner() || isManager() || isCashier()
-      );
-    }
-
-    // Transactions records (scoped by storeId)
-    // - Cashier, Manager, Owner can create transactions and read them for recap
-    // - Only Owner & Manager can delete transactions (e.g. void / audit)
-    match /transactions/{transactionId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow delete: if isSignedIn() && (isOwner() || isManager());
-      allow update: if false;
-    }
-
-    // Store settings & receipt printer configuration
-    // - Read allowed for staff to load receipt format and printer config
-    // - Write strictly restricted to Owner
-    match /settings/{settingsId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && (isOwner() || !exists(/databases/$(database)/documents/settings/$(settingsId)));
+      allow update: if ownerOf(storeId)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'address', 'phone']);
       allow delete: if false;
     }
 
-    // OCR Receipt Templates
+    match /users/{userId} {
+      allow read: if signedIn() && (
+        request.auth.uid == userId || memberOf(resource.data.storeId)
+      );
+
+      // Self-registration is allowed only for an owner profile backed by a store
+      // document whose ownerId is this same Auth UID. Staff creation is owner-only.
+      allow create: if signedIn() && request.resource.data.uid == userId && (
+        (request.auth.uid == userId
+          && request.resource.data.role == 'owner'
+          && request.resource.data.storeId is string
+          && exists(/databases/$(database)/documents/stores/$(request.resource.data.storeId))
+          && get(/databases/$(database)/documents/stores/$(request.resource.data.storeId)).data.ownerId == request.auth.uid)
+        || (managerOrOwner()
+          && userRole() == 'owner'
+          && request.resource.data.role in ['manager', 'cashier']
+          && request.resource.data.storeId == userStoreId()
+          && request.resource.data.createdById == request.auth.uid)
+      );
+
+      // Users may change only their own display/contact fields. Role and store
+      // membership are immutable to the user. Owners can administer staff only.
+      allow update: if signedIn() && request.resource.data.uid == userId && (
+        (request.auth.uid == userId
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.storeId == resource.data.storeId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'email', 'photoURL']))
+        || (ownerOf(resource.data.storeId)
+          && resource.data.role in ['manager', 'cashier']
+          && request.resource.data.storeId == resource.data.storeId
+          && request.resource.data.role in ['manager', 'cashier']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'displayName', 'email', 'photoURL']))
+      );
+      allow delete: if signedIn()
+        && ownerOf(resource.data.storeId)
+        && resource.data.role in ['manager', 'cashier']
+        && userId != request.auth.uid;
+    }
+
+    match /products/{productId} {
+      allow read: if memberOf(resource.data.storeId);
+      allow create: if managerOrOwner() && sameStoreAfterWrite(request.resource.data.storeId);
+      allow update: if managerOrOwner()
+        && memberOf(resource.data.storeId)
+        && request.resource.data.storeId == resource.data.storeId;
+      // Cashiers may only adjust stock during checkout.
+      allow update: if hasProfile() && userRole() == 'cashier'
+        && memberOf(resource.data.storeId)
+        && request.resource.data.storeId == resource.data.storeId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'updatedAt']);
+      allow delete: if managerOrOwner() && memberOf(resource.data.storeId);
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if memberOf(resource.data.storeId);
+      allow create: if hasProfile()
+        && userRole() in ['owner', 'manager', 'cashier']
+        && sameStoreAfterWrite(request.resource.data.storeId);
+      allow update: if false;
+      allow delete: if managerOrOwner() && memberOf(resource.data.storeId);
+    }
+
+    match /settings/{storeId} {
+      allow read: if memberOf(storeId) && resource.data.storeId == storeId;
+      allow create: if ownerOf(storeId)
+        && request.resource.data.storeId == storeId;
+      allow update: if ownerOf(storeId)
+        && resource.data.storeId == storeId
+        && request.resource.data.storeId == storeId;
+      allow delete: if false;
+    }
+
     match /receiptTemplates/{templateId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow read: if memberOf(resource.data.storeId);
+      allow create: if managerOrOwner() && sameStoreAfterWrite(request.resource.data.storeId);
+      allow update: if managerOrOwner()
+        && memberOf(resource.data.storeId)
+        && request.resource.data.storeId == resource.data.storeId;
+      allow delete: if managerOrOwner() && memberOf(resource.data.storeId);
     }
 
-    // Cash Flows (Pembukuan Arus Kas)
-    // - Authenticated store members can read, create, update, and delete cash flows
     match /cashFlows/{cashFlowId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow read: if memberOf(resource.data.storeId);
+      allow create: if hasProfile() && sameStoreAfterWrite(request.resource.data.storeId);
+      allow update: if hasProfile()
+        && memberOf(resource.data.storeId)
+        && request.resource.data.storeId == resource.data.storeId;
+      allow delete: if managerOrOwner() && memberOf(resource.data.storeId);
     }
 
-    // Capital (Modal Usaha)
-    // - Authenticated store members can read, create, update, and delete capital records
     match /capital/{capitalId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow read: if memberOf(resource.data.storeId);
+      allow create: if managerOrOwner() && sameStoreAfterWrite(request.resource.data.storeId);
+      allow update, delete: if managerOrOwner()
+        && memberOf(resource.data.storeId)
+        && request.resource.data.storeId == resource.data.storeId;
     }
 
-    // Debts (Buku Bon / Hutang Piutang Pelanggan)
-    // - Authenticated store members can read, record, update installments, and clear debts
     match /debts/{debtId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow read: if memberOf(resource.data.storeId);
+      allow create: if hasProfile() && sameStoreAfterWrite(request.resource.data.storeId);
+      allow update: if hasProfile()
+        && memberOf(resource.data.storeId)
+        && request.resource.data.storeId == resource.data.storeId;
+      allow delete: if managerOrOwner() && memberOf(resource.data.storeId);
     }
   }
 }

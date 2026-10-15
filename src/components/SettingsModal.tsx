@@ -18,6 +18,7 @@ import { TIMEZONE_OPTIONS, getCurrentTimePreview, DEFAULT_TIMEZONE } from '../ut
 
 export interface SettingsModalProps {
   settings: StoreSettings;
+  storeId?: string | null;
   onUpdateSettings: (settings: StoreSettings) => void;
   isOpen: boolean;
   onClose: () => void;
@@ -26,6 +27,7 @@ export interface SettingsModalProps {
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
+  storeId,
   onUpdateSettings,
   isOpen,
   onClose
@@ -119,7 +121,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
       // 3. Simpan ke Firestore jika user terotentikasi
       if (auth.currentUser) {
-        await saveStoreSettingsToFirestore(formData);
+        await saveStoreSettingsToFirestore({ ...formData, storeId: storeId || undefined }, storeId || undefined);
       }
 
       // 4. Update state di parent App

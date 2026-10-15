@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { Product, CartItem, PaymentMethod, Transaction, StoreSettings } from '../types';
 import { db } from '../db/db';
-import { saveTransactionToFirestore, saveProductToFirestore } from '../services/firebase';
+import { saveTransactionToFirestore, updateProductStockToFirestore } from '../services/firebase';
 import { formatRupiah } from '../utils/escpos';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
 import { CameraBarcodeScannerModal } from './CameraBarcodeScannerModal';
@@ -275,20 +275,15 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           const newStock = Math.max(0, Math.round((item.product.stock - item.quantity) * 1000) / 1000);
           await db.products.update(item.product.id, { stock: newStock });
           try {
-            const itemCost = item.product.costPrice !== undefined 
-              ? Number(item.product.costPrice) 
-              : (item.product.modal !== undefined ? Number(item.product.modal) : (item.product.purchase_price !== undefined ? Number(item.product.purchase_price) : 0));
-
-            await saveProductToFirestore({
-              ...item.product,
-              costPrice: itemCost,
-              modal: itemCost,
-              purchase_price: itemCost,
-              storeId: storeId || item.product.storeId,
-              stock: newStock
-            }, storeId || item.product.storeId);
+            const cloudProductId = item.product.firestoreId
+              || (typeof item.product.id === 'string' && isNaN(Number(item.product.id)) ? item.product.id : null);
+            if (cloudProductId && storeId) {
+              await updateProductStockToFirestore(cloudProductId, storeId, newStock, typeof item.product.id === 'number' ? item.product.id : undefined);
+            } else if (typeof item.product.id === 'number') {
+              await db.products.update(item.product.id, { syncPending: true });
+            }
           } catch (e) {
-            // Offline fallback
+            console.warn('Stock update is pending cloud sync:', e);
           }
         }
       }

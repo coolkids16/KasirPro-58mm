@@ -43,6 +43,7 @@ export interface Store {
 export interface Product {
   id?: number | string;
   firestoreId?: string;
+  syncPending?: boolean;
   storeId?: string;
   name: string;
   sku: string;
@@ -69,6 +70,7 @@ export type PaymentMethod = 'cash' | 'qris' | 'transfer';
 export interface Transaction {
   id?: number | string;
   firestoreId?: string;
+  syncPending?: boolean;
   storeId?: string;
   invoiceNumber: string;
   timestamp: number;
@@ -145,6 +147,7 @@ export type CashFlowType = 'income' | 'expense';
 export interface CashFlowRecord {
   id?: any;
   firestoreId?: string;
+  syncPending?: boolean;
   type: CashFlowType; // 'income' | 'expense'
   category: string;
   description: string;
@@ -182,6 +185,7 @@ export interface DebtMutation {
 export interface CustomerDebt {
   id?: any;
   firestoreId?: string;
+  syncPending?: boolean;
   customerName: string;
   customerPhone?: string;
   description: string;

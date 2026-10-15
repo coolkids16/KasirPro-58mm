@@ -34,6 +34,7 @@ export interface PrinterTesterProps {
   setPrinterStatus: (status: PrinterDeviceStatus) => void;
   runtimeEnv: 'tauri' | 'capacitor' | 'browser';
   settings: StoreSettings;
+  storeId?: string | null;
   onUpdateSettings: (settings: StoreSettings) => void;
 }
 
@@ -42,6 +43,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
   setPrinterStatus,
   runtimeEnv,
   settings,
+  storeId,
   onUpdateSettings
 }) => {
   const [formData, setFormData] = useState<StoreSettings>({ ...settings });
@@ -225,7 +227,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
       await db.settings.put({ ...updated, id: 'main' });
 
       if (auth.currentUser) {
-        await saveStoreSettingsToFirestore(updated);
+        await saveStoreSettingsToFirestore({ ...updated, storeId: storeId || undefined }, storeId || undefined);
       }
 
       onUpdateSettings(updated);

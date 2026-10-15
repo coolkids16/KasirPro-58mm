@@ -244,7 +244,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
 
       // 2. Delete from Firebase Firestore
       if (txToDelete.id || txToDelete.invoiceNumber) {
-        await deleteTransactionFromFirestore(txToDelete.id || txToDelete.invoiceNumber, txToDelete.invoiceNumber);
+        await deleteTransactionFromFirestore(txToDelete.id || txToDelete.invoiceNumber, txToDelete.invoiceNumber, storeId || undefined);
       }
 
       showToast(`Transaksi #${txToDelete.invoiceNumber} berhasil dihapus.`);
@@ -270,7 +270,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       for (const t of transactions) {
         if (t.id || t.invoiceNumber) {
           try {
-            await deleteTransactionFromFirestore(t.id || t.invoiceNumber, t.invoiceNumber);
+            await deleteTransactionFromFirestore(t.id || t.invoiceNumber, t.invoiceNumber, storeId || undefined);
           } catch (e) {
             // ignore
           }

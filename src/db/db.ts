@@ -1,6 +1,17 @@
 import Dexie, { type Table } from 'dexie';
 import { Product, Transaction, StoreSettings, CustomTemplate, CashFlowRecord, CustomerDebt, CapitalRecord } from '../types';
 
+export interface PendingSyncOperation {
+  id?: number;
+  storeId: string;
+  collection: 'products' | 'transactions' | 'cashFlows' | 'debts';
+  operation: 'delete';
+  documentId?: string;
+  field?: 'sku' | 'invoiceNumber' | 'createdAt';
+  value?: string | number;
+  createdAt: number;
+}
+
 export class KasirProDatabase extends Dexie {
   products!: Table<Product, any>;
   transactions!: Table<Transaction, any>;
@@ -9,6 +20,7 @@ export class KasirProDatabase extends Dexie {
   cashFlows!: Table<CashFlowRecord, any>;
   debts!: Table<CustomerDebt, any>;
   capital!: Table<CapitalRecord, any>;
+  syncQueue!: Table<PendingSyncOperation, number>;
 
   constructor() {
     super('KasirProPOS_DB');
@@ -39,6 +51,16 @@ export class KasirProDatabase extends Dexie {
       cashFlows: '++id, type, category, status, timestamp, dateString, storeId',
       debts: '++id, customerName, status, createdAt, storeId',
       capital: '++id, type, timestamp, storeId'
+    });
+    this.version(5).stores({
+      products: '++id, name, category, sku, barcode, stock',
+      transactions: '++id, invoiceNumber, timestamp, paymentMethod',
+      settings: 'id',
+      strukTemplates: 'id, name',
+      cashFlows: '++id, type, category, status, timestamp, dateString, storeId',
+      debts: '++id, customerName, status, createdAt, storeId',
+      capital: '++id, type, timestamp, storeId',
+      syncQueue: '++id, storeId, collection, operation, createdAt'
     });
   }
 }
