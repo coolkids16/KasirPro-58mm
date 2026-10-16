@@ -82,7 +82,25 @@ class ThermalPrinterService {
   };
 
   constructor() {
-    if (isTauriEnvironment()) {
+    if (typeof window === 'undefined') {
+      this.lastStatus = {
+        connected: false,
+        type: 'simulator',
+        deviceName: 'Simulator Thermal 58mm',
+        devicePath: this.defaultLinuxPath
+      };
+      return;
+    }
+
+    const w = window as any;
+    const tauriDetected = Boolean(
+      w.__TAURI_INTERNALS__ || 
+      w.__TAURI__ || 
+      w.__TAURI_METADATA__ ||
+      w.__TAURI_PATTERN__ !== undefined
+    );
+
+    if (tauriDetected) {
       this.lastStatus = {
         connected: true,
         type: 'tauri_raw',
@@ -127,7 +145,7 @@ class ThermalPrinterService {
     if (isTauriEnvironment()) {
       return 'tauri';
     }
-    if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
+    if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform) {
       return 'capacitor';
     }
     return 'browser';

@@ -154,6 +154,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
     await printerService.disconnectBluetooth();
     printerService.clearSavedBluetoothPrinter();
     setSavedBtPrinter(null);
+    setSelectedMethod(runtimeEnv === 'tauri' ? 'tauri_raw' : 'capacitor_bluetooth');
     setPrinterStatus({
       connected: false,
       type: 'simulator',
@@ -408,7 +409,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
               Laboratorium & Format Struk 58mm
             </h2>
             <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-mono px-2 py-0.5 rounded-md font-bold">
-              Linux OS
+              {runtimeEnv === 'tauri' ? 'Linux OS' : runtimeEnv === 'capacitor' ? 'Android' : 'Browser'}
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
@@ -421,7 +422,7 @@ export const PrinterTester: React.FC<PrinterTesterProps> = ({
           <span className="text-xs text-slate-400">Environment:</span>
           <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-xl text-xs font-mono uppercase font-bold flex items-center gap-1.5">
             <Cpu className="w-3.5 h-3.5" />
-            {runtimeEnv === 'tauri' ? 'Tauri v2 Desktop' : 'Web Preview / Browser'}
+            {runtimeEnv === 'tauri' ? 'Tauri v2 Desktop' : runtimeEnv === 'capacitor' ? 'Capacitor Android APK' : 'Web Preview / Browser'}
           </span>
         </div>
       </div>
