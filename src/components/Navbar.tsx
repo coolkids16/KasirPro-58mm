@@ -20,14 +20,15 @@ import {
   Users,
   Scan,
   Wallet,
-  RefreshCw
+  RefreshCw,
+  BarChart3
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { PrinterDeviceStatus, StoreSettings, UserProfile } from '../types';
 
 export interface NavbarProps {
-  activeTab: 'pos' | 'products' | 'strukscan' | 'transactions' | 'printer' | 'pembukuan';
-  setActiveTab: (tab: 'pos' | 'products' | 'strukscan' | 'transactions' | 'printer' | 'pembukuan') => void;
+  activeTab: 'pos' | 'products' | 'strukscan' | 'transactions' | 'printer' | 'pembukuan' | 'dashboard';
+  setActiveTab: (tab: 'pos' | 'products' | 'strukscan' | 'transactions' | 'printer' | 'pembukuan' | 'dashboard') => void;
   printerStatus: PrinterDeviceStatus;
   onOpenPrinterModal: () => void;
   onOpenSettingsModal: () => void;
@@ -181,6 +182,20 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <Wallet className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span className="whitespace-nowrap">Pembukuan</span>
+              </button>
+
+              {/* TAB DASHBOARD ANALYTICS */}
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                className={`flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
+                  activeTab === 'dashboard'
+                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 font-bold'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                }`}
+              >
+                <BarChart3 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="hidden lg:inline whitespace-nowrap">Analytics</span>
+                <span className="lg:hidden whitespace-nowrap">Dashboard</span>
               </button>
 
               {/* TAB STRUKSCAN STUDIO */}
@@ -604,6 +619,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Wallet className="w-4 h-4 text-emerald-400" />
             Buku
+          </button>
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`flex flex-col items-center gap-1 text-xs py-1 px-2 rounded shrink-0 ${
+              activeTab === 'dashboard' ? 'text-emerald-400 font-bold' : 'text-slate-400'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4 text-emerald-400" />
+            Analytics
           </button>
           <button
             onClick={() => setActiveTab('strukscan')}

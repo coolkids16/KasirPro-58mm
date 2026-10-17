@@ -6,6 +6,7 @@ import { ProductManagement } from './components/ProductManagement';
 import { StrukScanStudio } from './components/StrukScanStudio';
 import { TransactionHistory } from './components/TransactionHistory';
 import { Pembukuan } from './components/Pembukuan';
+import { DashboardAnalytics } from './components/DashboardAnalytics';
 import { PrinterTester } from './components/PrinterTester';
 import { ReceiptModal } from './components/ReceiptModal';
 import { AuthModal } from './components/AuthModal';
@@ -29,7 +30,7 @@ import { UserManagementModal } from './components/UserManagementModal';
 
 export default function App() {
   const { currentUser, userProfile, role, storeId, isOwner, isManager, isCashier } = useRole();
-  const [activeTab, setActiveTab] = useState<'pos' | 'products' | 'strukscan' | 'transactions' | 'printer' | 'pembukuan'>('pos');
+  const [activeTab, setActiveTab] = useState<'pos' | 'products' | 'strukscan' | 'transactions' | 'printer' | 'pembukuan' | 'dashboard'>('pos');
   const [products, setProducts] = useState<Product[]>([]);
   
   // Synchronously initialize settings from localStorage if available, otherwise DEFAULT_SETTINGS
@@ -342,6 +343,13 @@ export default function App() {
                 runtimeEnv={runtimeEnv}
                 settings={settings}
                 onUpdateSettings={handleUpdateSettings}
+                storeId={storeId}
+              />
+            )}
+
+            {activeTab === 'dashboard' && (
+              <DashboardAnalytics
+                settings={settings}
                 storeId={storeId}
               />
             )}
