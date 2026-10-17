@@ -1,10 +1,10 @@
 import Dexie, { type Table } from 'dexie';
-import { Product, Transaction, StoreSettings, CustomTemplate, CashFlowRecord, CustomerDebt, CapitalRecord } from '../types';
+import { Product, Transaction, StoreSettings, CustomTemplate, CashFlowRecord, CustomerDebt, CapitalRecord, TabunganRecord } from '../types';
 
 export interface PendingSyncOperation {
   id?: number;
   storeId: string;
-  collection: 'products' | 'transactions' | 'cashFlows' | 'debts';
+  collection: 'products' | 'transactions' | 'cashFlows' | 'debts' | 'savings';
   operation: 'delete';
   documentId?: string;
   field?: 'sku' | 'invoiceNumber' | 'createdAt';
@@ -20,6 +20,7 @@ export class KasirProDatabase extends Dexie {
   cashFlows!: Table<CashFlowRecord, any>;
   debts!: Table<CustomerDebt, any>;
   capital!: Table<CapitalRecord, any>;
+  savings!: Table<TabunganRecord, any>;
   syncQueue!: Table<PendingSyncOperation, number>;
 
   constructor() {
@@ -60,7 +61,8 @@ export class KasirProDatabase extends Dexie {
       cashFlows: '++id, type, category, status, timestamp, dateString, storeId',
       debts: '++id, customerName, status, createdAt, storeId',
       capital: '++id, type, timestamp, storeId',
-      syncQueue: '++id, storeId, collection, operation, createdAt'
+      syncQueue: '++id, storeId, collection, operation, createdAt',
+      savings: '++id, customerName, createdAt, storeId'
     });
   }
 }

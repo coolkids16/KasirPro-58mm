@@ -218,3 +218,29 @@ export interface CapitalRecord {
   storeId?: string;
 }
 
+export interface TabunganMutation {
+  id: string;
+  type: 'deposit' | 'withdrawal';
+  amount: number;
+  note: string;
+  timestamp: number;
+  dateString?: string;
+}
+
+export interface TabunganRecord {
+  id?: any;
+  firestoreId?: string;
+  syncPending?: boolean;
+  customerName: string;
+  customerPhone?: string;
+  description: string;
+  totalBalance: number;
+  depositCount: number;
+  withdrawalCount: number;
+  lastActivityTimestamp: number;
+  createdAt: number;
+  updatedAt?: number;
+  mutations?: TabunganMutation[];
+  storeId?: string;
+}
+

@@ -33,7 +33,7 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { Product, Transaction, StoreSettings, UserRole, UserProfile, Store, CustomTemplate, CashFlowRecord, CustomerDebt, CapitalRecord } from '../types';
+import { Product, Transaction, StoreSettings, UserRole, UserProfile, Store, CustomTemplate, CashFlowRecord, CustomerDebt, CapitalRecord, TabunganRecord } from '../types';
 import { db as localDb, DEFAULT_SETTINGS, PendingSyncOperation } from '../db/db';
 import { getLocalDateString } from '../utils/timezone';
 
@@ -1390,6 +1390,172 @@ export function subscribeDebts(
     },
     (err) => {
       console.warn('subscribeDebts error:', err);
+      if (onError) onError(err);
+    }
+  );
+}
+
+// ----------------- FIRESTORE SAVINGS (TABUNGAN) SERVICE -----------------
+
+export async function saveSavingsToFirestore(savings: TabunganRecord, storeId?: string): Promise<string> {
+  if (!auth.currentUser) {
+    await updateLocalSyncState('savings' as any, savings.id, { syncPending: true });
+    return String(savings.id || '');
+  }
+  const path = 'savings';
+  try {
+    const targetStoreId = await requireAuthenticatedStoreId(storeId || savings.storeId || activeStoreId || undefined);
+    const payload: Record<string, any> = {
+      storeId: targetStoreId,
+      customerName: savings.customerName,
+      customerPhone: savings.customerPhone || '',
+      description: savings.description || '',
+      totalBalance: Number(savings.totalBalance) || 0,
+      depositCount: Number(savings.depositCount) || 0,
+      withdrawalCount: Number(savings.withdrawalCount) || 0,
+      lastActivityTimestamp: savings.lastActivityTimestamp || Date.now(),
+      createdAt: savings.createdAt || Date.now(),
+      mutations: savings.mutations || [],
+      updatedAt: Date.now()
+    };
+
+    const cleanedPayload = cleanForFirestore(payload);
+    const docId = savings.firestoreId
+      || (typeof savings.id === 'string' && isNaN(Number(savings.id)) ? savings.id : null)
+      || (typeof savings.id === 'number' ? getOfflineDocumentId('savings', targetStoreId, savings.id) : null);
+    const docRef = docId ? doc(db, path, docId) : doc(collection(db, path));
+    await setDoc(docRef, cleanedPayload, { merge: true });
+    await updateLocalSyncState('savings' as any, savings.id, {
+      firestoreId: docRef.id,
+      storeId: targetStoreId,
+      syncPending: false
+    });
+    return docRef.id;
+  } catch (error) {
+    await updateLocalSyncState('savings' as any, savings.id, { syncPending: true }).catch(() => {});
+    handleFirestoreError(error, OperationType.WRITE, path);
+    return '';
+  }
+}
+
+export async function updateSavingsInFirestore(docId: string | number, partial: Partial<TabunganRecord>, originalCreatedAt?: number): Promise<void> {
+  if (!auth.currentUser) return;
+  const path = 'savings';
+  const effectiveStoreId = await requireAuthenticatedStoreId(partial.storeId);
+  const sanitizedPartial = cleanForFirestore(partial);
+
+  try {
+    if (docId && typeof docId === 'string' && isNaN(Number(docId))) {
+      await setDoc(doc(db, path, docId), {
+        ...sanitizedPartial,
+        updatedAt: Date.now()
+      }, { merge: true });
+      return;
+    }
+
+    const q = originalCreatedAt
+      ? query(collection(db, path), where('storeId', '==', effectiveStoreId), where('createdAt', '==', originalCreatedAt))
+      : null;
+    
+    if (!q) throw new Error('ID tabungan Firestore tidak tersedia.');
+    const snaps = await getDocs(q);
+    if (!snaps.empty) {
+      for (const d of snaps.docs) {
+        await setDoc(d.ref, {
+          ...sanitizedPartial,
+          updatedAt: Date.now()
+        }, { merge: true });
+      }
+    }
+  } catch (error) {
+    console.error('Failed to update savings in Firestore:', error);
+    throw error;
+  }
+}
+
+export async function deleteSavingsFromFirestore(savingsOrId: TabunganRecord | string | number): Promise<void> {
+  if (!auth.currentUser) {
+    if (typeof savingsOrId === 'object' && savingsOrId !== null) {
+      const docId = savingsOrId.firestoreId || (typeof savingsOrId.id === 'string' ? savingsOrId.id : (typeof savingsOrId.id === 'number' ? getOfflineDocumentId('savings', savingsOrId.storeId || activeStoreId || '', savingsOrId.id) : undefined));
+      await queuePendingDelete('savings' as any, savingsOrId.storeId || activeStoreId || undefined, docId ? { documentId: docId } : { field: 'createdAt', value: savingsOrId.createdAt });
+    }
+    return;
+  }
+  const path = 'savings';
+  try {
+    if (typeof savingsOrId === 'string' && isNaN(Number(savingsOrId))) {
+      const ref = doc(db, path, savingsOrId);
+      const snap = await getDoc(ref);
+      if (snap.exists() && snap.data().storeId === await requireAuthenticatedStoreId()) await deleteDoc(ref);
+      return;
+    }
+
+    if (typeof savingsOrId === 'object' && savingsOrId !== null) {
+      if (savingsOrId.firestoreId) {
+        const ref = doc(db, path, savingsOrId.firestoreId);
+        const snap = await getDoc(ref);
+        if (snap.exists() && snap.data().storeId === await requireAuthenticatedStoreId(savingsOrId.storeId)) await deleteDoc(ref);
+        return;
+      }
+      if (typeof savingsOrId.id === 'string' && isNaN(Number(savingsOrId.id))) {
+        const ref = doc(db, path, savingsOrId.id);
+        const snap = await getDoc(ref);
+        if (snap.exists() && snap.data().storeId === await requireAuthenticatedStoreId(savingsOrId.storeId)) await deleteDoc(ref);
+        return;
+      }
+
+      if (savingsOrId.createdAt) {
+        const store = await requireAuthenticatedStoreId(savingsOrId.storeId);
+        const q = query(
+          collection(db, path),
+          where('storeId', '==', store),
+          where('createdAt', '==', savingsOrId.createdAt)
+        );
+        const snaps = await getDocs(q);
+        for (const d of snaps.docs) {
+          await deleteDoc(d.ref);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to delete savings from Firestore:', error);
+    throw error;
+  }
+}
+
+export function subscribeSavings(
+  callback: (list: TabunganRecord[]) => void,
+  onError?: (err: any) => void,
+  storeId?: string
+) {
+  if (!auth.currentUser) {
+    if (onError) onError(new Error('User not authenticated'));
+    return () => {};
+  }
+  const targetStoreId = storeId || activeStoreId;
+  const col = collection(db, 'savings');
+  const q = targetStoreId
+    ? query(col, where('storeId', '==', targetStoreId))
+    : query(col, where('storeId', '==', '__no_store_assigned__'));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: TabunganRecord[] = [];
+      snapshot.forEach(docSnap => {
+        const d = docSnap.data();
+        list.push({
+          id: docSnap.id as any,
+          firestoreId: docSnap.id,
+          ...d,
+          syncPending: false
+        } as TabunganRecord);
+      });
+      list.sort((a, b) => (b.lastActivityTimestamp || b.createdAt || 0) - (a.lastActivityTimestamp || a.createdAt || 0));
+      callback(list);
+    },
+    (err) => {
+      console.warn('subscribeSavings error:', err);
       if (onError) onError(err);
     }
   );

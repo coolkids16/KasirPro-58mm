@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { CustomSelect } from './CustomSelect';
 import { BukuUtang } from './BukuUtang';
+import { Tabungan } from './Tabungan';
 import { 
   Wallet, 
   TrendingUp, 
@@ -34,10 +35,11 @@ import {
   RotateCcw,
   AlertTriangle,
   Truck,
-  ShoppingBag
+  ShoppingBag,
+  PiggyBank
 } from 'lucide-react';
 import { db } from '../db/db';
-import { CashFlowRecord, CustomerDebt, DebtPayment, DebtMutation, StoreSettings, Transaction } from '../types';
+import { CashFlowRecord, CustomerDebt, DebtPayment, DebtMutation, StoreSettings, Transaction, TabunganRecord } from '../types';
 import { formatRupiah, padCenter, padRow, padSeparator, EscPosEncoder } from '../utils/escpos';
 import { printerService } from '../services/printerService';
 import { sounds } from '../utils/audio';
@@ -53,6 +55,7 @@ import {
   subscribeCashFlows,
   subscribeDebts,
   subscribeTransactions,
+  subscribeSavings,
   subscribeToAuthState,
   deleteAllCashFlowsFromFirestore,
   deleteAllTransactionsFromFirestore,
@@ -69,7 +72,7 @@ interface PembukuanProps {
 }
 
 type PeriodFilter = 'today' | 'this_month' | 'all' | 'custom';
-type PembukuanSubTab = 'dashboard' | 'income' | 'expense' | 'debts';
+type PembukuanSubTab = 'dashboard' | 'income' | 'expense' | 'debts' | 'savings';
 
 interface IncomeFormItem {
   id: string;
@@ -104,6 +107,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   // Data states from Dexie
   const [cashFlows, setCashFlows] = useState<CashFlowRecord[]>([]);
   const [debts, setDebts] = useState<CustomerDebt[]>([]);
+  const [savings, setSavings] = useState<TabunganRecord[]>([]);
   const [posTransactions, setPosTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -194,10 +198,11 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [cfList, debtList, txList] = await Promise.all([
+      const [cfList, debtList, txList, savingsList] = await Promise.all([
         db.cashFlows.toArray(),
         db.debts.toArray(),
-        db.transactions.toArray()
+        db.transactions.toArray(),
+        db.savings.toArray()
       ]);
       setCashFlows(
         cfList
@@ -205,6 +210,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           .sort((a, b) => b.timestamp - a.timestamp)
       );
       setDebts(debtList.sort((a, b) => b.createdAt - a.createdAt));
+      setSavings(savingsList.sort((a, b) => (b.lastActivityTimestamp || b.createdAt || 0) - (a.lastActivityTimestamp || a.createdAt || 0)));
       setPosTransactions(
         txList
           .map(tx => ({ ...tx, timestamp: parseTimestamp(tx.timestamp) }))
@@ -229,12 +235,14 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   useEffect(() => {
     let unsubCf: (() => void) | null = null;
     let unsubDebts: (() => void) | null = null;
+    let unsubSavings: (() => void) | null = null;
     let unsubTx: (() => void) | null = null;
 
     const unsubAuth = subscribeToAuthState((user) => {
       // Unsubscribe previous listeners
       if (unsubCf) { unsubCf(); unsubCf = null; }
       if (unsubDebts) { unsubDebts(); unsubDebts = null; }
+      if (unsubSavings) { unsubSavings(); unsubSavings = null; }
       if (unsubTx) { unsubTx(); unsubTx = null; }
 
       if (user) {
@@ -278,6 +286,25 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           storeId || undefined
         );
 
+        unsubSavings = subscribeSavings(
+          async (remoteSavings) => {
+            if (remoteSavings) {
+              const sorted = (remoteSavings || []).sort((a, b) => (b.lastActivityTimestamp || b.createdAt || 0) - (a.lastActivityTimestamp || a.createdAt || 0));
+              setSavings(sorted);
+              try {
+                await db.savings.clear();
+                if (sorted.length > 0) {
+                  await db.savings.bulkAdd(sorted);
+                }
+              } catch (e) {
+                console.warn('Mirror savings error:', e);
+              }
+            }
+          },
+          undefined,
+          storeId || undefined
+        );
+
         unsubTx = subscribeTransactions(
           async (remoteList) => {
             if (remoteList) {
@@ -308,6 +335,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       unsubAuth();
       if (unsubCf) unsubCf();
       if (unsubDebts) unsubDebts();
+      if (unsubSavings) unsubSavings();
       if (unsubTx) unsubTx();
     };
   }, [storeId, loadData, parseTimestamp]);
@@ -1496,6 +1524,14 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
             <BookOpen className="w-4 h-4" />
             Buku Utang
           </button>
+
+          <button
+            onClick={() => setActiveSubTab('savings')}
+            className="px-3.5 py-2 bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+          >
+            <PiggyBank className="w-4 h-4" />
+            Tabungan
+          </button>
         </div>
       </div>
 
@@ -1548,6 +1584,18 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           >
             <BookOpen className="w-3.5 h-3.5" />
             Buku Utang ({metrics.countUnpaidDebts} Belum Lunas)
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('savings')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition whitespace-nowrap ${
+              activeSubTab === 'savings'
+                ? 'bg-emerald-500 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <PiggyBank className="w-3.5 h-3.5" />
+            Tabungan ({savings.length})
           </button>
         </div>
 
@@ -2347,6 +2395,17 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
         />
       )}
 
+      {/* ---------------- 5. SUB-TAB: TABUNGAN NASABAH ---------------- */}
+      {activeSubTab === 'savings' && (
+        <Tabungan
+          savings={savings}
+          onRefresh={loadData}
+          settings={settings}
+          storeId={storeId}
+          sounds={sounds}
+        />
+      )}
+
       {/* ================= MODAL: TAMBAH / EDIT PEMASUKAN ================= */}
       {isIncomeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
@@ -2454,7 +2513,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                         <input
                           type="number"
                           min={0}
-                          value={item.modal}
+                          value={item.modal || ''}
                           onChange={e => setIncomeItems(prev => prev.map(row => row.id === item.id ? { ...row, modal: Number(e.target.value) || 0 } : row))}
                           className="w-full min-w-0 px-3 py-2 bg-slate-900 border border-slate-750 rounded-xl text-sm text-slate-200 font-mono focus:outline-none"
                         />
@@ -2466,7 +2525,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                         <input
                           type="number"
                           min={0}
-                          value={item.pemasukan}
+                          value={item.pemasukan || ''}
                           onChange={e => setIncomeItems(prev => prev.map(row => row.id === item.id ? { ...row, pemasukan: Number(e.target.value) || 0 } : row))}
                           className="w-full min-w-0 px-3 py-2 bg-slate-900 border border-emerald-500/60 rounded-xl text-sm text-emerald-400 font-mono font-bold focus:outline-none"
                         />
