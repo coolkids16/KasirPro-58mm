@@ -128,6 +128,16 @@ html.light select option:focus {
 }
 
 /* Card & panel backgrounds in Light Mode - Clean White & Soft Slate-50 */
+html.light .bg-slate-950,
+html.light .bg-slate-950\/90,
+html.light .bg-slate-950\/80,
+html.light .bg-slate-950\/70,
+html.light .bg-slate-950\/60,
+html.light .bg-slate-950\/50,
+html.light .bg-slate-950\/40,
+html.light .bg-slate-950\/30,
+html.light .bg-slate-950\/20,
+html.light .bg-slate-950\/10,
 .light .bg-slate-950,
 .light .bg-slate-950\/90,
 .light .bg-slate-950\/80,
@@ -141,6 +151,13 @@ html.light select option:focus {
   background-color: #f8fafc !important; /* bg-slate-50 */
 }
 
+html.light .bg-slate-900,
+html.light .bg-slate-850,
+html.light .bg-slate-900\/90,
+html.light .bg-slate-900\/80,
+html.light .bg-slate-900\/60,
+html.light .bg-slate-900\/50,
+html.light .bg-slate-900\/40,
 .light .bg-slate-900,
 .light .bg-slate-850,
 .light .bg-slate-900\/90,
@@ -148,13 +165,24 @@ html.light select option:focus {
 .light .bg-slate-900\/60,
 .light .bg-slate-900\/50,
 .light .bg-slate-900\/40 {
-  background-color: #ffffff !important; /* white card background */
+  background-color: #f8fafc !important; /* bg-slate-50 */
 }
 
+html.light .bg-slate-800,
+html.light .bg-slate-800\/80,
+html.light .bg-slate-800\/60,
+html.light .bg-slate-850,
 .light .bg-slate-800,
 .light .bg-slate-800\/80,
 .light .bg-slate-800\/60,
 .light .bg-slate-850 {
+  background-color: #ffffff !important; /* white card background */
+}
+
+html.light .bg-slate-700,
+html.light .bg-slate-700\/50,
+.light .bg-slate-700,
+.light .bg-slate-700\/50 {
   background-color: #f1f5f9 !important; /* bg-slate-100 */
 }
 
@@ -224,11 +252,35 @@ html.light select option:focus {
 .light input[type="password"],
 .light input[type="number"],
 .light input[type="search"],
+.light input[type="date"],
 .light textarea,
 .light select {
   background-color: #ffffff !important;
   color: #0f172a !important;
   border-color: #cbd5e1 !important;
+}
+
+/* Date picker styling & arrow cursor */
+input[type="date"] {
+  cursor: default;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+.light input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.2);
+}
+
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
 }
 
 .light input::placeholder,
@@ -276,4 +328,59 @@ body, header, nav, button, input, textarea, select {
 .elegant-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.3) rgba(15, 23, 42, 0.3);
+}
+
+/* ==========================================================================
+   FORCE LIGHT MODE BACKGROUND OVERRIDES
+   ========================================================================== */
+html.light * {
+  /* Override all dark slate backgrounds in light mode */
+}
+
+html.light .bg-slate-900,
+html.light .dark\:bg-slate-900 {
+  background-color: #f8fafc !important;
+}
+
+html.light .bg-slate-800,
+html.light .dark\:bg-slate-800 {
+  background-color: #ffffff !important;
+}
+
+html.light .bg-slate-700,
+html.light .dark\:bg-slate-700 {
+  background-color: #f1f5f9 !important;
+}
+
+html.light .bg-slate-700\/50,
+html.light .dark\:bg-slate-700\/50 {
+  background-color: #f1f5f9 !important;
+}
+
+/* Text color overrides for light mode */
+html.light .text-slate-100,
+html.light .dark\:text-white,
+html.light .text-white {
+  color: #0f172a !important;
+}
+
+html.light .text-slate-400,
+html.light .dark\:text-slate-400 {
+  color: #64748b !important;
+}
+
+html.light .text-slate-500,
+html.light .dark\:text-slate-500 {
+  color: #64748b !important;
+}
+
+/* Border overrides */
+html.light .border-slate-700,
+html.light .dark\:border-slate-700 {
+  border-color: #e2e8f0 !important;
+}
+
+html.light .border-slate-600,
+html.light .dark\:border-slate-600 {
+  border-color: #cbd5e1 !important;
 }

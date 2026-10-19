@@ -169,5 +169,14 @@ service cloud.firestore {
         && request.resource.data.storeId == resource.data.storeId;
       allow delete: if managerOrOwner() && memberOf(resource.data.storeId);
     }
+
+    match /savings/{savingsId} {
+      allow read: if memberOf(resource.data.storeId);
+      allow create: if hasProfile() && sameStoreAfterWrite(request.resource.data.storeId);
+      allow update: if hasProfile()
+        && memberOf(resource.data.storeId)
+        && request.resource.data.storeId == resource.data.storeId;
+      allow delete: if managerOrOwner() && memberOf(resource.data.storeId);
+    }
   }
 }

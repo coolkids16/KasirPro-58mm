@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { db } from '../db/db';
 import { CashFlowRecord, CustomerDebt, DebtPayment, DebtMutation, StoreSettings, Transaction, TabunganRecord } from '../types';
+import { DatePicker } from './DatePicker';
 import { formatRupiah, padCenter, padRow, padSeparator, EscPosEncoder } from '../utils/escpos';
 import { printerService } from '../services/printerService';
 import { sounds } from '../utils/audio';
@@ -2409,7 +2410,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       {/* ================= MODAL: TAMBAH / EDIT PEMASUKAN ================= */}
       {isIncomeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-3xl max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-lg max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
@@ -2497,16 +2498,12 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
                 <div className="space-y-2.5">
                   {incomeItems.map((item, index) => (
-                    <div key={item.id} className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] [@media(orientation:portrait)]:!grid-cols-1 items-end gap-2.5 p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                    <div key={item.id} className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.5fr)_minmax(0,1fr)_minmax(0,1fr)_auto] [@media(orientation:portrait)]:!grid-cols-1 items-end gap-2.5 p-3 bg-slate-950 border border-slate-800 rounded-xl">
                       <div>
-                        <label className="block text-slate-400 mb-1 font-medium">Keterangan singkat</label>
-                        <input
-                          type="text"
-                          placeholder={`Contoh: Layanan ${index + 1}`}
-                          value={item.keterangan}
-                          onChange={e => setIncomeItems(prev => prev.map(row => row.id === item.id ? { ...row, keterangan: e.target.value } : row))}
-                          className="w-full min-w-0 px-3 py-2 bg-slate-900 border border-slate-750 rounded-xl text-sm text-white focus:outline-none focus:border-emerald-500"
-                        />
+                        <label className="block text-slate-400 mb-1 font-medium">No</label>
+                        <div className="w-full min-w-0 px-3 py-2 bg-slate-900 border border-slate-750 rounded-xl text-sm text-white font-mono">
+                          {index + 1}
+                        </div>
                       </div>
                       <div>
                         <label className="block text-slate-400 mb-1 font-medium">Biaya Modal (Rp)</label>
@@ -2635,11 +2632,10 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                       </button>
                     </div>
                   </div>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={formDate}
-                    onChange={e => setFormDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none"
+                    onChange={setFormDate}
+                    className="bg-slate-950 border-slate-750 text-white"
                   />
                 </div>
               </div>
@@ -2777,11 +2773,10 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                       </button>
                     </div>
                   </div>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={formDate}
-                    onChange={e => setFormDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none"
+                    onChange={setFormDate}
+                    className="bg-slate-950 border-slate-750 text-white"
                   />
                 </div>
               </div>

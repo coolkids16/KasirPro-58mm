@@ -25,6 +25,7 @@ import { db } from '../db/db';
 import { auth, saveSavingsToFirestore, updateSavingsInFirestore, deleteSavingsFromFirestore } from '../services/firebase';
 import { TabunganRecord, TabunganMutation, StoreSettings } from '../types';
 import { getLocalDateString } from '../utils/timezone';
+import { DatePicker } from './DatePicker';
 
 interface TabunganProps {
   savings: TabunganRecord[];
@@ -677,11 +678,9 @@ export const Tabungan: React.FC<TabunganProps> = ({
               </div>
               <div>
                 <label className="text-xs text-slate-500 mb-1 block">Tanggal Setoran</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={formInitialDepositDate}
-                  onChange={(e) => setFormInitialDepositDate(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  onChange={setFormInitialDepositDate}
                 />
               </div>
               <div>
@@ -749,11 +748,9 @@ export const Tabungan: React.FC<TabunganProps> = ({
               </div>
               <div>
                 <label className="text-xs text-slate-500 mb-1 block">Tanggal</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={trxDate}
-                  onChange={(e) => setTrxDate(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  onChange={setTrxDate}
                 />
               </div>
               <div className="flex justify-end space-x-2 pt-2">
@@ -814,11 +811,9 @@ export const Tabungan: React.FC<TabunganProps> = ({
               </div>
               <div>
                 <label className="text-xs text-slate-500 mb-1 block">Tanggal</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={trxDate}
-                  onChange={(e) => setTrxDate(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500"
+                  onChange={setTrxDate}
                 />
               </div>
               <div className="flex justify-end space-x-2 pt-2">

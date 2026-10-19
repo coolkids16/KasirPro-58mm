@@ -25,6 +25,7 @@ import { EscPosEncoder } from '../utils/escpos';
 import { db } from '../db/db';
 import { auth, saveDebtToFirestore, updateDebtInFirestore, deleteDebtFromFirestore } from '../services/firebase';
 import { CustomerDebt, DebtPayment, DebtMutation, StoreSettings } from '../types';
+import { DatePicker } from './DatePicker';
 import { getLocalDateString, getLocalYesterdayDateString } from '../utils/timezone';
 
 interface BukuUtangProps {
@@ -1160,20 +1161,19 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
                         </button>
                       </div>
                     </div>
-                    <input
-                      type="date"
+                    <DatePicker
                       value={giveDate}
-                      onChange={e => setGiveDate(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none"
+                      onChange={setGiveDate}
+                      className="bg-slate-950 border-slate-750 text-white"
                     />
                   </div>
                   <div>
                     <label className="block text-slate-400 mb-1 font-semibold">Jatuh Tempo (Opsional)</label>
-                    <input
-                      type="date"
+                    <DatePicker
                       value={giveDueDate}
-                      onChange={e => setGiveDueDate(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none"
+                      onChange={setGiveDueDate}
+                      placeholder="Pilih jatuh tempo"
+                      className="bg-slate-950 border-slate-750 text-white"
                     />
                   </div>
                 </div>
@@ -1290,12 +1290,10 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
                       </button>
                     </div>
                   </div>
-                  <input
-                    type="date"
-                    required
+                  <DatePicker
                     value={takeDate}
-                    onChange={e => setTakeDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+                    onChange={setTakeDate}
+                    className="bg-slate-950 border-slate-750 text-white"
                   />
                 </div>
 
@@ -1342,11 +1340,10 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
               <div>
                 <label className="block text-slate-400 mb-1 text-xs">Tanggal Jatuh Tempo</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={tempDueDate}
-                  onChange={e => setTempDueDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white text-xs focus:outline-none"
+                  onChange={setTempDueDate}
+                  className="bg-slate-950 border-slate-750 text-white"
                 />
               </div>
 
@@ -1941,12 +1938,10 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
                       </button>
                     </div>
                   </div>
-                  <input
-                    type="date"
-                    required
+                  <DatePicker
                     value={formDate}
-                    onChange={e => setFormDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white font-medium focus:outline-none focus:border-emerald-500"
+                    onChange={setFormDate}
+                    className="bg-slate-950 border-slate-750 text-white"
                   />
                 </div>
 
@@ -1955,11 +1950,11 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
                     <Clock className="w-3.5 h-3.5 text-amber-400" />
                     Jatuh Tempo (Opsional)
                   </label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={formDueDate}
-                    onChange={e => setFormDueDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white focus:outline-none focus:border-slate-600"
+                    onChange={setFormDueDate}
+                    placeholder="Pilih jatuh tempo"
+                    className="bg-slate-950 border-slate-750 text-white"
                   />
                 </div>
               </div>
