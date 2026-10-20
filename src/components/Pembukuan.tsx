@@ -2409,8 +2409,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
       {/* ================= MODAL: TAMBAH / EDIT PEMASUKAN ================= */}
       {isIncomeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-lg max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
@@ -2675,8 +2675,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
       {/* ================= MODAL: TAMBAH / EDIT PENGELUARAN ================= */}
       {isExpenseModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
@@ -2816,8 +2816,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
       {/* ================= MODAL: KONFIRMASI HAPUS TRANSAKSI PEMBUKUAN ================= */}
       {cashFlowToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
-          <div className="bg-slate-900 border border-rose-500/40 w-full max-w-md rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 animate-in fade-in overflow-y-auto">
+          <div className="bg-slate-900 border border-rose-500/40 w-full max-w-md rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
@@ -2891,8 +2891,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
 
       {/* ================= MODAL: KONFIRMASI HAPUS SEMUA DATA ================= */}
       {isConfirmClearAllOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
-          <div className="bg-slate-900 border border-rose-500/40 w-full max-w-md rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 animate-in fade-in overflow-y-auto">
+          <div className="bg-slate-900 border border-rose-500/40 w-full max-w-md rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">

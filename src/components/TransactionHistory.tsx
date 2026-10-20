@@ -749,8 +749,8 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
 
       {/* IN-APP CONFIRMATION MODAL: DELETE SINGLE TRANSACTION */}
       {txToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 text-center space-y-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 text-center space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto border border-rose-500/20">
               <Trash2 className="w-6 h-6" />
             </div>
@@ -785,8 +785,8 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
 
       {/* IN-APP CONFIRMATION MODAL: CLEAR ALL TRANSACTIONS */}
       {isClearAllOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 text-center space-y-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 text-center space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto border border-rose-500/20">
               <AlertCircle className="w-6 h-6" />
             </div>

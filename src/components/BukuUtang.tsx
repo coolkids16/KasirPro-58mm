@@ -1079,8 +1079,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
         {/* Modal: "Berikan" (Tambah Utang Baru Pada Pelanggan Ini) */}
         {isGiveModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
-            <div className="bg-slate-900 border border-rose-500/40 w-full max-w-sm rounded-3xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 animate-in fade-in overflow-y-auto">
+            <div className="bg-slate-900 border border-rose-500/40 w-full max-w-sm rounded-3xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
@@ -1200,8 +1200,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
         {/* Modal: "Terima" (Catat Pembayaran / Cicilan) */}
         {isTakeModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
-            <div className="bg-slate-900 border border-emerald-500/40 w-full max-w-sm rounded-3xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 animate-in fade-in overflow-y-auto">
+            <div className="bg-slate-900 border border-emerald-500/40 w-full max-w-sm rounded-3xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
@@ -1328,8 +1328,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
         {/* Modal: Atur Jatuh Tempo */}
         {isDueDateModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
-            <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 animate-in fade-in overflow-y-auto">
+            <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 space-y-4">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-emerald-400" />
                 Atur Tanggal Jatuh Tempo
@@ -1380,8 +1380,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
         {/* Modal: Konfirmasi Lunaskan */}
         {isPayoffModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
-            <div className="bg-slate-900 border border-emerald-500/40 w-full max-w-sm rounded-3xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 animate-in fade-in overflow-y-auto">
+            <div className="bg-slate-900 border border-emerald-500/40 w-full max-w-sm rounded-3xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 space-y-4">
               <div className="flex items-center gap-2.5 pb-2 border-b border-slate-800">
                 <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
                   <CheckCircle2 className="w-5 h-5" />
@@ -1425,8 +1425,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
         {/* Modal: Bagikan Laporan */}
         {isShareModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
-            <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 animate-in fade-in overflow-y-auto">
+            <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 space-y-4">
               <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <Share2 className="w-4 h-4 text-cyan-400" />
@@ -1475,8 +1475,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
         {/* Modal: Hapus Pelanggan */}
         {isDeleteModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
-            <div className="bg-slate-900 border border-rose-500/40 w-full max-w-sm rounded-3xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 animate-in fade-in overflow-y-auto">
+            <div className="bg-slate-900 border border-rose-500/40 w-full max-w-sm rounded-3xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 space-y-4">
               <div className="flex items-center gap-2.5 text-rose-400 pb-2 border-b border-slate-800">
                 <Trash2 className="w-5 h-5" />
                 <h3 className="text-base font-bold text-white">Hapus Pelanggan?</h3>
@@ -1508,8 +1508,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
         {/* Modal: Konfirmasi Hapus Catatan Transaksi */}
         {mutationToDelete && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
-            <div className="bg-slate-900 border border-rose-500/40 w-full max-w-md rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 animate-in fade-in overflow-y-auto">
+            <div className="bg-slate-900 border border-rose-500/40 w-full max-w-md rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center gap-2.5">
                   <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
@@ -1806,8 +1806,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
           MODAL: CATAT UTANG BARU (+ Catat Utang)
           ========================================================================= */}
       {isNewDebtModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-3xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 animate-in fade-in overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-3xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-500 text-slate-950 font-black flex items-center justify-center">

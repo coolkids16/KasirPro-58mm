@@ -13,7 +13,8 @@ import {
   AlertCircle,
   Camera,
   Barcode,
-  CheckCircle2
+  CheckCircle2,
+  TrendingUp
 } from 'lucide-react';
 import { Product, CartItem, PaymentMethod, Transaction, StoreSettings } from '../types';
 import { db } from '../db/db';
@@ -55,6 +56,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortBy, setSortBy] = useState<'default' | 'bestselling'>('default');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [cashGiven, setCashGiven] = useState<number>(0);
@@ -90,7 +92,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
 
   // Filter products by category & search query
   const filteredProducts = useMemo(() => {
-    return products.filter(product => {
+    let result = products.filter(product => {
       const matchCat = selectedCategory === 'Semua' || product.category === selectedCategory;
       const matchQuery = 
         product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -98,7 +100,14 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         (product.barcode && product.barcode.includes(searchQuery));
       return matchCat && matchQuery;
     });
-  }, [products, selectedCategory, searchQuery]);
+
+    // Sort by best-selling if selected
+    if (sortBy === 'bestselling') {
+      result = [...result].sort((a, b) => (b.soldCount || 0) - (a.soldCount || 0));
+    }
+
+    return result;
+  }, [products, selectedCategory, searchQuery, sortBy]);
 
   // Cart totals calculation
   const subtotal = useMemo(() => {
@@ -269,11 +278,12 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       const txId = await db.transactions.add(newTransaction);
       newTransaction.id = txId;
 
-      // 2. Reduce product stock in Dexie & sync to Firestore
+      // 2. Reduce product stock in Dexie & sync to Firestore, update soldCount
       for (const item of cart) {
         if (item.product.id) {
           const newStock = Math.max(0, Math.round((item.product.stock - item.quantity) * 1000) / 1000);
-          await db.products.update(item.product.id, { stock: newStock });
+          const newSoldCount = (item.product.soldCount || 0) + item.quantity;
+          await db.products.update(item.product.id, { stock: newStock, soldCount: newSoldCount });
           try {
             const cloudProductId = item.product.firestoreId
               || (typeof item.product.id === 'string' && isNaN(Number(item.product.id)) ? item.product.id : null);
@@ -389,6 +399,21 @@ export const PosScreen: React.FC<PosScreenProps> = ({
               );
             })}
           </div>
+
+          {/* Sort/Filter Dropdown */}
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-[11px] text-slate-400">Urutkan:</span>
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as 'default' | 'bestselling')}
+              className="px-2.5 py-1.5 bg-slate-950 border border-slate-750 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 appearance-none"
+            >
+              <option value="default">Default</option>
+              <option value="bestselling">
+                <TrendingUp className="w-3 h-3 inline mr-1" /> Terlaris
+              </option>
+            </select>
+          </div>
         </div>
 
         {/* Product Cards Grid: two columns on phones, with denser grids on wide screens */}
@@ -396,6 +421,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           {filteredProducts.map(product => {
             const outOfStock = product.stock <= 0;
             const inCart = cart.find(i => i.product.id === product.id);
+            const isBestseller = (product.soldCount || 0) > 0;
 
             return (
               <div
@@ -434,6 +460,13 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                   <h4 className="min-w-0 break-words font-semibold text-white text-xs sm:text-sm leading-snug group-hover:text-emerald-300 transition-colors">
                     {product.name}
                   </h4>
+
+                  {isBestseller && sortBy === 'bestselling' && (
+                    <div className="mt-1.5 flex items-center gap-1 text-[10px] text-amber-400">
+                      <TrendingUp className="w-3 h-3" />
+                      <span className="font-bold">Terlaris: {product.soldCount} terjual</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-2.5 sm:mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">

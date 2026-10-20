@@ -268,11 +268,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Popover Card Info */}
               {showSyncInfo && createPortal(
                 <div
-                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+                  className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto"
                   onClick={() => setShowSyncInfo(false)}
                 >
                   <div
-                    className="relative z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full mx-4 p-4 text-xs space-y-3 animate-in fade-in"
+                    className="relative z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full mx-4 p-4 text-xs space-y-3 animate-in fade-in overflow-y-auto max-h-[90vh]"
                     role="dialog"
                     aria-modal="true"
                     aria-label="Status Sinkronisasi Database"
@@ -429,11 +429,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Dropdown Menu Card */}
               {showProfileMenu && createPortal(
                 <div
-                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+                  className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto"
                   onClick={() => setShowProfileMenu(false)}
                 >
                   <div
-                    className="relative z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full mx-4 p-3 text-xs space-y-2 animate-in fade-in zoom-in-95 duration-100"
+                    className="relative z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full mx-4 p-3 text-xs space-y-2 animate-in fade-in zoom-in-95 duration-100 overflow-y-auto max-h-[90vh]"
                     role="dialog"
                     aria-modal="true"
                     aria-label="Menu akun dan pengaturan"

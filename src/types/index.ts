@@ -57,6 +57,7 @@ export interface Product {
   modal?: number; // Alias harga modal
   purchase_price?: number; // Alias harga beli/modal
   unit?: string; // Satuan (Pcs, Dus, Liter, Kg, dll)
+  soldCount?: number; // Total quantity sold (for best-selling filter)
 }
 
 export interface CartItem {

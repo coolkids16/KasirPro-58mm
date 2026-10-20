@@ -811,8 +811,8 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
 
       {/* MODAL: TAMBAH KATEGORI BARU CEPAT DARI TOOLBAR */}
       {isNewCategoryModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
@@ -868,8 +868,8 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
 
       {/* IN-APP CONFIRMATION MODAL: DELETE INDIVIDUAL PRODUCT */}
       {productToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 text-center space-y-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 text-center space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto border border-rose-500/20">
               <Trash2 className="w-6 h-6" />
             </div>
@@ -953,8 +953,8 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
 
       {/* IN-APP MODAL: HAPUS SEMUA STOK (PILIHAN KOSONGKAN STOK ATAU HAPUS SEMUA PRODUK) */}
       {isClearAllStockModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold">
@@ -1034,8 +1034,8 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
 
       {/* ADD / EDIT PRODUCT MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden p-3 sm:p-4 lg:p-6 relative">
+        <div className="fixed inset-0 z-50 flex items-start justify-center min-h-screen bg-black/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] p-3 sm:p-4 lg:p-6 relative w-full mx-4 my-4">
             <button
               onClick={() => setIsModalOpen(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
