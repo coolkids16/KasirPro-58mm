@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
   Trash2, 
@@ -14,11 +14,12 @@ import {
   Camera,
   Barcode,
   CheckCircle2,
-  TrendingUp
+  TrendingUp,
+  User
 } from 'lucide-react';
-import { Product, CartItem, PaymentMethod, Transaction, StoreSettings } from '../types';
+import { Product, CartItem, PaymentMethod, Transaction, StoreSettings, CustomerDebt, DebtMutation, DebtPayment } from '../types';
 import { db } from '../db/db';
-import { saveTransactionToFirestore, updateProductStockToFirestore } from '../services/firebase';
+import { auth, saveDebtToFirestore, updateDebtInFirestore, saveTransactionToFirestore, updateProductStockToFirestore } from '../services/firebase';
 import { formatRupiah } from '../utils/escpos';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
 import { CameraBarcodeScannerModal } from './CameraBarcodeScannerModal';
@@ -61,11 +62,19 @@ export const PosScreen: React.FC<PosScreenProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [cashGiven, setCashGiven] = useState<number>(0);
   const [cashInputString, setCashInputString] = useState<string>('');
+  const [paymentStatus, setPaymentStatus] = useState<'lunas' | 'belum_lunas'>('lunas');
+  const [debts, setDebts] = useState<CustomerDebt[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<string>('');
+  const [manualCustomerName, setManualCustomerName] = useState<string>('');
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [showDiscountInput, setShowDiscountInput] = useState<boolean>(false);
   const [itemNoteModal, setItemNoteModal] = useState<{ index: number; text: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    db.debts.toArray().then(setDebts).catch(error => console.warn('Gagal memuat daftar bon pelanggan:', error));
+  }, []);
 
   // Connect Hardware USB Barcode Scanner Hook for Linux/Desktop PC
   const { toastNotification } = useHardwareBarcodeScanner({
@@ -214,6 +223,9 @@ export const PosScreen: React.FC<PosScreenProps> = ({
     setCashGiven(0);
     setCashInputString('');
     setDiscountAmount(0);
+    setPaymentStatus('lunas');
+    setSelectedCustomer('');
+    setManualCustomerName('');
   };
 
   // Quick denomination helper
@@ -240,8 +252,18 @@ export const PosScreen: React.FC<PosScreenProps> = ({
   const handleCheckout = async () => {
     if (cart.length === 0 || isProcessing) return;
 
-    if (paymentMethod === 'cash' && cashGiven < grandTotal) {
+    if (paymentStatus === 'lunas' && paymentMethod === 'cash' && cashGiven < grandTotal) {
       alert(`Uang pembayaran kurang! Total belanja: Rp ${formatRupiah(grandTotal)}, Uang diterima: Rp ${formatRupiah(cashGiven)}`);
+      return;
+    }
+    if (paymentStatus === 'belum_lunas' && !selectedCustomer) {
+      alert('Pilih pelanggan bon atau tambah nama pelanggan terlebih dahulu.');
+      return;
+    }
+
+    const customerName = selectedCustomer === '__new__' ? manualCustomerName.trim() : selectedCustomer;
+    if (paymentStatus === 'belum_lunas' && !customerName) {
+      alert('Nama pelanggan wajib diisi untuk transaksi bon.');
       return;
     }
 
@@ -249,8 +271,11 @@ export const PosScreen: React.FC<PosScreenProps> = ({
 
     try {
       const invoiceNumber = generateUniqueInvoiceNumber();
-      const paid = paymentMethod === 'cash' ? cashGiven : grandTotal;
+      const paid = paymentStatus === 'belum_lunas'
+        ? (paymentMethod === 'cash' ? Math.min(cashGiven, grandTotal) : 0)
+        : (paymentMethod === 'cash' ? cashGiven : grandTotal);
       const change = paymentMethod === 'cash' ? Math.max(0, cashGiven - grandTotal) : 0;
+      const remainingDebt = Math.max(0, grandTotal - paid);
 
       const totalCost = cart.reduce((sum, item) => {
         const itemCost = item.product.costPrice !== undefined 
@@ -274,12 +299,82 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         paidAmount: paid,
         changeAmount: change,
         paymentMethod,
+        paymentStatus: remainingDebt > 0 ? 'belum_lunas' : 'lunas',
+        customerName: remainingDebt > 0 && paymentStatus === 'belum_lunas' ? customerName : undefined,
         cashierName: settings.cashierName
       };
 
       // 1. Save transaction in Dexie IndexedDB
       const txId = await db.transactions.add(newTransaction);
       newTransaction.id = txId;
+
+      if (paymentStatus === 'belum_lunas' && remainingDebt > 0) {
+        const timestamp = Date.now();
+        const note = `Transaksi kasir ${invoiceNumber}`;
+        const giveMutation: DebtMutation = {
+          id: `mut-${timestamp}`,
+          type: 'give',
+          amount: grandTotal,
+          note,
+          timestamp,
+          dateString: new Date(timestamp).toISOString().slice(0, 10)
+        };
+        const payments: DebtPayment[] = paid > 0 ? [{
+          id: `dp-${timestamp}`,
+          amount: paid,
+          timestamp,
+          note: `Pembayaran awal transaksi ${invoiceNumber}`
+        }] : [];
+        const takeMutation: DebtMutation | null = paid > 0 ? {
+          id: `mut-pay-${timestamp}`,
+          type: 'take',
+          amount: paid,
+          note: `Pembayaran awal transaksi ${invoiceNumber}`,
+          timestamp,
+          dateString: new Date(timestamp).toISOString().slice(0, 10)
+        } : null;
+        const existingDebt = debts.find(debt => debt.customerName.trim().toLowerCase() === customerName.toLowerCase());
+
+        if (existingDebt?.id) {
+          const newTotal = existingDebt.totalAmount + grandTotal;
+          const newPaid = existingDebt.paidAmount + paid;
+          const updatedDebt: Partial<CustomerDebt> = {
+            totalAmount: newTotal,
+            paidAmount: newPaid,
+            remainingAmount: Math.max(0, newTotal - newPaid),
+            status: newTotal - newPaid <= 0 ? 'lunas' : (newPaid > 0 ? 'cicilan' : 'belum_lunas'),
+            description: `${existingDebt.description}, ${note}`,
+            payments: [...(existingDebt.payments || []), ...payments],
+            mutations: [...(existingDebt.mutations || []), giveMutation, ...(takeMutation ? [takeMutation] : [])],
+            updatedAt: timestamp
+          };
+          await db.debts.update(existingDebt.id, updatedDebt);
+          if (auth.currentUser) {
+            await updateDebtInFirestore(existingDebt.firestoreId || existingDebt.id, updatedDebt, existingDebt.createdAt);
+          }
+        } else {
+          const newDebt: CustomerDebt = {
+            customerName,
+            description: note,
+            totalAmount: grandTotal,
+            paidAmount: paid,
+            remainingAmount: remainingDebt,
+            status: paid > 0 ? 'cicilan' : 'belum_lunas',
+            debtCategory: 'pelanggan',
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            payments,
+            mutations: [giveMutation, ...(takeMutation ? [takeMutation] : [])],
+            storeId: storeId || undefined
+          };
+          const debtId = await db.debts.add(newDebt);
+          newDebt.id = debtId;
+          if (auth.currentUser) {
+            const firestoreId = await saveDebtToFirestore(newDebt, storeId || undefined);
+            if (firestoreId) await db.debts.update(debtId, { firestoreId });
+          }
+        }
+      }
 
       // 2. Reduce product stock in Dexie & sync to Firestore, update soldCount
       for (const item of cart) {
@@ -314,6 +409,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
 
       // 5. Reset Cart
       clearCart();
+      db.debts.toArray().then(setDebts).catch(error => console.warn('Gagal memuat ulang daftar bon pelanggan:', error));
     } catch (err) {
       console.error('Checkout error:', err);
       alert('Terjadi kesalahan saat memproses transaksi.');
@@ -722,6 +818,62 @@ export const PosScreen: React.FC<PosScreenProps> = ({
             </button>
           </div>
 
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => setPaymentStatus('lunas')}
+                className={`py-1.5 sm:py-2 px-2 sm:px-3 rounded-lg sm:rounded-xl border text-xs font-semibold transition ${
+                  paymentStatus === 'lunas'
+                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                Lunas
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentStatus('belum_lunas')}
+                className={`py-1.5 sm:py-2 px-2 sm:px-3 rounded-lg sm:rounded-xl border text-xs font-semibold transition ${
+                  paymentStatus === 'belum_lunas'
+                    ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                Belum Lunas
+              </button>
+            </div>
+            {paymentStatus === 'belum_lunas' && (
+              <div className="space-y-2 p-2.5 bg-amber-950/20 border border-amber-500/25 rounded-xl">
+                <label htmlFor="pos-debt-customer" className="block text-[11px] sm:text-xs text-slate-300 font-medium">
+                  <User className="inline w-3.5 h-3.5 mr-1 text-amber-400" />Pelanggan Bon
+                </label>
+                <select
+                  id="pos-debt-customer"
+                  value={selectedCustomer}
+                  onChange={e => setSelectedCustomer(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg sm:rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:border-amber-500"
+                >
+                  <option value="">Pilih pelanggan terdaftar...</option>
+                  {Array.from(new Set(debts.map(debt => debt.customerName.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)).map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                  <option value="__new__">+ Tambah nama pelanggan baru</option>
+                </select>
+                {selectedCustomer === '__new__' && (
+                  <input
+                    type="text"
+                    value={manualCustomerName}
+                    onChange={e => setManualCustomerName(e.target.value)}
+                    placeholder="Nama pelanggan"
+                    className="w-full px-3 py-2 bg-slate-950 border border-amber-500/50 rounded-lg sm:rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                  />
+                )}
+                <p className="text-[10px] text-slate-400">Kekurangan pembayaran akan otomatis ditambahkan ke bon pelanggan.</p>
+              </div>
+            )}
+          </div>
+
           {/* Cash Payment Details & Quick Buttons */}
           {paymentMethod === 'cash' && (
             <div className="space-y-2">
@@ -782,15 +934,17 @@ export const PosScreen: React.FC<PosScreenProps> = ({
 
               {/* Kembalian Banner */}
               <div className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl flex items-center justify-between text-xs font-semibold ${
-                cashGiven >= grandTotal
-                  ? 'bg-emerald-950/60 border border-emerald-500/30 text-emerald-300'
+                paymentStatus === 'belum_lunas' || cashGiven >= grandTotal
+                  ? 'bg-emerald-950/60 border border-emerald-500/30 text-white'
                   : 'bg-rose-950/60 border border-rose-500/30 text-rose-300'
               }`}>
-                <span>Kembalian:</span>
+                <span>{paymentStatus === 'belum_lunas' && cashGiven < grandTotal ? 'Sisa Bon:' : 'Kembalian:'}</span>
                 <span className="font-mono font-bold text-xs sm:text-sm">
-                  {cashGiven >= grandTotal
-                    ? `Rp ${formatRupiah(changeAmount)}`
-                    : `Kurang Rp ${formatRupiah(grandTotal - cashGiven)}`}
+                  {paymentStatus === 'belum_lunas' && cashGiven < grandTotal
+                    ? `Rp ${formatRupiah(grandTotal - Math.min(cashGiven, grandTotal))}`
+                    : cashGiven >= grandTotal
+                      ? `Rp ${formatRupiah(changeAmount)}`
+                      : `Kurang Rp ${formatRupiah(grandTotal - cashGiven)}`}
                 </span>
               </div>
             </div>
@@ -800,7 +954,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           <div className="pt-1 pb-2 sm:pb-3">
             <button
               onClick={handleCheckout}
-              disabled={cart.length === 0 || isProcessing || (paymentMethod === 'cash' && cashGiven < grandTotal)}
+              disabled={cart.length === 0 || isProcessing || (paymentStatus === 'lunas' && paymentMethod === 'cash' && cashGiven < grandTotal)}
               className="w-full py-2.5 sm:py-3 px-3 sm:px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-40 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 text-xs sm:text-sm transition-all active:scale-[0.99]"
             >
               <ReceiptText className="w-4 h-4 shrink-0" />

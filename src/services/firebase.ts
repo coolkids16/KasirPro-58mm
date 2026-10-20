@@ -811,6 +811,8 @@ export function subscribeTransactions(
           paidAmount: Number(data.paidAmount) || 0,
           changeAmount: Number(data.changeAmount) || 0,
           paymentMethod: data.paymentMethod || 'cash',
+          paymentStatus: data.paymentStatus || 'lunas',
+          customerName: data.customerName || undefined,
           cashierName: data.cashierName || 'Kasir',
           cashierId: data.cashierId || '',
           notes: data.notes || ''
@@ -905,6 +907,8 @@ export async function saveTransactionToFirestore(transaction: Transaction, store
       paidAmount: Number(transaction.paidAmount),
       changeAmount: Number(transaction.changeAmount),
       paymentMethod: transaction.paymentMethod,
+      paymentStatus: transaction.paymentStatus || 'lunas',
+      customerName: transaction.customerName || '',
       cashierName: transaction.cashierName,
       cashierId: auth.currentUser.uid,
       notes: transaction.notes || '',

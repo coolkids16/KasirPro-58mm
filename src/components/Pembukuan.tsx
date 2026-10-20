@@ -72,7 +72,7 @@ interface PembukuanProps {
   onSelectTransactionToPrint?: (tx: Transaction) => void;
 }
 
-type PeriodFilter = 'today' | 'this_month' | 'all' | 'custom';
+type PeriodFilter = 'today' | 'yesterday' | 'last7' | 'last30' | 'this_month' | 'last_month' | 'custom';
 type PembukuanSubTab = 'dashboard' | 'income' | 'expense' | 'debts' | 'savings';
 
 interface IncomeFormItem {
@@ -348,10 +348,12 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   const [formDescription, setFormDescription] = useState<string>('');
   const [formAmount, setFormAmount] = useState<string>('');
   const [incomeItems, setIncomeItems] = useState<IncomeFormItem[]>([createIncomeFormItem()]);
+  const [cashReceived, setCashReceived] = useState<string>('');
   const incomeTotals = useMemo(() => incomeItems.reduce((totals, item) => ({
     modal: totals.modal + (Number(item.modal) || 0),
     pemasukan: totals.pemasukan + (Number(item.pemasukan) || 0)
   }), { modal: 0, pemasukan: 0 }), [incomeItems]);
+  const cashReceivedAmount = Number(cashReceived) || 0;
   const incomeProfit = incomeTotals.pemasukan - incomeTotals.modal;
   const [formDpAmount, setFormDpAmount] = useState<string>('');
   const [formCost, setFormCost] = useState<string>('');
@@ -442,30 +444,30 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   // Date filtering logic
   const isDateInPeriod = useCallback((timestamp: any): boolean => {
     const timeNum = parseTimestamp(timestamp);
-    const recordDate = new Date(timeNum);
     const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
-    if (period === 'today') {
-      return (
-        recordDate.getDate() === now.getDate() &&
-        recordDate.getMonth() === now.getMonth() &&
-        recordDate.getFullYear() === now.getFullYear()
-      );
+    if (period === 'yesterday') {
+      start.setDate(start.getDate() - 1);
+      end.setTime(start.getTime() + 24 * 60 * 60 * 1000);
+    } else if (period === 'last7') {
+      start.setDate(start.getDate() - 6);
+    } else if (period === 'last30') {
+      start.setDate(start.getDate() - 29);
+    } else if (period === 'this_month') {
+      start.setDate(1);
+    } else if (period === 'last_month') {
+      start.setMonth(start.getMonth() - 1, 1);
+      end.setDate(1);
+    } else if (period === 'custom') {
+      const startParts = customStartDate.split('-').map(Number);
+      const endParts = customEndDate.split('-').map(Number);
+      start.setFullYear(startParts[0], startParts[1] - 1, startParts[2]);
+      end.setFullYear(endParts[0], endParts[1] - 1, endParts[2] + 1);
     }
-    if (period === 'this_month') {
-      return (
-        recordDate.getMonth() === now.getMonth() &&
-        recordDate.getFullYear() === now.getFullYear()
-      );
-    }
-    if (period === 'custom') {
-      const start = new Date(customStartDate);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(customEndDate);
-      end.setHours(23, 59, 59, 999);
-      return timeNum >= start.getTime() && timeNum <= end.getTime();
-    }
-    return true; // 'all'
+
+    return timeNum >= start.getTime() && timeNum < end.getTime();
   }, [period, customStartDate, customEndDate, parseTimestamp]);
 
   // Filtered Cashflows
@@ -755,6 +757,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   // Open Modal Helpers
   const handleOpenIncomeModal = (item?: CashFlowRecord) => {
     setFormType('income');
+    setCashReceived('');
     if (item) {
       setEditingCashFlow(item);
       setFormCategory(item.category);
@@ -855,7 +858,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
     // Handle debt creation for unpaid income (Buku Bon / Piutang) with optional DP AND record profit immediately
     if (formType === 'income' && formStatus === 'belum_lunas') {
       const customerName = formCustomerName.trim() || 'Pelanggan Umum';
-      const dpNum = parseFloat(formDpAmount) || 0;
+      const dpNum = formPaymentMethod === 'Tunai' ? cashReceivedAmount : (parseFloat(formDpAmount) || 0);
       const remainingDebt = Math.max(0, amountNum - dpNum);
 
       try {
@@ -1611,31 +1614,40 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
             Hapus Semua Data
           </button>
           <span className="text-[11px] text-slate-500 hidden lg:inline mr-1">Periode:</span>
-          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 p-1 rounded-xl text-xs">
-            <button
-              onClick={() => setPeriod('today')}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition ${
-                period === 'today' ? 'bg-slate-800 text-emerald-400 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={period}
+              onChange={e => setPeriod(e.target.value as PeriodFilter)}
+              aria-label="Filter periode arus transaksi"
+              className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
             >
-              Hari Ini
-            </button>
-            <button
-              onClick={() => setPeriod('this_month')}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition ${
-                period === 'this_month' ? 'bg-slate-800 text-emerald-400 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Bulan Ini
-            </button>
-            <button
-              onClick={() => setPeriod('all')}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition ${
-                period === 'all' ? 'bg-slate-800 text-emerald-400 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Semua
-            </button>
+              <option value="today">Hari ini</option>
+              <option value="yesterday">Kemarin</option>
+              <option value="last7">7 Hari lalu</option>
+              <option value="last30">30 Hari lalu</option>
+              <option value="this_month">Bulan ini</option>
+              <option value="last_month">Bulan lalu</option>
+              <option value="custom">Custom range Tanggal</option>
+            </select>
+            {period === 'custom' && (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={e => setCustomStartDate(e.target.value)}
+                  aria-label="Tanggal mulai arus transaksi"
+                  className="min-w-0 px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+                <span className="text-slate-500 text-[11px]">s.d.</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={e => setCustomEndDate(e.target.value)}
+                  aria-label="Tanggal akhir arus transaksi"
+                  className="min-w-0 px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1763,7 +1775,16 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setPeriod('all')}
+                    onClick={() => {
+                      const timestamps = [
+                        ...posTransactions.map(tx => Number(tx.timestamp) || Date.now()),
+                        ...cashFlows.map(cf => Number(cf.timestamp) || Date.now())
+                      ];
+                      const earliestTimestamp = timestamps.length ? Math.min(...timestamps) : Date.now();
+                      setCustomStartDate(getLocalDateString(earliestTimestamp));
+                      setCustomEndDate(getLocalDateString());
+                      setPeriod('custom');
+                    }}
                     className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-[11px] whitespace-nowrap transition shadow-sm"
                   >
                     Tampilkan Semua Periode
@@ -1847,7 +1868,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                       : 'Belum ada catatan keuangan atau transaksi kasir di periode ini.'}
                   </div>
                 ) : (
-                  unifiedRecentTransactions.slice(0, 12).map(item => {
+                  unifiedRecentTransactions.map(item => {
                     const isPos = item.source === 'pos';
                     const isIncome = item.type === 'income';
 
@@ -2473,7 +2494,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                     )}
                   </div>
 
-                  <div>
+                  {formPaymentMethod !== 'Tunai' && <div>
                     <label className="block text-slate-400 mb-1 font-medium">Uang Muka / DP yang Dibayar (Rp)</label>
                     <input
                       type="number"
@@ -2484,7 +2505,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                       className="w-full px-3 py-2 bg-slate-950 border border-amber-500/60 rounded-xl text-amber-400 font-mono font-bold focus:outline-none"
                     />
                     <p className="text-[10px] text-slate-500 mt-0.5">Uang kas masuk hari ini. Sisa otomatis dicatat sebagai bon di Buku Bon.</p>
-                  </div>
+                  </div>}
                 </div>
               )}
 
@@ -2562,13 +2583,53 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                   <span>Total Pemasukan</span>
                   <span className="font-semibold text-white font-mono">Rp {formatRupiah(incomeTotals.pemasukan)}</span>
                 </div>
+                {formPaymentMethod === 'Tunai' && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="income-cash-received" className="text-slate-400 shrink-0">Uang Diterima:</label>
+                      <div className="relative flex-1">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500 font-bold">Rp</span>
+                        <input
+                          id="income-cash-received"
+                          type="number"
+                          min={0}
+                          value={cashReceived}
+                          onChange={e => setCashReceived(e.target.value)}
+                          placeholder={incomeTotals.pemasukan.toString()}
+                          className="w-full pl-8 pr-3 py-2 bg-slate-900 border border-slate-750 rounded-xl text-sm font-mono font-bold text-white focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCashReceived(incomeTotals.pemasukan.toString())}
+                        className="shrink-0 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-semibold text-slate-200 transition"
+                      >
+                        Uang Pas
+                      </button>
+                    </div>
+                    <div className={`p-2 rounded-xl flex items-center justify-between gap-3 text-xs font-semibold ${
+                      cashReceivedAmount >= incomeTotals.pemasukan
+                        ? 'bg-emerald-950/60 border border-emerald-500/30 text-white'
+                        : 'bg-rose-950/60 border border-rose-500/30 text-rose-300'
+                    }`}>
+                      <span>{formStatus === 'belum_lunas' ? 'Sisa Bon:' : 'Kembalian:'}</span>
+                      <span className="font-mono font-bold">
+                        {formStatus === 'belum_lunas'
+                          ? `Rp ${formatRupiah(Math.max(0, incomeTotals.pemasukan - cashReceivedAmount))}`
+                          : cashReceivedAmount >= incomeTotals.pemasukan
+                            ? `Rp ${formatRupiah(cashReceivedAmount - incomeTotals.pemasukan)}`
+                            : `Kurang Rp ${formatRupiah(incomeTotals.pemasukan - cashReceivedAmount)}`}
+                      </span>
+                    </div>
+                  </>
+                )}
                 <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
                   <span className="text-slate-300">Estimasi Keuntungan Bersih</span>
                   <span className={`font-bold font-mono ${incomeProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                     Rp {formatRupiah(incomeProfit)}
                   </span>
                 </div>
-                {formStatus === 'belum_lunas' && formType === 'income' && (
+                {formStatus === 'belum_lunas' && formType === 'income' && formPaymentMethod !== 'Tunai' && (
                   <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
                     <span className="text-slate-400">Sisa Bon (Masuk Buku Bon):</span>
                     <span className="font-bold text-amber-400 font-mono text-sm">

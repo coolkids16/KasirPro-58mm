@@ -66,6 +66,8 @@ const MONTH_NAMES = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
 ];
 
+type HistoryPeriod = 'today' | 'yesterday' | 'last7' | 'last30' | 'this_month' | 'last_month' | 'custom';
+
 export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   settings,
   onSelectTransactionToPrint,
@@ -75,6 +77,16 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [search, setSearch] = useState('');
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [historyPeriod, setHistoryPeriod] = useState<HistoryPeriod>('today');
+  const [customStartDate, setCustomStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 6);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  });
+  const [customEndDate, setCustomEndDate] = useState(() => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  });
   
   // Date filtering state for Recharts
   const today = new Date();
@@ -137,10 +149,41 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     };
   }, [storeId]);
 
-  const filtered = transactions.filter(t => 
-    t.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
-    t.cashierName.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+
+    if (historyPeriod === 'yesterday') {
+      start.setDate(start.getDate() - 1);
+      end.setTime(start.getTime() + 24 * 60 * 60 * 1000);
+    } else if (historyPeriod === 'last7') {
+      start.setDate(start.getDate() - 6);
+    } else if (historyPeriod === 'last30') {
+      start.setDate(start.getDate() - 29);
+    } else if (historyPeriod === 'this_month') {
+      start.setDate(1);
+    } else if (historyPeriod === 'last_month') {
+      start.setMonth(start.getMonth() - 1, 1);
+      end.setDate(1);
+    } else if (historyPeriod === 'custom') {
+      const startParts = customStartDate.split('-').map(Number);
+      const endParts = customEndDate.split('-').map(Number);
+      start.setFullYear(startParts[0], startParts[1] - 1, startParts[2]);
+      end.setFullYear(endParts[0], endParts[1] - 1, endParts[2] + 1);
+    }
+
+    const startTime = start.getTime();
+    const endTime = end.getTime();
+    const query = search.toLowerCase();
+    return transactions.filter(transaction => {
+      const timestamp = Number(transaction.timestamp);
+      const matchesDate = timestamp >= startTime && timestamp < endTime;
+      const matchesSearch = transaction.invoiceNumber.toLowerCase().includes(query)
+        || transaction.cashierName.toLowerCase().includes(query);
+      return matchesDate && matchesSearch;
+    });
+  }, [transactions, search, historyPeriod, customStartDate, customEndDate]);
 
   const totalOmzet = transactions.reduce((sum, t) => sum + t.total, 0);
 
@@ -536,7 +579,40 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           />
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+          <select
+            value={historyPeriod}
+            onChange={e => setHistoryPeriod(e.target.value as HistoryPeriod)}
+            aria-label="Filter periode riwayat"
+            className="px-3 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+          >
+            <option value="today">Hari ini</option>
+            <option value="yesterday">Kemarin</option>
+            <option value="last7">7 Hari lalu</option>
+            <option value="last30">30 Hari lalu</option>
+            <option value="this_month">Bulan ini</option>
+            <option value="last_month">Bulan lalu</option>
+            <option value="custom">Custom range Tanggal</option>
+          </select>
+          {historyPeriod === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={e => setCustomStartDate(e.target.value)}
+                aria-label="Tanggal mulai riwayat"
+                className="min-w-0 px-2.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+              />
+              <span className="text-slate-500 text-xs">s.d.</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={e => setCustomEndDate(e.target.value)}
+                aria-label="Tanggal akhir riwayat"
+                className="min-w-0 px-2.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          )}
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-400">
             <span className="text-slate-500">Zona:</span>
             <span className="font-mono font-bold text-emerald-400">{getTimezoneAbbr(settings?.timezone)}</span>
@@ -715,7 +791,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                   </div>
                   <div className="flex justify-between text-slate-400 text-[11px]">
                     <span>Kembalian</span>
-                    <span>Rp {formatRupiah(selectedTx.changeAmount)}</span>
+                    <span className="text-slate-200">Rp {formatRupiah(selectedTx.changeAmount)}</span>
                   </div>
                 </div>
               </div>

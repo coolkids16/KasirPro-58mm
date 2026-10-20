@@ -87,6 +87,8 @@ export interface Transaction {
   changeAmount: number;
   paymentMethod: PaymentMethod;
   cashierName: string;
+  paymentStatus?: 'lunas' | 'belum_lunas';
+  customerName?: string;
   cashierId?: string;
   notes?: string;
 }

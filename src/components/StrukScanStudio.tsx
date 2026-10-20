@@ -2089,7 +2089,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                       value={data.paidAmount < data.total ? `-${formatRupiah(data.total - data.paidAmount)}` : formatRupiah(data.changeAmount)}
                       readOnly
                       className={`w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl font-mono focus:outline-none font-bold ${
-                        data.paidAmount < data.total ? 'text-rose-400' : 'text-emerald-400'
+                        data.paidAmount < data.total ? 'text-rose-300' : 'text-white'
                       }`}
                     />
                   </div>
