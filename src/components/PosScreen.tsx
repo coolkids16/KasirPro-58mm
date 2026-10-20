@@ -101,9 +101,12 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       return matchCat && matchQuery;
     });
 
+    console.log('[DEBUG] Filtering/sorting products. sortBy:', sortBy, 'products length:', products.length, 'soldCounts:', products.map(p => ({ name: p.name, soldCount: p.soldCount })));
+
     // Sort by best-selling if selected
     if (sortBy === 'bestselling') {
       result = [...result].sort((a, b) => (b.soldCount || 0) - (a.soldCount || 0));
+      console.log('[DEBUG] Sorted by bestselling result:', result.map(p => ({ name: p.name, soldCount: p.soldCount })));
     }
 
     return result;
@@ -283,7 +286,11 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         if (item.product.id) {
           const newStock = Math.max(0, Math.round((item.product.stock - item.quantity) * 1000) / 1000);
           const newSoldCount = (item.product.soldCount || 0) + item.quantity;
+          console.log('[DEBUG] Updating product:', item.product.name, 'id:', item.product.id, 'old soldCount:', item.product.soldCount, 'new soldCount:', newSoldCount);
           await db.products.update(item.product.id, { stock: newStock, soldCount: newSoldCount });
+          // Verify update
+          const updated = await db.products.get(item.product.id);
+          console.log('[DEBUG] Verified product after update:', updated?.name, 'soldCount:', updated?.soldCount);
           try {
             const cloudProductId = item.product.firestoreId
               || (typeof item.product.id === 'string' && isNaN(Number(item.product.id)) ? item.product.id : null);
