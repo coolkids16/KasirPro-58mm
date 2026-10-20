@@ -30,7 +30,8 @@ import {
   where,
   orderBy,
   limit,
-  writeBatch
+  writeBatch,
+  increment
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Product, Transaction, StoreSettings, UserRole, UserProfile, Store, CustomTemplate, CashFlowRecord, CustomerDebt, CapitalRecord, TabunganRecord } from '../types';
@@ -536,6 +537,7 @@ export function subscribeProducts(
           sku: data.sku || '',
           price: Number(data.price) || 0,
           stock: Number(data.stock) || 0,
+          soldCount: Number(data.soldCount) || 0,
           costPrice: costVal || 0,
           modal: costVal || 0,
           purchase_price: costVal || 0,
@@ -679,7 +681,7 @@ export async function deleteProductFromFirestore(
   }
 }
 
-export async function updateProductStockToFirestore(productId: string, storeId: string, stock: number, localId?: number): Promise<void> {
+export async function updateProductStockToFirestore(productId: string, storeId: string, stock: number, localId?: number, soldQuantity = 0): Promise<void> {
   if (!auth.currentUser) {
     await updateLocalSyncState('products', localId, { syncPending: true });
     return;
@@ -691,7 +693,11 @@ export async function updateProductStockToFirestore(productId: string, storeId: 
     if (!snapshot.exists() || snapshot.data().storeId !== targetStoreId) {
       throw new Error('Produk tidak ditemukan di toko aktif.');
     }
-    await updateDoc(productRef, { stock: Math.max(0, Number(stock) || 0), updatedAt: new Date().toISOString() });
+    await updateDoc(productRef, {
+      stock: Math.max(0, Number(stock) || 0),
+      ...(soldQuantity > 0 ? { soldCount: increment(soldQuantity) } : {}),
+      updatedAt: new Date().toISOString()
+    });
     await updateLocalSyncState('products', localId, { syncPending: false });
   } catch (error) {
     await updateLocalSyncState('products', localId, { syncPending: true }).catch(() => {});

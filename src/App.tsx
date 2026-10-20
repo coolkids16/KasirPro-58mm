@@ -78,7 +78,6 @@ export default function App() {
   const refreshProductsLocal = useCallback(async () => {
     try {
       const list = await db.products.toArray();
-      console.log('[DEBUG] refreshProductsLocal loaded products:', list.map(p => ({ name: p.name, id: p.id, soldCount: p.soldCount, stock: p.stock })));
       if (list.length > 0) {
         setProducts(list);
       }

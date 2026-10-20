@@ -286,16 +286,12 @@ export const PosScreen: React.FC<PosScreenProps> = ({
         if (item.product.id) {
           const newStock = Math.max(0, Math.round((item.product.stock - item.quantity) * 1000) / 1000);
           const newSoldCount = (item.product.soldCount || 0) + item.quantity;
-          console.log('[DEBUG] Updating product:', item.product.name, 'id:', item.product.id, 'old soldCount:', item.product.soldCount, 'new soldCount:', newSoldCount);
           await db.products.update(item.product.id, { stock: newStock, soldCount: newSoldCount });
-          // Verify update
-          const updated = await db.products.get(item.product.id);
-          console.log('[DEBUG] Verified product after update:', updated?.name, 'soldCount:', updated?.soldCount);
           try {
             const cloudProductId = item.product.firestoreId
               || (typeof item.product.id === 'string' && isNaN(Number(item.product.id)) ? item.product.id : null);
             if (cloudProductId && storeId) {
-              await updateProductStockToFirestore(cloudProductId, storeId, newStock, typeof item.product.id === 'number' ? item.product.id : undefined);
+              await updateProductStockToFirestore(cloudProductId, storeId, newStock, typeof item.product.id === 'number' ? item.product.id : undefined, item.quantity);
             } else if (typeof item.product.id === 'number') {
               await db.products.update(item.product.id, { syncPending: true });
             }
