@@ -2462,39 +2462,8 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 />
               </div>
 
-              {formStatus === 'belum_lunas' && formType === 'income' && (
-                <div className="space-y-3 p-3 bg-slate-950 border border-slate-800 rounded-xl">
-                  <div>
-                    <label className="block text-slate-400 mb-1 font-medium">Nama Pelanggan</label>
-                    <CustomSelect
-                      value={isAddingNewCustomer ? 'new' : formCustomerName}
-                      onChange={(val) => {
-                        if (val === 'new') {
-                          setIsAddingNewCustomer(true);
-                          setFormCustomerName('');
-                        } else {
-                          setIsAddingNewCustomer(false);
-                          setFormCustomerName(val);
-                        }
-                      }}
-                      options={[
-                        ...Array.from(new Set(debts.map(d => d.customerName))).map(name => ({ label: name, value: name })),
-                        { label: '+ Tambah Pelanggan Baru', value: 'new' }
-                      ]}
-                    />
-                    {isAddingNewCustomer && (
-                      <input
-                        type="text"
-                        required
-                        placeholder="Masukkan nama baru"
-                        value={formCustomerName}
-                        onChange={e => setFormCustomerName(e.target.value)}
-                        className="w-full mt-2 px-3 py-2 bg-slate-950 border border-emerald-500/60 rounded-xl text-white focus:outline-none focus:border-emerald-500 font-semibold"
-                      />
-                    )}
-                  </div>
-
-                  {formPaymentMethod !== 'Tunai' && <div>
+              {formStatus === 'belum_lunas' && formType === 'income' && formPaymentMethod !== 'Tunai' && (
+                <div>
                     <label className="block text-slate-400 mb-1 font-medium">Uang Muka / DP yang Dibayar (Rp)</label>
                     <input
                       type="number"
@@ -2505,7 +2474,6 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                       className="w-full px-3 py-2 bg-slate-950 border border-amber-500/60 rounded-xl text-amber-400 font-mono font-bold focus:outline-none"
                     />
                     <p className="text-[10px] text-slate-500 mt-0.5">Uang kas masuk hari ini. Sisa otomatis dicatat sebagai bon di Buku Bon.</p>
-                  </div>}
                 </div>
               )}
 
@@ -2652,6 +2620,38 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                     ]}
                   />
                 </div>
+
+                {formStatus === 'belum_lunas' && formType === 'income' && (
+                  <div>
+                    <label className="block text-slate-400 mb-1 font-medium">Nama Pelanggan</label>
+                    <CustomSelect
+                      value={isAddingNewCustomer ? 'new' : formCustomerName}
+                      onChange={(val) => {
+                        if (val === 'new') {
+                          setIsAddingNewCustomer(true);
+                          setFormCustomerName('');
+                        } else {
+                          setIsAddingNewCustomer(false);
+                          setFormCustomerName(val);
+                        }
+                      }}
+                      options={[
+                        ...Array.from(new Set(debts.map(d => d.customerName))).map(name => ({ label: name, value: name })),
+                        { label: '+ Tambah Pelanggan Baru', value: 'new' }
+                      ]}
+                    />
+                    {isAddingNewCustomer && (
+                      <input
+                        type="text"
+                        required
+                        placeholder="Masukkan nama baru"
+                        value={formCustomerName}
+                        onChange={e => setFormCustomerName(e.target.value)}
+                        className="w-full mt-2 px-3 py-2 bg-slate-950 border border-emerald-500/60 rounded-xl text-white focus:outline-none focus:border-emerald-500 font-semibold"
+                      />
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-slate-400 mb-1 font-medium">Status Pembayaran</label>
