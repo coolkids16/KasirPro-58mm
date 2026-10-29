@@ -32,3 +32,14 @@ android/
 # Abaikan schema dan aset icon otomatis Tauri
 src-tauri/gen/
 src-tauri/icons/
+
+# Environment & Secrets (JANGAN COMMIT)
+.env
+.env.local
+.env.*.local
+firebase-applet-config.json
+firebase-blueprint.json
+*.pem
+*.key
+*.keystore
+*.jks

@@ -11,9 +11,9 @@ import {
   Activity
 } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart as RechartsPie, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Transaction, StoreSettings } from '../types';
+import { Transaction, StoreSettings, CashFlowRecord, Product } from '../types';
 import { db } from '../db/db';
-import { subscribeTransactions } from '../services/firebase';
+import { subscribeTransactions, subscribeCashFlows } from '../services/firebase';
 import { formatRupiah } from '../utils/escpos';
 
 export interface DashboardAnalyticsProps {
@@ -53,16 +53,24 @@ const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 
 export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings, storeId }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [cashFlows, setCashFlows] = useState<CashFlowRecord[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Load transactions dari Dexie & Firebase
   useEffect(() => {
     const loadLocal = async () => {
       try {
-        const list = await db.transactions.toArray();
-        setTransactions(list);
+        const [txList, cfList, prodList] = await Promise.all([
+          db.transactions.toArray(),
+          db.cashFlows.toArray(),
+          db.products.toArray()
+        ]);
+        setTransactions(txList);
+        setCashFlows(cfList);
+        setProducts(prodList);
       } catch (err) {
-        console.warn('Failed to load transactions from Dexie:', err);
+        console.warn('Failed to load data from Dexie:', err);
       } finally {
         setLoading(false);
       }
@@ -70,7 +78,7 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
 
     loadLocal();
 
-    const unsubscribe = subscribeTransactions(
+    const unsubscribeTx = subscribeTransactions(
       (firestoreTxs) => {
         if (firestoreTxs && firestoreTxs.length > 0) {
           setTransactions(firestoreTxs);
@@ -81,7 +89,21 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
       storeId || undefined
     );
 
-    return () => unsubscribe();
+    const unsubscribeCf = subscribeCashFlows(
+      (firestoreCfs) => {
+        if (firestoreCfs && firestoreCfs.length > 0) {
+          setCashFlows(firestoreCfs);
+          db.cashFlows.clear().then(() => db.cashFlows.bulkAdd(firestoreCfs)).catch(console.warn);
+        }
+      },
+      undefined,
+      storeId || undefined
+    );
+
+    return () => {
+      unsubscribeTx();
+      unsubscribeCf();
+    };
   }, [storeId]);
 
   // Hitung metrics utama
@@ -205,15 +227,17 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
     <div className="w-full max-w-full mx-auto p-2 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 p-4 sm:p-6 rounded-2xl">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-            <Activity className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-xl sm:text-2xl font-extrabold text-white">Dashboard Analytics</h2>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Insight penjualan real-time & performa toko Anda
-            </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <Activity className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-xl sm:text-2xl font-extrabold text-white">Dashboard Analytics</h2>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                Insight penjualan real-time & performa toko Anda
+              </p>
+            </div>
           </div>
         </div>
       </div>

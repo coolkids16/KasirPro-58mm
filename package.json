@@ -1,8 +1,9 @@
 {
-  "name": "react-example",
+  "name": "kasirpro-58mm",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "license": "Proprietary",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
@@ -21,6 +22,7 @@
     "@capacitor/android": "^8.5.2",
     "@capacitor/cli": "^8.5.2",
     "@capacitor/core": "^8.5.2",
+    "@capacitor/filesystem": "^8.1.5",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2.12.1",
@@ -33,6 +35,8 @@
     "express": "^4.21.2",
     "firebase": "^12.19.0",
     "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
@@ -40,7 +44,8 @@
     "react-dom": "^19.0.1",
     "recharts": "^3.10.1",
     "tesseract.js": "^7.0.0",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.1",

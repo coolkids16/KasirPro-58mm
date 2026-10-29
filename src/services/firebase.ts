@@ -787,7 +787,7 @@ export function subscribeTransactions(
   const effectiveStoreId = storeId || activeStoreId;
   const txCol = collection(db, 'transactions');
   const q = effectiveStoreId
-    ? query(txCol, where('storeId', '==', effectiveStoreId), orderBy('timestamp', 'desc'), limit(150))
+    ? query(txCol, where('storeId', '==', effectiveStoreId), orderBy('timestamp', 'desc'))
     : query(txCol, where('storeId', '==', '__no_store_assigned__'), orderBy('timestamp', 'desc'), limit(1));
 
   return onSnapshot(

@@ -63,6 +63,8 @@ export const PosScreen: React.FC<PosScreenProps> = ({
   const [cashGiven, setCashGiven] = useState<number>(0);
   const [cashInputString, setCashInputString] = useState<string>('');
   const [paymentStatus, setPaymentStatus] = useState<'lunas' | 'belum_lunas'>('lunas');
+  const [initialPayment, setInitialPayment] = useState<number>(0);
+  const [initialPaymentString, setInitialPaymentString] = useState<string>('');
   const [debts, setDebts] = useState<CustomerDebt[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
   const [manualCustomerName, setManualCustomerName] = useState<string>('');
@@ -222,6 +224,8 @@ export const PosScreen: React.FC<PosScreenProps> = ({
     setCart([]);
     setCashGiven(0);
     setCashInputString('');
+    setInitialPayment(0);
+    setInitialPaymentString('');
     setDiscountAmount(0);
     setPaymentStatus('lunas');
     setSelectedCustomer('');
@@ -271,8 +275,11 @@ export const PosScreen: React.FC<PosScreenProps> = ({
 
     try {
       const invoiceNumber = generateUniqueInvoiceNumber();
+      
+      // For belum_lunas: use initialPayment (DP) as the paid amount
+      // For lunas: use cashGiven for cash, grandTotal for other methods
       const paid = paymentStatus === 'belum_lunas'
-        ? (paymentMethod === 'cash' ? Math.min(cashGiven, grandTotal) : 0)
+        ? Math.min(initialPayment, grandTotal)
         : (paymentMethod === 'cash' ? cashGiven : grandTotal);
       const change = paymentMethod === 'cash' ? Math.max(0, cashGiven - grandTotal) : 0;
       const remainingDebt = Math.max(0, grandTotal - paid);
@@ -869,6 +876,38 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                     className="w-full px-3 py-2 bg-slate-950 border border-amber-500/50 rounded-lg sm:rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
                   />
                 )}
+                
+                {/* Initial Payment (DP) Input - works for all payment methods */}
+                <div className="space-y-1.5 pt-1 border-t border-amber-500/20">
+                  <label htmlFor="pos-initial-payment" className="block text-[11px] sm:text-xs text-slate-300 font-medium">
+                    <Banknote className="inline w-3.5 h-3.5 mr-1 text-emerald-400" />DP / Pembayaran Awal (Opsional)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500 font-bold">
+                      Rp
+                    </span>
+                    <input
+                      id="pos-initial-payment"
+                      type="number"
+                      value={initialPaymentString}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setInitialPaymentString(val);
+                        setInitialPayment(Number(val) || 0);
+                      }}
+                      placeholder="0"
+                      min="0"
+                      max={grandTotal}
+                      className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-750 rounded-lg sm:rounded-xl text-xs sm:text-sm font-mono font-bold text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    {initialPayment > 0 
+                      ? `Sisa bon: Rp ${formatRupiah(grandTotal - Math.min(initialPayment, grandTotal))}`
+                      : 'Kosongkan untuk bon penuh (total belanja jadi utang)'}
+                  </p>
+                </div>
+                
                 <p className="text-[10px] text-slate-400">Kekurangan pembayaran akan otomatis ditambahkan ke bon pelanggan.</p>
               </div>
             )}
@@ -877,76 +916,168 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           {/* Cash Payment Details & Quick Buttons */}
           {paymentMethod === 'cash' && (
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] sm:text-xs text-slate-400 w-24 shrink-0">Uang Diterima:</span>
-                <div className="relative flex-1">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500 font-bold">
-                    Rp
-                  </span>
-                  <input
-                    type="number"
-                    value={cashInputString}
-                    onChange={e => {
-                      setCashInputString(e.target.value);
-                      setCashGiven(Number(e.target.value) || 0);
-                    }}
-                    placeholder={grandTotal.toString()}
-                    className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-750 rounded-lg sm:rounded-xl text-xs sm:text-sm font-mono font-bold text-white focus:outline-none focus:border-emerald-500"
-                  />
+              {paymentStatus === 'belum_lunas' ? (
+                // For belum_lunas with cash: show initial payment input (DP)
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] sm:text-xs text-slate-400 w-24 shrink-0">DP Tunai:</span>
+                    <div className="relative flex-1">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500 font-bold">
+                        Rp
+                      </span>
+                      <input
+                        type="number"
+                        value={initialPaymentString}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setInitialPaymentString(val);
+                          setInitialPayment(Number(val) || 0);
+                        }}
+                        placeholder="0"
+                        min="0"
+                        max={grandTotal}
+                        className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-750 rounded-lg sm:rounded-xl text-xs sm:text-sm font-mono font-bold text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick DP Suggestions */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInitialPayment(grandTotal);
+                        setInitialPaymentString(grandTotal.toString());
+                      }}
+                      className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate"
+                      title="DP Full (Lunas)"
+                    >
+                      DP Full
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const half = Math.round(grandTotal / 2);
+                        setInitialPayment(half);
+                        setInitialPaymentString(half.toString());
+                      }}
+                      className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate font-mono"
+                      title="DP 50%"
+                    >
+                      50%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInitialPayment(0);
+                        setInitialPaymentString('');
+                      }}
+                      className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate font-mono"
+                      title="DP 0 (Bon Penuh)"
+                    >
+                      0 (Bon Penuh)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const val = 20000;
+                        setInitialPayment(Math.min(val, grandTotal));
+                        setInitialPaymentString(Math.min(val, grandTotal).toString());
+                      }}
+                      className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate font-mono"
+                      title="20.000"
+                    >
+                      20.000
+                    </button>
+                  </div>
+
+                  {/* Remaining Debt Banner */}
+                  <div className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl flex items-center justify-between text-xs font-semibold ${
+                    initialPayment >= grandTotal
+                      ? 'bg-emerald-950/60 border border-emerald-500/30 text-white'
+                      : 'bg-amber-950/60 border border-amber-500/30 text-amber-300'
+                  }`}>
+                    <span>{initialPayment >= grandTotal ? 'Status:' : 'Sisa Bon:'}</span>
+                    <span className="font-mono font-bold text-xs sm:text-sm">
+                      {initialPayment >= grandTotal
+                        ? 'Lunas'
+                        : `Rp ${formatRupiah(grandTotal - Math.min(initialPayment, grandTotal))}`}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                // For lunas with cash: show full cash received input
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] sm:text-xs text-slate-400 w-24 shrink-0">Uang Diterima:</span>
+                    <div className="relative flex-1">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500 font-bold">
+                        Rp
+                      </span>
+                      <input
+                        type="number"
+                        value={cashInputString}
+                        onChange={e => {
+                          setCashInputString(e.target.value);
+                          setCashGiven(Number(e.target.value) || 0);
+                        }}
+                        placeholder={grandTotal.toString()}
+                        className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-750 rounded-lg sm:rounded-xl text-xs sm:text-sm font-mono font-bold text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
 
-              {/* Quick Cash Suggestions */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickCash(grandTotal)}
-                  className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate"
-                  title="Uang Pas"
-                >
-                  Uang Pas
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickCash(20000)}
-                  className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate font-mono"
-                  title="20.000"
-                >
-                  20.000
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickCash(50000)}
-                  className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate font-mono"
-                  title="50.000"
-                >
-                  50.000
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickCash(100000)}
-                  className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate font-mono"
-                  title="100.000"
-                >
-                  100.000
-                </button>
-              </div>
+                  {/* Quick Cash Suggestions */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickCash(grandTotal)}
+                      className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate"
+                      title="Uang Pas"
+                    >
+                      Uang Pas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickCash(20000)}
+                      className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate font-mono"
+                      title="20.000"
+                    >
+                      20.000
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickCash(50000)}
+                      className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate font-mono"
+                      title="50.000"
+                    >
+                      50.000
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickCash(100000)}
+                      className="py-1.5 px-1 sm:px-2 bg-slate-800 hover:bg-slate-750 text-[10px] sm:text-[11px] font-semibold text-slate-200 rounded-lg border border-slate-750 text-center transition truncate font-mono"
+                      title="100.000"
+                    >
+                      100.000
+                    </button>
+                  </div>
 
-              {/* Kembalian Banner */}
-              <div className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl flex items-center justify-between text-xs font-semibold ${
-                paymentStatus === 'belum_lunas' || cashGiven >= grandTotal
-                  ? 'bg-emerald-950/60 border border-emerald-500/30 text-white'
-                  : 'bg-rose-950/60 border border-rose-500/30 text-rose-300'
-              }`}>
-                <span>{paymentStatus === 'belum_lunas' && cashGiven < grandTotal ? 'Sisa Bon:' : 'Kembalian:'}</span>
-                <span className="font-mono font-bold text-xs sm:text-sm">
-                  {paymentStatus === 'belum_lunas' && cashGiven < grandTotal
-                    ? `Rp ${formatRupiah(grandTotal - Math.min(cashGiven, grandTotal))}`
-                    : cashGiven >= grandTotal
-                      ? `Rp ${formatRupiah(changeAmount)}`
-                      : `Kurang Rp ${formatRupiah(grandTotal - cashGiven)}`}
-                </span>
-              </div>
+                  {/* Kembalian Banner */}
+                  <div className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl flex items-center justify-between text-xs font-semibold ${
+                    cashGiven >= grandTotal
+                      ? 'bg-emerald-950/60 border border-emerald-500/30 text-white'
+                      : 'bg-rose-950/60 border border-rose-500/30 text-rose-300'
+                  }`}>
+                    <span>Kembalian:</span>
+                    <span className="font-mono font-bold text-xs sm:text-sm">
+                      {cashGiven >= grandTotal
+                        ? `Rp ${formatRupiah(changeAmount)}`
+                        : `Kurang Rp ${formatRupiah(grandTotal - cashGiven)}`}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::Path;
+use tauri::Manager;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DeviceInfo {
@@ -147,13 +148,34 @@ fn print_raw_escpos(bytes: Vec<u8>, device_path: Option<String>) -> Result<Strin
     tauri_raw(bytes, device_path)
 }
 
+#[tauri::command]
+fn save_download(app: tauri::AppHandle, filename: String, bytes: Vec<u8>) -> Result<String, String> {
+    let safe_filename = Path::new(&filename)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| *name == filename && *name != "." && *name != "..");
+    let safe_filename = safe_filename.ok_or_else(|| "Nama file tidak valid.".to_string())?;
+    let download_dir = app
+        .path()
+        .download_dir()
+        .map_err(|error| format!("Folder Downloads tidak tersedia: {}", error))?;
+
+    fs::create_dir_all(&download_dir)
+        .map_err(|error| format!("Gagal membuat folder Downloads: {}", error))?;
+    let file_path = download_dir.join(safe_filename);
+    fs::write(&file_path, bytes).map_err(|error| format!("Gagal menyimpan PDF: {}", error))?;
+
+    Ok(file_path.to_string_lossy().into_owned())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             tauri_raw,
             print_raw_escpos,
-            check_printer_device
+            check_printer_device,
+            save_download
         ])
         .run(tauri::generate_context!())
         .expect("Terjadi kesalahan saat menjalankan aplikasi Tauri POS");

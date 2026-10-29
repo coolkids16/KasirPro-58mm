@@ -58,6 +58,7 @@ export interface Product {
   purchase_price?: number; // Alias harga beli/modal
   unit?: string; // Satuan (Pcs, Dus, Liter, Kg, dll)
   soldCount?: number; // Total quantity sold (for best-selling filter)
+  minStock?: number; // Minimum stock threshold for low stock alert
 }
 
 export interface CartItem {

@@ -36,7 +36,8 @@ import {
   AlertTriangle,
   Truck,
   ShoppingBag,
-  PiggyBank
+  PiggyBank,
+  Download
 } from 'lucide-react';
 import { db } from '../db/db';
 import { CashFlowRecord, CustomerDebt, DebtPayment, DebtMutation, StoreSettings, Transaction, TabunganRecord } from '../types';
@@ -45,6 +46,7 @@ import { formatRupiah, padCenter, padRow, padSeparator, EscPosEncoder } from '..
 import { printerService } from '../services/printerService';
 import { sounds } from '../utils/audio';
 import { getTimezoneAbbr, getLocalDateString, getLocalYesterdayDateString } from '../utils/timezone';
+import { exportFinancialReportPdf } from '../utils/exportFinancialReport';
 import { 
   auth,
   saveCashFlowToFirestore, 
@@ -1536,6 +1538,26 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
             <PiggyBank className="w-4 h-4" />
             Tabungan
           </button>
+
+          <button
+            onClick={() => {
+              const periodLabel = `Bulan ${new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' })}`;
+              exportFinancialReportPdf({
+                settings,
+                periodLabel,
+                transactions: posTransactions,
+                cashFlows,
+                products: [],
+                debts,
+                savings
+              });
+            }}
+            className="px-3.5 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+            title="Ekspor Laporan Keuangan PDF"
+          >
+            <Download className="w-4 h-4" />
+            Ekspor PDF
+          </button>
         </div>
       </div>
 
@@ -1601,6 +1623,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
             <PiggyBank className="w-3.5 h-3.5" />
             Tabungan ({savings.length})
           </button>
+
         </div>
 
         {/* Time Period Filter Pill Buttons */}

@@ -166,6 +166,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   const [formSku, setFormSku] = useState('');
   const [formPrice, setFormPrice] = useState<number | string>('');
   const [formStock, setFormStock] = useState<number | string>('');
+  const [formMinStock, setFormMinStock] = useState<number | string>('5');
   const [formCategory, setFormCategory] = useState('Makanan');
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [customCategoryInput, setCustomCategoryInput] = useState('');
@@ -271,6 +272,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     setFormSku(`PRD-${Math.floor(100 + Math.random() * 900)}`);
     setFormPrice('');
     setFormStock('20');
+    setFormMinStock('5');
     setFormCategory('Makanan');
     setIsCustomCategory(false);
     setCustomCategoryInput('');
@@ -292,6 +294,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
     setFormSku(p.sku);
     setFormPrice(p.price);
     setFormStock(p.stock);
+    setFormMinStock(p.minStock !== undefined ? p.minStock : '5');
     setFormCategory(p.category || 'Makanan');
     setIsCustomCategory(false);
     setCustomCategoryInput('');
@@ -382,6 +385,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
       category: finalCategory,
       price: parseCurrencyNumber(formPrice),
       stock: finalStock,
+      minStock: parseFloatNumber(formMinStock),
       costPrice: modalPerLiter,
       modal: modalPerLiter,
       purchase_price: modalPerLiter,
@@ -704,7 +708,8 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {filteredProducts.map(product => {
-                const isLow = product.stock <= 5 && product.stock > 0;
+                const threshold = product.minStock !== undefined ? product.minStock : 5;
+                const isLow = product.stock <= threshold && product.stock > 0;
                 const isOut = product.stock === 0;
 
                 return (
@@ -741,6 +746,12 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                       <div className="text-[10px] text-slate-400 font-mono">
                         Modal: Rp {formatRupiah(product.costPrice || (product as any).modal || (product as any).purchase_price || 0)}
                       </div>
+                      {isLow && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <AlertTriangle className="w-3 h-3 text-amber-400" />
+                          <span className="text-[10px] text-amber-400 font-medium">Stok Menipis (≤{threshold})</span>
+                        </div>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4 text-center">
@@ -1151,6 +1162,21 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                     placeholder="50"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-750 rounded-xl text-white font-mono focus:outline-none focus:border-emerald-500"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1 font-medium">Stok Minimum (Alert)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={formMinStock}
+                    onChange={e => setFormMinStock(e.target.value)}
+                    placeholder="5"
+                    className="w-full px-3 py-2 bg-slate-950 border border-amber-500/60 rounded-xl text-amber-400 font-mono focus:outline-none focus:border-amber-500"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-0.5">Notifikasi saat stok ≤ nilai ini</p>
                 </div>
               </div>
 
