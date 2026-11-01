@@ -538,6 +538,8 @@ export function subscribeProducts(
           price: Number(data.price) || 0,
           stock: Number(data.stock) || 0,
           soldCount: Number(data.soldCount) || 0,
+          monthlySoldCount: Number(data.monthlySoldCount) || 0,
+          monthlySalesMonth: data.monthlySalesMonth || '',
           costPrice: costVal || 0,
           modal: costVal || 0,
           purchase_price: costVal || 0,
@@ -681,7 +683,7 @@ export async function deleteProductFromFirestore(
   }
 }
 
-export async function updateProductStockToFirestore(productId: string, storeId: string, stock: number, localId?: number, soldQuantity = 0): Promise<void> {
+export async function updateProductStockToFirestore(productId: string, storeId: string, stock: number, localId?: number, soldQuantity = 0, salesMonth = ''): Promise<void> {
   if (!auth.currentUser) {
     await updateLocalSyncState('products', localId, { syncPending: true });
     return;
@@ -693,9 +695,15 @@ export async function updateProductStockToFirestore(productId: string, storeId: 
     if (!snapshot.exists() || snapshot.data().storeId !== targetStoreId) {
       throw new Error('Produk tidak ditemukan di toko aktif.');
     }
+    const currentData = snapshot.data();
+    const sameMonth = salesMonth && currentData.monthlySalesMonth === salesMonth;
     await updateDoc(productRef, {
       stock: Math.max(0, Number(stock) || 0),
       ...(soldQuantity > 0 ? { soldCount: increment(soldQuantity) } : {}),
+      ...(soldQuantity > 0 && salesMonth ? {
+        monthlySoldCount: sameMonth ? increment(soldQuantity) : soldQuantity,
+        monthlySalesMonth: salesMonth
+      } : {}),
       updatedAt: new Date().toISOString()
     });
     await updateLocalSyncState('products', localId, { syncPending: false });

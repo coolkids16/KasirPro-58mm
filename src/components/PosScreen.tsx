@@ -40,6 +40,11 @@ export const generateUniqueInvoiceNumber = (): string => {
   return `INV-${year}${month}${day}-${hours}${minutes}${seconds}-${randomSuffix}`;
 };
 
+const getCurrentSalesMonth = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+};
+
 interface PosScreenProps {
   products: Product[];
   settings: StoreSettings;
@@ -57,7 +62,14 @@ export const PosScreen: React.FC<PosScreenProps> = ({
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'default' | 'bestselling'>('default');
+  const [sortBy, setSortBy] = useState<'default' | 'bestselling'>(() => {
+    try {
+      return localStorage.getItem('kasirpro_pos_sort_by') === 'bestselling' ? 'bestselling' : 'default';
+    } catch {
+      return 'default';
+    }
+  });
+  const [currentSalesMonth, setCurrentSalesMonth] = useState(getCurrentSalesMonth);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [cashGiven, setCashGiven] = useState<number>(0);
@@ -73,6 +85,22 @@ export const PosScreen: React.FC<PosScreenProps> = ({
   const [itemNoteModal, setItemNoteModal] = useState<{ index: number; text: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('kasirpro_pos_sort_by', sortBy);
+    } catch (error) {
+      console.warn('Gagal menyimpan pengurutan produk:', error);
+    }
+  }, [sortBy]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      const month = getCurrentSalesMonth();
+      setCurrentSalesMonth(current => current === month ? current : month);
+    }, 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     db.debts.toArray().then(setDebts).catch(error => console.warn('Gagal memuat daftar bon pelanggan:', error));
@@ -112,16 +140,17 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       return matchCat && matchQuery;
     });
 
-    console.log('[DEBUG] Filtering/sorting products. sortBy:', sortBy, 'products length:', products.length, 'soldCounts:', products.map(p => ({ name: p.name, soldCount: p.soldCount })));
-
     // Sort by best-selling if selected
     if (sortBy === 'bestselling') {
-      result = [...result].sort((a, b) => (b.soldCount || 0) - (a.soldCount || 0));
-      console.log('[DEBUG] Sorted by bestselling result:', result.map(p => ({ name: p.name, soldCount: p.soldCount })));
+      result = [...result].sort((a, b) => {
+        const soldA = a.monthlySalesMonth === currentSalesMonth ? a.monthlySoldCount || 0 : 0;
+        const soldB = b.monthlySalesMonth === currentSalesMonth ? b.monthlySoldCount || 0 : 0;
+        return soldB - soldA;
+      });
     }
 
     return result;
-  }, [products, selectedCategory, searchQuery, sortBy]);
+  }, [products, selectedCategory, searchQuery, sortBy, currentSalesMonth]);
 
   // Cart totals calculation
   const subtotal = useMemo(() => {
@@ -384,16 +413,24 @@ export const PosScreen: React.FC<PosScreenProps> = ({
       }
 
       // 2. Reduce product stock in Dexie & sync to Firestore, update soldCount
+      const currentMonth = getCurrentSalesMonth();
       for (const item of cart) {
         if (item.product.id) {
           const newStock = Math.max(0, Math.round((item.product.stock - item.quantity) * 1000) / 1000);
           const newSoldCount = (item.product.soldCount || 0) + item.quantity;
-          await db.products.update(item.product.id, { stock: newStock, soldCount: newSoldCount });
+          const currentMonthlyCount = item.product.monthlySalesMonth === currentMonth ? item.product.monthlySoldCount || 0 : 0;
+          const newMonthlySoldCount = currentMonthlyCount + item.quantity;
+          await db.products.update(item.product.id, {
+            stock: newStock,
+            soldCount: newSoldCount,
+            monthlySoldCount: newMonthlySoldCount,
+            monthlySalesMonth: currentMonth
+          });
           try {
             const cloudProductId = item.product.firestoreId
               || (typeof item.product.id === 'string' && isNaN(Number(item.product.id)) ? item.product.id : null);
             if (cloudProductId && storeId) {
-              await updateProductStockToFirestore(cloudProductId, storeId, newStock, typeof item.product.id === 'number' ? item.product.id : undefined, item.quantity);
+              await updateProductStockToFirestore(cloudProductId, storeId, newStock, typeof item.product.id === 'number' ? item.product.id : undefined, item.quantity, currentMonth);
             } else if (typeof item.product.id === 'number') {
               await db.products.update(item.product.id, { syncPending: true });
             }
@@ -527,7 +564,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
           {filteredProducts.map(product => {
             const outOfStock = product.stock <= 0;
             const inCart = cart.find(i => i.product.id === product.id);
-            const isBestseller = (product.soldCount || 0) > 0;
+            const isBestseller = product.monthlySalesMonth === currentSalesMonth && (product.monthlySoldCount || 0) > 0;
 
             return (
               <div
@@ -570,7 +607,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({
                   {isBestseller && sortBy === 'bestselling' && (
                     <div className="mt-1.5 flex items-center gap-1 text-[10px] text-amber-400">
                       <TrendingUp className="w-3 h-3" />
-                      <span className="font-bold">Terlaris: {product.soldCount} terjual</span>
+                      <span className="font-bold">Terlaris bulan ini: {product.monthlySoldCount} terjual</span>
                     </div>
                   )}
                 </div>

@@ -266,12 +266,12 @@ export const DatePicker: React.FC<DatePickerProps> = ({
             onSelect={handleSelect}
             locale={id}
             month={currentMonth}
-            fromDate={new Date(2020, 0, 1)}
-            toDate={new Date(2030, 11, 31)}
+            startMonth={new Date(2020, 0, 1)}
+            endMonth={new Date(2030, 11, 31)}
             showOutsideDays
             fixedWeeks
             components={{
-              Caption: () => null
+              MonthCaption: () => <></>
             }}
           />
         </div>

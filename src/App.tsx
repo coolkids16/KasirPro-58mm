@@ -19,6 +19,7 @@ import {
   subscribeToAuthState, 
   subscribeProducts, 
   subscribeStoreSettings, 
+  subscribeTransactions,
   saveStoreSettingsToFirestore,
   validateFirestoreConnection,
   saveProductToFirestore,
@@ -32,6 +33,7 @@ export default function App() {
   const { currentUser, userProfile, role, storeId, isOwner, isManager, isCashier } = useRole();
   const [activeTab, setActiveTab] = useState<'pos' | 'products' | 'strukscan' | 'transactions' | 'printer' | 'pembukuan' | 'dashboard'>('pos');
   const [products, setProducts] = useState<Product[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   
   // Synchronously initialize settings from localStorage if available, otherwise DEFAULT_SETTINGS
   const [settings, setSettings] = useState<StoreSettings>(() => {
@@ -236,6 +238,49 @@ export default function App() {
     };
   }, [currentUser, storeId, isOwner, isManager, refreshProductsLocal, loadSettingsLocal]);
 
+  // 3. Real-time sync for Transactions (active when authenticated)
+  useEffect(() => {
+    if (!currentUser) {
+      // Load from local Dexie when not authenticated
+      const loadLocal = async () => {
+        try {
+          const list = await db.transactions.reverse().toArray();
+          setTransactions(list);
+        } catch (err) {
+          console.error('Failed to load transactions from Dexie:', err);
+        }
+      };
+      loadLocal();
+      return;
+    }
+
+    if (storeId) {
+      setActiveStoreId(storeId);
+    }
+
+    const unsubTransactions = subscribeTransactions(
+      (firestoreTxs) => {
+        if (firestoreTxs && firestoreTxs.length > 0) {
+          setTransactions(firestoreTxs);
+          // Mirror to local Dexie for offline cache
+          db.transactions.clear().then(() => db.transactions.bulkAdd(firestoreTxs)).catch(console.warn);
+        } else {
+          // Fallback to local Dexie
+          db.transactions.reverse().toArray().then(setTransactions).catch(console.warn);
+        }
+      },
+      () => {
+        // Fallback to local Dexie on error
+        db.transactions.reverse().toArray().then(setTransactions).catch(console.warn);
+      },
+      storeId || undefined
+    );
+
+    return () => {
+      unsubTransactions();
+    };
+  }, [currentUser, storeId]);
+
   // When cashier completes a transaction
   const handleTransactionComplete = (tx: Transaction) => {
     const finalTx: Transaction = {
@@ -312,6 +357,7 @@ export default function App() {
             {activeTab === 'transactions' && (
               <TransactionHistory
                 settings={settings}
+                transactions={transactions}
                 onSelectTransactionToPrint={handleSelectTransactionToPrint}
                 onOpenBackupModal={() => setIsBackupModalOpen(true)}
                 storeId={storeId}
@@ -350,6 +396,7 @@ export default function App() {
             {activeTab === 'dashboard' && (
               <DashboardAnalytics
                 settings={settings}
+                transactions={transactions}
                 storeId={storeId}
               />
             )}
