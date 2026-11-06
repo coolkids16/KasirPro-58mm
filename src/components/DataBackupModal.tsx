@@ -18,14 +18,29 @@ import {
   Cloud,
   RefreshCw
 } from 'lucide-react';
-import { Product, Transaction, StoreSettings, CashFlowRecord, CustomerDebt, UserRole } from '../types';
+import {
+  Product,
+  Transaction,
+  StoreSettings,
+  CashFlowRecord,
+  CustomerDebt,
+  CapitalRecord,
+  TabunganRecord,
+  CustomTemplate,
+  BluetoothDeviceOption,
+  UserRole
+} from '../types';
 import { db } from '../db/db';
+import type { PendingSyncOperation } from '../db/db';
 import { 
   batchSaveProductsToFirestore, 
   batchSaveTransactionsToFirestore, 
   saveStoreSettingsToFirestore,
   batchSaveCashFlowsToFirestore,
   batchSaveDebtsToFirestore,
+  saveCapitalRecordToFirestore,
+  saveSavingsToFirestore,
+  saveReceiptTemplateToFirestore,
   syncPendingDeletesToFirestore,
   auth
 } from '../services/firebase';
@@ -62,6 +77,11 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [allCashFlows, setAllCashFlows] = useState<CashFlowRecord[]>([]);
   const [allDebts, setAllDebts] = useState<CustomerDebt[]>([]);
+  const [allCapital, setAllCapital] = useState<CapitalRecord[]>([]);
+  const [allSavings, setAllSavings] = useState<TabunganRecord[]>([]);
+  const [allReceiptTemplates, setAllReceiptTemplates] = useState<CustomTemplate[]>([]);
+  const [allSyncQueue, setAllSyncQueue] = useState<PendingSyncOperation[]>([]);
+  const [localAppData, setLocalAppData] = useState<NonNullable<FullBackupData['appData']>>({});
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -130,28 +150,63 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
     type: 'full_backup' | 'products' | 'transactions';
     productsCount: number;
     transactionsCount: number;
+    cashFlowsCount?: number;
+    debtsCount?: number;
+    capitalCount?: number;
+    savingsCount?: number;
+    receiptTemplatesCount?: number;
+    pendingDeletesCount?: number;
     hasSettings: boolean;
     rawProducts?: Product[];
     rawTransactions?: Transaction[];
     rawSettings?: StoreSettings;
     rawCashFlows?: CashFlowRecord[];
     rawDebts?: CustomerDebt[];
+    rawCapital?: CapitalRecord[];
+    rawSavings?: TabunganRecord[];
+    rawReceiptTemplates?: CustomTemplate[];
+    rawSyncQueue?: PendingSyncOperation[];
+    rawAppData?: FullBackupData['appData'];
   } | null>(null);
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
 
   // Load all transactions and bookkeeping for export
   React.useEffect(() => {
     if (isOpen) {
-      db.transactions.reverse().toArray().then(txs => {
+      Promise.all([
+        db.transactions.reverse().toArray(),
+        db.cashFlows.toArray(),
+        db.debts.toArray(),
+        db.capital.toArray(),
+        db.savings.toArray(),
+        db.strukTemplates.toArray(),
+        db.syncQueue.toArray()
+      ]).then(([txs, cashFlows, debts, capital, savings, receiptTemplates, syncQueue]) => {
         setAllTransactions(txs);
-      }).catch(console.error);
+        setAllCashFlows(cashFlows);
+        setAllDebts(debts);
+        setAllCapital(capital);
+        setAllSavings(savings);
+        setAllReceiptTemplates(receiptTemplates);
+        setAllSyncQueue(syncQueue);
 
-      db.cashFlows.toArray().then(cf => {
-        setAllCashFlows(cf);
-      }).catch(console.error);
-
-      db.debts.toArray().then(d => {
-        setAllDebts(d);
+        const readJson = <T,>(key: string, fallback: T): T => {
+          try {
+            const value = localStorage.getItem(key);
+            return value === null ? fallback : JSON.parse(value) as T;
+          } catch {
+            return fallback;
+          }
+        };
+        setLocalAppData({
+          customCategories: readJson<string[]>('kasirpro_custom_categories', []),
+          theme: readJson<'dark' | 'light' | undefined>('kasirpro_theme', undefined),
+          posSortBy: readJson<'default' | 'bestselling' | undefined>('kasirpro_pos_sort_by', undefined),
+          dashboardTimePeriod: readJson<string | undefined>('dashboard_time_period', undefined),
+          strukScanHistory: readJson<unknown[]>('kasirpro_strukscan_history', []),
+          strukScanTemplates: readJson<CustomTemplate[]>('kasirpro_strukscan_custom_templates', []),
+          bluetoothPrinter: readJson<BluetoothDeviceOption | null>('kasirpro_bt_printer', null)
+        });
       }).catch(console.error);
     }
   }, [isOpen]);
@@ -173,17 +228,32 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
         const json = JSON.parse(text);
 
         // Case 1: Full Backup
-        if (json.version && (json.products || json.transactions || json.cashFlows || json.debts)) {
+        if (json.version && (
+          json.products || json.transactions || json.cashFlows || json.debts
+          || json.capital || json.savings || json.receiptTemplates || json.appData
+          || json.syncQueue
+        )) {
           setParsedData({
             type: 'full_backup',
             productsCount: json.products?.length || 0,
             transactionsCount: json.transactions?.length || 0,
+            cashFlowsCount: json.cashFlows?.length || 0,
+            debtsCount: json.debts?.length || 0,
+            capitalCount: json.capital?.length || 0,
+            savingsCount: json.savings?.length || 0,
+            receiptTemplatesCount: json.receiptTemplates?.length || 0,
+            pendingDeletesCount: json.syncQueue?.length || 0,
             hasSettings: Boolean(json.storeSettings),
             rawProducts: json.products || [],
             rawTransactions: json.transactions || [],
             rawSettings: json.storeSettings,
             rawCashFlows: json.cashFlows || [],
-            rawDebts: json.debts || []
+            rawDebts: json.debts || [],
+            rawCapital: json.capital || [],
+            rawSavings: json.savings || [],
+            rawReceiptTemplates: json.receiptTemplates || [],
+            rawSyncQueue: json.syncQueue || [],
+            rawAppData: json.appData || {}
           });
         }
         // Case 2: Array of products
@@ -251,9 +321,22 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
       let importedProductsCount = 0;
       let importedTxsCount = 0;
 
+      if (parsedData.type === 'full_backup' && importMode === 'replace') {
+        await Promise.all([
+          db.products.clear(),
+          db.transactions.clear(),
+          db.cashFlows.clear(),
+          db.debts.clear(),
+          db.capital.clear(),
+          db.savings.clear(),
+          db.strukTemplates.clear(),
+          db.syncQueue.clear()
+        ]);
+      }
+
       // 1. Process Products
       if (parsedData.rawProducts && parsedData.rawProducts.length > 0) {
-        if (importMode === 'replace') {
+        if (importMode === 'replace' && parsedData.type !== 'full_backup') {
           await db.products.clear();
         }
 
@@ -276,7 +359,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
 
       // 2. Process Transactions
       if (parsedData.rawTransactions && parsedData.rawTransactions.length > 0) {
-        if (importMode === 'replace') {
+        if (importMode === 'replace' && parsedData.type !== 'full_backup') {
           await db.transactions.clear();
         }
 
@@ -298,6 +381,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
       // 3. Process Settings if available
       if (parsedData.rawSettings) {
         await db.settings.put({ ...parsedData.rawSettings, id: 'main' });
+        localStorage.setItem('kasirpro_settings', JSON.stringify(parsedData.rawSettings));
         if (auth.currentUser && storeId && role === 'owner') {
           await saveStoreSettingsToFirestore({ ...parsedData.rawSettings, storeId }, storeId);
         }
@@ -305,7 +389,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
 
       // 4. Process Cash Flows if available
       if (parsedData.rawCashFlows && parsedData.rawCashFlows.length > 0) {
-        if (importMode === 'replace') {
+        if (importMode === 'replace' && parsedData.type !== 'full_backup') {
           await db.cashFlows.clear();
         }
         const importedCashFlows: CashFlowRecord[] = [];
@@ -321,7 +405,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
 
       // 5. Process Debts if available
       if (parsedData.rawDebts && parsedData.rawDebts.length > 0) {
-        if (importMode === 'replace') {
+        if (importMode === 'replace' && parsedData.type !== 'full_backup') {
           await db.debts.clear();
         }
         const importedDebts: CustomerDebt[] = [];
@@ -335,11 +419,72 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
         }
       }
 
+      if (parsedData.rawCapital?.length) {
+        for (const capital of parsedData.rawCapital) {
+          const { id, ...record } = capital;
+          const localId = await db.capital.add({ ...record, storeId: storeId || capital.storeId });
+          if (auth.currentUser && storeId) {
+            const firestoreId = await saveCapitalRecordToFirestore({ ...record, id: localId, storeId });
+            if (firestoreId) await db.capital.update(localId, { firestoreId });
+          }
+        }
+      }
+
+      if (parsedData.rawSavings?.length) {
+        for (const savings of parsedData.rawSavings) {
+          const { id, ...record } = savings;
+          const localId = await db.savings.add({ ...record, storeId: storeId || savings.storeId });
+          if (auth.currentUser && storeId) {
+            const firestoreId = await saveSavingsToFirestore({ ...record, id: localId, storeId });
+            if (firestoreId) await db.savings.update(localId, { firestoreId });
+          }
+        }
+      }
+
+      if (parsedData.rawReceiptTemplates?.length) {
+        for (const template of parsedData.rawReceiptTemplates) {
+          const restoredTemplate = { ...template, storeId: storeId || template.storeId };
+          await db.strukTemplates.put(restoredTemplate);
+          if (auth.currentUser && storeId) {
+            await saveReceiptTemplateToFirestore(restoredTemplate);
+          }
+        }
+      }
+
+      if (parsedData.rawSyncQueue?.length) {
+        const operations = parsedData.rawSyncQueue.map(({ id: _id, ...operation }) => ({
+          ...operation,
+          storeId: storeId || operation.storeId
+        }));
+        await db.syncQueue.bulkAdd(operations);
+      }
+
+      if (parsedData.rawAppData) {
+        const appData = parsedData.rawAppData;
+        if (appData.customCategories) localStorage.setItem('kasirpro_custom_categories', JSON.stringify(appData.customCategories));
+        if (appData.theme) localStorage.setItem('kasirpro_theme', appData.theme);
+        if (appData.posSortBy) localStorage.setItem('kasirpro_pos_sort_by', appData.posSortBy);
+        if (appData.dashboardTimePeriod) localStorage.setItem('dashboard_time_period', appData.dashboardTimePeriod);
+        if (appData.strukScanHistory) localStorage.setItem('kasirpro_strukscan_history', JSON.stringify(appData.strukScanHistory));
+        if (appData.strukScanTemplates) {
+          localStorage.setItem('kasirpro_strukscan_custom_templates', JSON.stringify(appData.strukScanTemplates));
+          await db.strukTemplates.bulkPut(appData.strukScanTemplates.map(template => ({
+            ...template,
+            storeId: storeId || template.storeId
+          })));
+        }
+        if (appData.bluetoothPrinter) {
+          localStorage.setItem('kasirpro_bt_printer', JSON.stringify(appData.bluetoothPrinter));
+        } else if (Object.prototype.hasOwnProperty.call(appData, 'bluetoothPrinter')) {
+          localStorage.removeItem('kasirpro_bt_printer');
+        }
+      }
+
       setStatusMessage({
         type: 'success',
         text: auth.currentUser && storeId
-          ? `Berhasil mengimpor ${importedProductsCount} produk dan ${importedTxsCount} transaksi ke cache lokal dan menyinkronkan ke Firestore toko aktif.`
-          : `Berhasil mengimpor ${importedProductsCount} produk dan ${importedTxsCount} transaksi ke backup lokal. Login lalu gunakan Sinkron Manual untuk mengunggah ke Firestore.`
+          ? `Berhasil mengimpor ${importedProductsCount} produk, ${importedTxsCount} transaksi, dan seluruh data backup yang tersedia ke lokal/Firestore.`
+          : `Berhasil mengimpor ${importedProductsCount} produk, ${importedTxsCount} transaksi, dan seluruh data backup yang tersedia ke lokal.`
       });
 
       // Clear file selection
@@ -461,7 +606,7 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
                 <div>
                   <h4 className="font-bold text-white text-sm">Cadangan Penuh (Full Backup JSON)</h4>
                   <p className="text-slate-400 text-[11px] mt-0.5">
-                    Menyimpan semua {products.length} produk & stok, {allTransactions.length} transaksi riwayat, dan profil toko dalam 1 file.
+                    Mencakup semua tabel lokal, pengaturan, preferensi, riwayat StrukScan, dan antrean sinkron. Kredensial akun tidak disertakan.
                   </p>
                 </div>
               </div>
@@ -469,10 +614,21 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  exportFullBackupJson(products, allTransactions, settings, allCashFlows, allDebts);
+                  exportFullBackupJson(
+                    products,
+                    allTransactions,
+                    settings,
+                    allCashFlows,
+                    allDebts,
+                    allCapital,
+                    allSavings,
+                    allReceiptTemplates,
+                    localAppData,
+                    allSyncQueue
+                  );
                   setStatusMessage({
                     type: 'success',
-                    text: 'File Cadangan Penuh (JSON termasuk Pembukuan & Bon) berhasil diunduh!'
+                    text: 'Cadangan Penuh JSON berhasil diunduh, termasuk seluruh tabel lokal dan preferensi aplikasi.'
                   });
                 }}
                 className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-500/20 shrink-0 transition"
@@ -614,6 +770,29 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
                     <span className="text-slate-400 block">Profil Toko:</span>
                     <strong className="text-white font-mono text-sm">{parsedData.hasSettings ? 'Tersedia' : '-'}</strong>
                   </div>
+
+                  {parsedData.type === 'full_backup' && (
+                    <>
+                      <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                        <span className="text-slate-400 block">Pembukuan & Bon:</span>
+                        <strong className="text-purple-300 font-mono text-sm">
+                          {parsedData.cashFlowsCount || 0} arus kas · {parsedData.debtsCount || 0} bon
+                        </strong>
+                      </div>
+                      <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                        <span className="text-slate-400 block">Modal & Tabungan:</span>
+                        <strong className="text-amber-300 font-mono text-sm">
+                          {parsedData.capitalCount || 0} modal · {parsedData.savingsCount || 0} tabungan
+                        </strong>
+                      </div>
+                      <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                        <span className="text-slate-400 block">Template Struk:</span>
+                        <strong className="text-cyan-300 font-mono text-sm">
+                          {parsedData.receiptTemplatesCount || 0} template · {parsedData.pendingDeletesCount || 0} antrean hapus
+                        </strong>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Import Mode: Merge vs Replace */}

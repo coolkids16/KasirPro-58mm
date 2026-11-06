@@ -181,7 +181,7 @@ export interface DebtPayment {
 
 export interface DebtMutation {
   id: string;
-  type: 'give' | 'take'; // 'give' = Berikan (Utang +), 'take' = Terima (Bayar/Cicil -)
+  type: 'give' | 'take' | 'adjustment'; // adjustment amount is signed: positive adds debt, negative reduces it
   amount: number;
   note?: string;
   timestamp: number;
@@ -210,6 +210,7 @@ export interface CustomerDebt {
   dueDate?: string;
   payments: DebtPayment[];
   mutations?: DebtMutation[];
+  historyClearedAt?: number | null;
   storeId?: string;
   updatedAt?: number;
 }

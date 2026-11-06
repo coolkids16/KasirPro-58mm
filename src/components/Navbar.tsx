@@ -565,7 +565,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                   {/* Environment info footer */}
                   <div className="border-t border-slate-800 pt-2 pb-1 px-2 flex items-center justify-between text-[10px] text-slate-500 font-mono">
-                    <span>KasirPro v2.0</span>
+                    <span>KasirPro v1.0</span>
                     <span className="uppercase bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 text-cyan-500 text-[9px]">
                       {runtimeEnv}
                     </span>

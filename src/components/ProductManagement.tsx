@@ -17,7 +17,8 @@ import {
   Tag,
   Barcode,
   Camera,
-  Sparkles
+  Sparkles,
+  PlusCircle
 } from 'lucide-react';
 import { Product } from '../types';
 import { db } from '../db/db';
@@ -153,6 +154,8 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
 
   // In-app modal states
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [stockAdjustmentProduct, setStockAdjustmentProduct] = useState<Product | null>(null);
+  const [stockAdjustmentAmount, setStockAdjustmentAmount] = useState('1');
   const [isClearAllStockModalOpen, setIsClearAllStockModalOpen] = useState(false);
   const [isNewCategoryModalOpen, setIsNewCategoryModalOpen] = useState(false);
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
@@ -230,10 +233,10 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
   }, [modalInputType, formSackWeight, formConversionFactor]);
 
   useEffect(() => {
-    if (modalInputType === 'konversi' && calculatedConvertedStock !== null) {
+    if (!editingProduct && modalInputType === 'konversi' && calculatedConvertedStock !== null) {
       setFormStock(String(calculatedConvertedStock));
     }
-  }, [calculatedConvertedStock, modalInputType]);
+  }, [calculatedConvertedStock, modalInputType, editingProduct]);
 
   const handleBarcodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -370,7 +373,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
       modalPerLiter = 0;
     }
 
-    const finalStock = modalInputType === 'konversi' && calculatedConvertedStock !== null 
+    const finalStock = !editingProduct && modalInputType === 'konversi' && calculatedConvertedStock !== null 
       ? calculatedConvertedStock 
       : parseFloatNumber(formStock);
 
@@ -505,6 +508,35 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
       // offline fallback
     }
     onRefreshProducts();
+  };
+
+  const handleAddStockAmount = async () => {
+    if (!stockAdjustmentProduct) return;
+    const amount = parseFloatNumber(stockAdjustmentAmount);
+    if (amount <= 0) {
+      showNotification('Jumlah stok tambahan harus lebih dari 0.');
+      return;
+    }
+
+    const product = stockAdjustmentProduct;
+    const newStock = Math.round((product.stock + amount) * 1000) / 1000;
+    try {
+      if (product.id) {
+        await db.products.update(product.id as any, { stock: newStock });
+      }
+      await saveProductToFirestore({
+        ...product,
+        stock: newStock,
+        storeId: storeId || product.storeId
+      }, storeId || product.storeId);
+      showNotification(`Stok ${product.name} ditambah ${amount} ${product.unit || 'Pcs'}.`);
+    } catch (error) {
+      showNotification(`Stok diperbarui lokal; sinkronisasi cloud tertunda.`);
+    } finally {
+      setStockAdjustmentProduct(null);
+      setStockAdjustmentAmount('1');
+      onRefreshProducts();
+    }
   };
 
   // Clear / Zero out individual product stock
@@ -777,6 +809,17 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                           +
                         </button>
                         <button
+                          onClick={() => {
+                            setStockAdjustmentProduct(product);
+                            setStockAdjustmentAmount('1');
+                          }}
+                          title="Tambah stok dengan jumlah tertentu"
+                          aria-label={`Tambah stok ${product.name} dengan jumlah tertentu`}
+                          className="w-6 h-6 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 flex items-center justify-center transition"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5" />
+                        </button>
+                        <button
                           onClick={() => handleClearStock(product)}
                           title="Kosongkan stok produk ini (0)"
                           className="text-[10px] px-1.5 py-0.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition"
@@ -1043,6 +1086,55 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
         </div>
       )}
 
+      {stockAdjustmentProduct && (
+        <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-white">Tambah Stok</h3>
+              <button
+                type="button"
+                onClick={() => setStockAdjustmentProduct(null)}
+                className="p-1 text-slate-400 hover:text-white"
+                aria-label="Tutup"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-400">
+              {stockAdjustmentProduct.name} · stok saat ini {stockAdjustmentProduct.stock} {stockAdjustmentProduct.unit || 'Pcs'}
+            </p>
+            <label className="block text-xs text-slate-300">
+              Jumlah yang ditambahkan ({stockAdjustmentProduct.unit || 'Pcs'})
+              <input
+                type="number"
+                min="0.001"
+                step="any"
+                autoFocus
+                value={stockAdjustmentAmount}
+                onChange={event => setStockAdjustmentAmount(event.target.value)}
+                className="mt-1 w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono focus:outline-none focus:border-emerald-500"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setStockAdjustmentProduct(null)}
+                className="px-3 py-2 bg-slate-800 text-slate-300 rounded-lg text-xs"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleAddStockAmount}
+                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg text-xs"
+              >
+                Tambahkan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ADD / EDIT PRODUCT MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center min-h-screen bg-black/80 backdrop-blur-sm">
@@ -1303,11 +1395,16 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({
                     </div>
                     <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl space-y-1 text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-300">Total Stok Konversi Liter:</span>
+                        <span className="text-slate-300">{editingProduct ? 'Konversi Karung:' : 'Stok Awal Konversi:'}</span>
                         <span className="font-mono font-bold text-emerald-300">
                           {calculatedConvertedStock} Liter
                         </span>
                       </div>
+                      {editingProduct && (
+                        <p className="text-[10px] text-slate-400">
+                          Saat mengedit, stok mengikuti nilai pada kolom Jumlah Stok.
+                        </p>
+                      )}
                       <div className="flex items-center justify-between pt-1 border-t border-emerald-500/20">
                         <span className="text-slate-200 font-medium">Modal per Liter:</span>
                         <span className="font-mono font-extrabold text-emerald-400 text-sm">

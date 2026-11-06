@@ -1,6 +1,6 @@
 [package]
 name = "kasirpro-pos"
-version = "0.1.0"
+version = "1.0.0"
 description = "Aplikasi Kasir POS 58mm untuk Linux Desktop dan Android"
 authors = ["KasirPro"]
 edition = "2024"

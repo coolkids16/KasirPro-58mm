@@ -302,6 +302,12 @@ export default function App() {
   const handleDataImported = () => {
     refreshProductsLocal();
     loadSettingsLocal();
+    try {
+      const restoredTheme = localStorage.getItem('kasirpro_theme');
+      if (restoredTheme === 'light' || restoredTheme === 'dark') setTheme(restoredTheme);
+    } catch (error) {
+      console.warn('Gagal menerapkan tema hasil restore:', error);
+    }
   };
 
   return (

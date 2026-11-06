@@ -533,7 +533,6 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         {/* Card: Penjualan Periode */}
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-3xl -translate-x-1/2 translate-y-1/2" />
           <div className="relative flex items-center justify-between mb-2">
             <span className="text-xs text-slate-400 font-medium">Penjualan {periodLabel}</span>
             <DollarSign className="w-4 h-4 text-emerald-400" />
@@ -556,7 +555,6 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
 
         {/* Card: Transaksi Periode */}
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full blur-3xl -translate-x-1/2 translate-y-1/2" />
           <div className="relative flex items-center justify-between mb-2">
             <span className="text-xs text-slate-400 font-medium">Transaksi {periodLabel}</span>
             <ShoppingCart className="w-4 h-4 text-blue-400" />
@@ -571,7 +569,6 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
 
         {/* Card: Rata-rata Harian */}
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-3xl -translate-x-1/2 translate-y-1/2" />
           <div className="relative flex items-center justify-between mb-2">
             <span className="text-xs text-slate-400 font-medium">Rata-rata Harian</span>
             <Activity className="w-4 h-4 text-purple-400" />
@@ -586,7 +583,6 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
 
         {/* Card: AOV (Average Order Value) */}
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-3xl -translate-x-1/2 translate-y-1/2" />
           <div className="relative flex items-center justify-between mb-2">
             <span className="text-xs text-slate-400 font-medium">AOV</span>
             <DollarSign className="w-4 h-4 text-amber-400" />
@@ -601,7 +597,6 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
 
         {/* Card: Total Produk Terjual */}
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 rounded-full blur-3xl -translate-x-1/2 translate-y-1/2" />
           <div className="relative flex items-center justify-between mb-2">
             <span className="text-xs text-slate-400 font-medium">Item Terjual</span>
             <Award className="w-4 h-4 text-cyan-400" />
@@ -626,7 +621,7 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
 
           {topProducts.length > 0 ? (
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={topProducts} layout="vertical">
+                <BarChart data={topProducts} layout="vertical">
                 <defs>
                   <linearGradient id="topProductsGradient" x1="0" y1="0" x2="1" y2="0">
                     <stop offset="0%" stopColor="#10b981" stopOpacity={0.9} />
@@ -673,6 +668,7 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
                   dataKey="quantity" 
                   radius={[0, 8, 8, 0]}
                   maxBarSize={40}
+                  isAnimationActive={false}
                 >
                   {topProducts.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -706,6 +702,7 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
                   labelLine={false}
                   label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(1)}%`}
                   dataKey="value"
+                  isAnimationActive={false}
                 >
                   {paymentStats.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -802,6 +799,7 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
                   fill="url(#prevPeriodGradient)"
                   name="Periode Sebelumnya"
                   opacity={0.7}
+                  isAnimationActive={false}
                 />
               )}
               <Area
@@ -811,6 +809,7 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
                 strokeWidth={2}
                 fill="url(#currentPeriodGradient)"
                 name={periodLabel}
+                isAnimationActive={false}
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -858,6 +857,7 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
                 fill="url(#salesGradient3)" 
                 radius={[6, 6, 0, 0]}
                 maxBarSize={30}
+                isAnimationActive={false}
               >
                 {hourlySales.map((_, index) => (
                   <Cell key={`hour-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -900,6 +900,7 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({ settings
                 labelLine={false}
                 label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(1)}%`}
                 dataKey="value"
+                isAnimationActive={false}
               >
                 {(() => {
                   const catMap: Record<string, number> = {};

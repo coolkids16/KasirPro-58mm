@@ -63,8 +63,12 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
   const [isDueDateModalOpen, setIsDueDateModalOpen] = useState(false);
   const [isPayoffModalOpen, setIsPayoffModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isEditMutationModalOpen, setIsEditMutationModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [mutationToDelete, setMutationToDelete] = useState<DebtMutation | null>(null);
+  const [mutationToEdit, setMutationToEdit] = useState<DebtMutation | null>(null);
+  const [editMutationAmount, setEditMutationAmount] = useState('');
+  const [deleteBonAfterPayoff, setDeleteBonAfterPayoff] = useState(false);
 
   // Form States for "Catat Utang Baru"
   const [formCustomerName, setFormCustomerName] = useState('');
@@ -255,6 +259,8 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
   const customerMutations = useMemo((): DebtMutation[] => {
     if (!selectedCustomer) return [];
 
+    if (selectedCustomer.historyClearedAt) return [];
+
     if (selectedCustomer.mutations && selectedCustomer.mutations.length > 0) {
       return [...selectedCustomer.mutations].sort((a, b) => b.timestamp - a.timestamp);
     }
@@ -400,6 +406,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
       status: newStatus,
       description: desc,
       mutations: updatedMutations,
+      historyClearedAt: null,
       updatedAt: Date.now()
     };
 
@@ -475,6 +482,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
       status: newStatus,
       payments: updatedPayments,
       mutations: updatedMutations,
+      historyClearedAt: null,
       updatedAt: Date.now()
     };
 
@@ -499,6 +507,69 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
     } catch (err: any) {
       console.error(err);
       alert('Gagal mencatat pembayaran: ' + err.message);
+    }
+  };
+
+  const isPosDebtMutation = (mutation: DebtMutation) =>
+    mutation.type === 'give' && /transaksi\s+kasir/i.test(mutation.note || '');
+
+  const handleSaveEditedMutation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCustomer || !mutationToEdit || mutationToEdit.type !== 'give') return;
+    if (isPosDebtMutation(mutationToEdit)) {
+      alert('Nominal bon dari transaksi Kasir (POS) tidak dapat diedit dari Buku Utang.');
+      return;
+    }
+
+    const updatedMutationAmount = Number(editMutationAmount);
+    if (!Number.isFinite(updatedMutationAmount) || updatedMutationAmount <= 0) {
+      alert('Nominal transaksi bon harus lebih dari 0.');
+      return;
+    }
+    const difference = updatedMutationAmount - mutationToEdit.amount;
+    const updatedTotal = (selectedCustomer.totalAmount || 0) + difference;
+    if (updatedTotal < (selectedCustomer.paidAmount || 0)) {
+      alert('Nominal transaksi tidak bisa dikurangi karena totalnya akan lebih kecil dari jumlah yang sudah dibayar.');
+      return;
+    }
+
+    if (difference === 0) {
+      setIsEditMutationModalOpen(false);
+      setMutationToEdit(null);
+      return;
+    }
+
+    const now = Date.now();
+    const updatedMutations = customerMutations.map(mutation => mutation.id === mutationToEdit.id
+      ? { ...mutation, amount: updatedMutationAmount }
+      : mutation
+    );
+    const updatedRemaining = Math.max(0, updatedTotal - (selectedCustomer.paidAmount || 0));
+    const updatedPayload: Partial<CustomerDebt> = {
+      totalAmount: updatedTotal,
+      remainingAmount: updatedRemaining,
+      status: updatedRemaining === 0 ? 'lunas' : ((selectedCustomer.paidAmount || 0) > 0 ? 'cicilan' : 'belum_lunas'),
+      mutations: updatedMutations,
+      historyClearedAt: null,
+      updatedAt: now
+    };
+
+    try {
+      if (selectedCustomer.id) await db.debts.update(selectedCustomer.id, updatedPayload);
+      if (auth.currentUser) {
+        await updateDebtInFirestore(
+          selectedCustomer.firestoreId || selectedCustomer.id,
+          updatedPayload,
+          selectedCustomer.createdAt
+        );
+      }
+      setIsEditMutationModalOpen(false);
+      setMutationToEdit(null);
+      showToast(`✓ Nominal transaksi bon diperbarui menjadi Rp ${formatRupiah(updatedMutationAmount)}`);
+      onRefresh();
+    } catch (error: any) {
+      console.error(error);
+      alert('Gagal memperbarui nominal bon: ' + (error.message || 'Error'));
     }
   };
 
@@ -538,24 +609,50 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
       status: 'lunas',
       payments: updatedPayments,
       mutations: updatedMutations,
+      historyClearedAt: null,
       updatedAt: ts
     };
 
     try {
-      if (selectedCustomer.id) {
-        await db.debts.update(selectedCustomer.id, updatePayload);
-      }
-      if (auth.currentUser) {
-        await updateDebtInFirestore(
-          selectedCustomer.firestoreId || selectedCustomer.id,
-          updatePayload,
-          selectedCustomer.createdAt
-        );
+      if (deleteBonAfterPayoff) {
+        const clearedHistoryPayload: Partial<CustomerDebt> = {
+          paidAmount: selectedCustomer.totalAmount,
+          remainingAmount: 0,
+          status: 'lunas',
+          payments: [],
+          mutations: [],
+          historyClearedAt: ts,
+          updatedAt: ts
+        };
+        if (selectedCustomer.id) {
+          await db.debts.update(selectedCustomer.id, clearedHistoryPayload);
+        }
+        if (auth.currentUser) {
+          await updateDebtInFirestore(
+            selectedCustomer.firestoreId || selectedCustomer.id,
+            clearedHistoryPayload,
+            selectedCustomer.createdAt
+          );
+        }
+      } else {
+        if (selectedCustomer.id) {
+          await db.debts.update(selectedCustomer.id, updatePayload);
+        }
+        if (auth.currentUser) {
+          await updateDebtInFirestore(
+            selectedCustomer.firestoreId || selectedCustomer.id,
+            updatePayload,
+            selectedCustomer.createdAt
+          );
+        }
       }
 
       sounds.playSuccess();
-      showToast(`✓ Utang ${selectedCustomer.customerName} sebesar Rp ${formatRupiah(remaining)} telah LUNAS!`);
+      showToast(deleteBonAfterPayoff
+        ? `✓ Utang ${selectedCustomer.customerName} lunas; riwayat bon dibersihkan, nama pelanggan tetap tersimpan.`
+        : `✓ Utang ${selectedCustomer.customerName} sebesar Rp ${formatRupiah(remaining)} telah LUNAS!`);
       setIsPayoffModalOpen(false);
+      setDeleteBonAfterPayoff(false);
       onRefresh();
     } catch (err: any) {
       console.error(err);
@@ -609,6 +706,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
     updatedMutations.forEach(m => {
       if (m.type === 'give') newTotal += m.amount;
       if (m.type === 'take') newPaid += m.amount;
+      if (m.type === 'adjustment') newTotal += m.amount;
     });
 
     const newRemaining = Math.max(0, newTotal - newPaid);
@@ -620,6 +718,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
       remainingAmount: newRemaining,
       status: newStatus,
       mutations: updatedMutations,
+      historyClearedAt: updatedMutations.length === 0 ? Date.now() : null,
       updatedAt: Date.now()
     };
 
@@ -721,9 +820,11 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
     // List recent mutations
     customerMutations.slice(0, 10).forEach(m => {
-      const typeStr = m.type === 'give' ? '[BERIKAN]' : '[TERIMA] ';
+      const typeStr = m.type === 'give' ? '[BERIKAN]' : m.type === 'take' ? '[TERIMA]' : '[KOREKSI]';
       const dateStr = new Date(m.timestamp).toLocaleDateString('id-ID');
-      const valStr = `Rp ${formatRupiah(m.amount)}`;
+      const valStr = m.type === 'adjustment'
+        ? `${m.amount > 0 ? '+' : '-'}Rp ${formatRupiah(Math.abs(m.amount))}`
+        : `Rp ${formatRupiah(m.amount)}`;
       encoder.textLine(`${dateStr} ${typeStr}`);
       if (m.note) encoder.textLine(` ${m.note.substring(0, W - 2)}`);
       encoder.align('right');
@@ -769,8 +870,11 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
 
     customerMutations.slice(0, 15).forEach((m, i) => {
       const dt = new Date(m.timestamp).toLocaleDateString('id-ID');
-      const sym = m.type === 'give' ? '[-] Berikan' : '[+] Terima';
-      text += `${i + 1}. ${dt} - ${sym} Rp ${formatRupiah(m.amount)} (${m.note || '-'})\n`;
+      const sym = m.type === 'give' ? '[-] Berikan' : m.type === 'take' ? '[+] Terima' : '[=] Koreksi';
+      const amount = m.type === 'adjustment'
+        ? `${m.amount > 0 ? '+' : '-'}Rp ${formatRupiah(Math.abs(m.amount))}`
+        : `Rp ${formatRupiah(m.amount)}`;
+      text += `${i + 1}. ${dt} - ${sym} ${amount} (${m.note || '-'})\n`;
     });
 
     navigator.clipboard.writeText(text);
@@ -879,7 +983,10 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
             {/* Quick Action: Lunaskan Button */}
             {!isPaid && (
               <button
-                onClick={() => setIsPayoffModalOpen(true)}
+                onClick={() => {
+                  setDeleteBonAfterPayoff(false);
+                  setIsPayoffModalOpen(true);
+                }}
                 className="px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition cursor-pointer shrink-0"
               >
                 <CheckCircle2 className="w-4 h-4" />
@@ -984,6 +1091,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
             {customerMutations.map((mut) => {
               const isTake = mut.type === 'take';
               const isGive = mut.type === 'give';
+              const isAdjustment = mut.type === 'adjustment';
 
               return (
                 <div 
@@ -998,6 +1106,25 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
                     <p className="font-semibold text-white text-xs mt-0.5 truncate">
                       {mut.note || (isTake ? 'Pembayaran Utang' : 'Bon Belanja')}
                     </p>
+                    {isGive && !isPosDebtMutation(mut) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMutationToEdit(mut);
+                          setEditMutationAmount(String(mut.amount));
+                          setIsEditMutationModalOpen(true);
+                        }}
+                        className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-cyan-300 hover:text-cyan-200"
+                        title="Edit nominal transaksi bon manual"
+                      >
+                        <Edit3 className="w-3 h-3" /> Edit nominal transaksi
+                      </button>
+                    )}
+                    {isAdjustment && (
+                      <p className="text-[10px] font-mono font-bold text-amber-300">
+                        {mut.amount > 0 ? '+' : '-'}Rp {formatRupiah(Math.abs(mut.amount))}
+                      </p>
+                    )}
                   </div>
 
                   {/* Terima Column (Hijau) */}
@@ -1043,6 +1170,66 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
             )}
           </div>
         </div>
+
+        {isEditMutationModalOpen && mutationToEdit && (
+          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/80 overflow-y-auto">
+            <div className="bg-slate-900 border border-emerald-500/40 w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-white">Edit Nominal Transaksi Bon</h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditMutationModalOpen(false);
+                    setMutationToEdit(null);
+                  }}
+                  className="p-1 text-slate-400 hover:text-white"
+                  aria-label="Tutup"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-xs text-slate-400">
+                {selectedCustomer.customerName} · {mutationToEdit.note || 'Bon manual'}.
+              </p>
+              <form onSubmit={handleSaveEditedMutation} className="space-y-4">
+                <label className="block text-xs text-slate-300">
+                  Nominal transaksi ini (Rp)
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    required
+                    autoFocus
+                    value={editMutationAmount}
+                    onChange={event => setEditMutationAmount(event.target.value)}
+                    className="mt-1 w-full px-3 py-2.5 bg-slate-950 border border-emerald-500/50 rounded-xl text-white font-mono font-bold focus:outline-none focus:border-emerald-400"
+                  />
+                </label>
+                <p className="text-[10px] text-slate-500">
+                  Hanya transaksi bon manual ini yang berubah. Bon dari Kasir (POS) tidak dapat diedit dari sini.
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditMutationModalOpen(false);
+                      setMutationToEdit(null);
+                    }}
+                    className="px-3 py-2 bg-slate-800 text-slate-300 rounded-lg text-xs"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs"
+                  >
+                    Simpan Nominal
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* =========================================================================
             FIXED BOTTOM DOCK: TWO BIG ACTION BUTTONS (BERIKAN & TERIMA)
@@ -1402,6 +1589,21 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
                 </span>
                 <p className="text-[10px] text-slate-400 mt-1">Status akan otomatis berubah menjadi LUNAS.</p>
               </div>
+
+              <label className="flex items-start gap-2.5 p-3 bg-rose-950/30 border border-rose-500/30 rounded-xl text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deleteBonAfterPayoff}
+                  onChange={event => setDeleteBonAfterPayoff(event.target.checked)}
+                  className="mt-0.5 accent-rose-500"
+                />
+                <span className="text-slate-300">
+                  <strong className="text-rose-300">Hapus riwayat bon ini setelah lunas</strong>
+                  <span className="block text-[10px] text-slate-400 mt-0.5">
+                    Hanya daftar mutasi dan pembayaran yang dikosongkan. Nama pelanggan dan data bon berstatus Lunas tetap disimpan.
+                  </span>
+                </span>
+              </label>
 
               <div className="flex gap-2.5 pt-2">
                 <button

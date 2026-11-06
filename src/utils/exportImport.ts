@@ -1,4 +1,14 @@
-import { Product, Transaction, StoreSettings, CashFlowRecord, CustomerDebt } from '../types';
+import {
+  Product,
+  Transaction,
+  StoreSettings,
+  CashFlowRecord,
+  CustomerDebt,
+  CapitalRecord,
+  TabunganRecord,
+  CustomTemplate
+} from '../types';
+import type { PendingSyncOperation } from '../db/db';
 import { getLocalDateString } from './timezone';
 
 export interface FullBackupData {
@@ -9,6 +19,19 @@ export interface FullBackupData {
   transactions: Transaction[];
   cashFlows?: CashFlowRecord[];
   debts?: CustomerDebt[];
+  capital?: CapitalRecord[];
+  savings?: TabunganRecord[];
+  receiptTemplates?: CustomTemplate[];
+  syncQueue?: PendingSyncOperation[];
+  appData?: {
+    customCategories?: string[];
+    theme?: 'dark' | 'light';
+    posSortBy?: 'default' | 'bestselling';
+    dashboardTimePeriod?: string;
+    strukScanHistory?: unknown[];
+    strukScanTemplates?: CustomTemplate[];
+    bluetoothPrinter?: { name: string; address: string } | null;
+  };
 }
 
 export function downloadFile(content: string, filename: string, mimeType: string) {
@@ -30,16 +53,26 @@ export function exportFullBackupJson(
   transactions: Transaction[],
   settings?: StoreSettings,
   cashFlows?: CashFlowRecord[],
-  debts?: CustomerDebt[]
+  debts?: CustomerDebt[],
+  capital?: CapitalRecord[],
+  savings?: TabunganRecord[],
+  receiptTemplates?: CustomTemplate[],
+  appData?: FullBackupData['appData'],
+  syncQueue?: PendingSyncOperation[]
 ) {
   const backup: FullBackupData = {
-    version: '2.0.0',
+    version: '3.0.0',
     exportedAt: new Date().toISOString(),
     storeSettings: settings,
     products,
     transactions,
     cashFlows,
-    debts
+    debts,
+    capital,
+    savings,
+    receiptTemplates,
+    appData,
+    syncQueue
   };
   const dateStr = getLocalDateString();
   downloadFile(
