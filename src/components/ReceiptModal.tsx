@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import { 
   Printer, 
   X, 
@@ -11,7 +13,8 @@ import {
   FileText,
   Cpu,
   Share2,
-  RefreshCw
+  RefreshCw,
+  Download
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Transaction, StoreSettings, PrinterConnectionType, BluetoothDeviceOption } from '../types';
@@ -138,6 +141,69 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     }
   };
 
+  const handleDownloadPDF = async () => {
+    setIsPrinting(true);
+    setPrintErrorMessage(null);
+    try {
+      const lines = receiptPlainText.split('\n');
+      const lineHeight = 3.5;
+      const pdfWidth = 58;
+      const pdfHeight = Math.max(100, lines.length * lineHeight + 20);
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [pdfWidth, pdfHeight]
+      });
+
+      pdf.setFont('courier', 'normal');
+      pdf.setFontSize(7);
+      pdf.setTextColor(0, 0, 0);
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageCenter = pageWidth / 2;
+      let y = 8;
+
+      lines.forEach((line) => {
+        if (!line) {
+          y += lineHeight;
+          return;
+        }
+
+        const trimmed = line.trim();
+        const leadingSpaces = line.length - line.trimStart().length;
+        const trailingSpaces = line.length - line.trimEnd().length;
+        
+        // Detect alignment based on leading/trailing spaces
+        // Separator lines (all = or -)
+        if ((trimmed.startsWith('=') || trimmed.startsWith('-')) && trimmed.replace(/[=\-]/g, '').trim() === '') {
+          pdf.text(trimmed, 2, y, { align: 'left' });
+        }
+        // Balanced padding = center-aligned (similar leading & trailing spaces)
+        else if (Math.abs(leadingSpaces - trailingSpaces) < 3 && leadingSpaces > 5) {
+          pdf.text(trimmed, pageCenter, y, { align: 'center' });
+        }
+        // More leading spaces = right-aligned
+        else if (leadingSpaces > trailingSpaces + 5) {
+          pdf.text(trimmed, pageWidth - 2, y, { align: 'right' });
+        }
+        // Default left-aligned
+        else {
+          pdf.text(trimmed, 2, y, { align: 'left' });
+        }
+
+        y += lineHeight;
+      });
+
+      pdf.save(`Struk-${transaction.invoiceNumber}.pdf`);
+      setPrintSuccessMessage('Struk berhasil diunduh sebagai PDF.');
+    } catch (err: any) {
+      setPrintErrorMessage('Gagal mengunduh PDF: ' + err.message);
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   const receiptPlainText = generateReceiptText(transaction, settings);
   const hexDump = Array.from(escPosBinary)
     .map(b => b.toString(16).padStart(2, '0').toUpperCase())
@@ -198,7 +264,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
           </div>
 
           {/* Paper Container */}
-          <div className="w-[min(280px,100%)] max-w-full mx-auto bg-[#fdfdf9] text-zinc-900 shadow-2xl rounded-sm p-4 relative font-mono text-[11px] leading-snug border-t-8 border-b-8 border-dashed border-zinc-300">
+          <div id="receipt-paper" className="w-[min(280px,100%)] max-w-full mx-auto bg-[#fdfdf9] text-zinc-900 shadow-2xl rounded-sm p-4 relative font-mono text-[11px] leading-snug border-t-8 border-b-8 border-dashed border-zinc-300">
             {/* 32-character boundary ruler hint */}
             <div className="text-[9px] text-zinc-400 text-center border-b border-zinc-200 pb-1 mb-2 font-mono select-none">
               |..5...10...15...20...25...30.32|
@@ -246,16 +312,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               </button>
             </div>
 
-            {/* Linux Hardware Target Badge */}
-            <div className="mt-3 p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1.5 text-slate-300 font-medium">
-                <Cpu className="w-4 h-4 text-cyan-400" />
-                Target Port: <code className="font-mono text-cyan-300">{linuxPath}</code>
-              </span>
-              <span className="font-mono text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">
-                VID: 28e9 PID: 0289
-              </span>
-            </div>
+
 
             {/* Notification messages */}
             {printSuccessMessage && (
@@ -273,16 +330,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 </div>
                 <div className="flex items-center gap-2 pt-1 border-t border-rose-500/20">
                   <button
-                    onClick={() => handlePrint('simulator')}
+                    onClick={handleDownloadPDF}
                     className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-semibold transition"
                   >
-                    Gunakan Simulator 58mm
-                  </button>
-                  <button
-                    onClick={() => handlePrint('browser_print')}
-                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-semibold transition"
-                  >
-                    Cetak Dialog Browser (PDF)
+                    Download PDF
                   </button>
                 </div>
               </div>
@@ -381,24 +432,15 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 </div>
               )}
 
-              {/* Secondary Options */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              {/* Secondary Option */}
+              <div className="w-full text-xs">
                 <button
-                  onClick={() => handlePrint('simulator')}
+                  onClick={handleDownloadPDF}
                   disabled={isPrinting}
-                  className="p-2.5 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-xl flex items-center justify-center gap-2 font-medium transition"
+                  className="w-full p-2.5 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-xl flex items-center justify-center gap-2 font-medium transition"
                 >
-                  <Printer className="w-3.5 h-3.5 text-emerald-400" />
-                  Uji Simulator
-                </button>
-
-                <button
-                  onClick={() => handlePrint('browser_print')}
-                  disabled={isPrinting}
-                  className="p-2.5 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-xl flex items-center justify-center gap-2 font-medium transition"
-                >
-                  <FileText className="w-3.5 h-3.5 text-indigo-400" />
-                  Cetak Browser / PDF
+                  <Download className="w-3.5 h-3.5 text-indigo-400" />
+                  Download PDF
                 </button>
               </div>
 

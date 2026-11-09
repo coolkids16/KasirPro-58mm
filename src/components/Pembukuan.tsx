@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { CustomSelect } from './CustomSelect';
 import { BukuUtang } from './BukuUtang';
 import { Tabungan } from './Tabungan';
@@ -147,6 +147,11 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
   const [debtToPayoff, setDebtToPayoff] = useState<CustomerDebt | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [isConfirmClearAllOpen, setIsConfirmClearAllOpen] = useState<boolean>(false);
+
+  // Pagination states for Income & Expense tables
+  const [incomePage, setIncomePage] = useState<number>(0);
+  const [expensePage, setExpensePage] = useState<number>(0);
+  const ITEMS_PER_PAGE = 30;
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -736,8 +741,34 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
       }
     }
 
-    return list.sort((a, b) => b.timestamp - a.timestamp);
+    // Stable sort - sort only if needed (prevent re-render)
+    const sorted = [...list].sort((a, b) => b.timestamp - a.timestamp);
+    return sorted;
   }, [filteredCashFlows, filteredPosTransactions, incomeSourceFilter, searchQuery]);
+
+  const filteredExpenseRecords = useMemo(
+    () => filteredCashFlows.filter(cf => cf.type === 'expense'),
+    [filteredCashFlows]
+  );
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setIncomePage(0);
+  }, [incomeSourceFilter, searchQuery, selectedCategoryFilter, period]);
+
+  useEffect(() => {
+    setExpensePage(0);
+  }, [searchQuery, selectedCategoryFilter, period]);
+
+  const paginatedIncomeRecords = useMemo(() => {
+    const start = incomePage * ITEMS_PER_PAGE;
+    return combinedIncomeRecords.slice(start, start + ITEMS_PER_PAGE);
+  }, [combinedIncomeRecords, incomePage]);
+
+  const paginatedExpenseRecords = useMemo(() => {
+    const start = expensePage * ITEMS_PER_PAGE;
+    return filteredExpenseRecords.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredExpenseRecords, expensePage]);
 
   // Filtered Debts
   const filteredDebts = useMemo(() => {
@@ -1879,7 +1910,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 </button>
               </div>
 
-              <div className="space-y-2.5 max-h-[440px] overflow-y-auto overscroll-contain pr-1">
+              <div className="space-y-2.5">
                 {unifiedRecentTransactions.length === 0 ? (
                   <div className="py-12 text-center text-slate-500 text-xs">
                     {dashboardFilter === 'pos'
@@ -1898,7 +1929,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                     return (
                       <div
                         key={item.id}
-                        className={`p-3 bg-slate-950 border rounded-xl flex items-center justify-between gap-3 text-xs ${
+                        className={`bookkeeping-virtual-item p-3 bg-slate-950 border rounded-xl flex items-center justify-between gap-3 text-xs ${
                           isPos
                             ? 'border-emerald-500/25 hover:border-emerald-500/50 bg-emerald-950/10'
                             : 'border-slate-800 hover:border-slate-750'
@@ -2019,7 +2050,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                 </div>
                 <p className="text-xs text-slate-400 mb-3">Pelanggan yang masih memiliki sisa bon belanja.</p>
 
-                <div className="space-y-2 max-h-[300px] overflow-y-auto overscroll-contain pr-1">
+                <div className="space-y-2">
                   {debts.filter(d => d.status !== 'lunas').length === 0 ? (
                     <div className="py-8 text-center text-slate-500 text-xs">
                       🎉 Tidak ada hutang pelanggan yang belum lunas.
@@ -2028,7 +2059,7 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
                     debts.filter(d => d.status !== 'lunas').slice(0, 5).map(d => (
                       <div
                         key={d.id}
-                        className="p-3 bg-slate-950 border border-amber-500/20 rounded-xl space-y-1.5"
+                        className="bookkeeping-virtual-item p-3 bg-slate-950 border border-amber-500/20 rounded-xl space-y-1.5"
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-white text-xs">{d.customerName}</span>
@@ -2215,115 +2246,151 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           </div>
 
           {/* Income Records Table */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-            <div className="w-full overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 font-semibold uppercase text-[10px] tracking-wider">
-                  <tr>
-                    <th className="py-3 px-4">Tanggal</th>
-                    <th className="py-3 px-4">Kategori & Deskripsi</th>
-                    <th className="py-3 px-4 text-right">Modal</th>
-                    <th className="py-3 px-4 text-right">Pemasukan</th>
-                    <th className="py-3 px-4 text-right">Untung (Laba)</th>
-                    <th className="py-3 px-4 text-center">Status</th>
-                    <th className="py-3 px-4 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {combinedIncomeRecords.map(item => {
-                    const isPos = item.source === 'pos';
-
-                    return (
-                      <tr 
-                        key={item.id} 
-                        className={`transition ${isPos ? 'bg-emerald-950/5 hover:bg-emerald-950/15' : 'hover:bg-slate-850/50'}`}
-                      >
-                        <td className="py-3 px-4 text-slate-400 font-mono text-[11px] whitespace-nowrap">
-                          {item.dateString}
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="font-semibold text-white flex items-center gap-1.5 flex-wrap">
-                            <span>{item.description}</span>
-                            {isPos && (
-                              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.2 rounded text-[10px] font-bold">
-                                KASIR POS
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-medium inline-block mt-0.5">
-                            {item.category} • {item.paymentMethod || 'Tunai'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono text-slate-400 whitespace-nowrap">
-                          Rp {formatRupiah(item.cost || 0)}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-white whitespace-nowrap">
-                          Rp {formatRupiah(item.amount)}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-400 whitespace-nowrap">
-                          Rp {formatRupiah(item.profit || 0)}
-                        </td>
-                        <td className="py-3 px-4 text-center whitespace-nowrap">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            item.status === 'lunas' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
-                          }`}>
-                            {item.status.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {isPos ? (
-                              onSelectTransactionToPrint && item.posTransaction && (
-                                <button
-                                  type="button"
-                                  onClick={() => onSelectTransactionToPrint(item.posTransaction!)}
-                                  className="p-1.5 bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 rounded-lg transition"
-                                  title="Lihat & Cetak Struk 58mm"
-                                >
-                                  <Printer className="w-3.5 h-3.5" />
-                                </button>
-                              )
-                            ) : (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => item.cashFlowRecord && handleOpenIncomeModal(item.cashFlowRecord)}
-                                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
-                                  title="Edit"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => item.cashFlowRecord && setCashFlowToDelete(item.cashFlowRecord)}
-                                  className="p-1.5 bg-slate-800 hover:bg-rose-950/80 text-slate-400 hover:text-rose-400 rounded-lg transition"
-                                  title="Hapus Catatan Pemasukan"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-
-                  {combinedIncomeRecords.length === 0 && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            {combinedIncomeRecords.length > 0 ? (
+              <div className="w-full overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10">
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-slate-500">
-                        {incomeSourceFilter === 'pos'
-                          ? 'Tidak ada transaksi penjualan Kasir POS di periode ini.'
-                          : incomeSourceFilter === 'manual'
-                          ? 'Tidak ada transaksi pemasukan luar kasir di periode ini.'
-                          : 'Tidak ada transaksi pemasukan kasir maupun luar kasir di periode ini.'}
-                      </td>
+                      <th className="py-3.5 px-4 text-left">Tanggal</th>
+                      <th className="py-3.5 px-4 text-left">Kategori & Deskripsi</th>
+                      <th className="py-3.5 px-4 text-right">Modal</th>
+                      <th className="py-3.5 px-4 text-right">Pemasukan</th>
+                      <th className="py-3.5 px-4 text-right">Untung (Laba)</th>
+                      <th className="py-3.5 px-4 text-center">Status</th>
+                      <th className="py-3.5 px-4 text-right">Aksi</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {paginatedIncomeRecords.map(item => {
+                      const isPos = item.source === 'pos';
+                      return (
+                        <tr
+                          key={item.id}
+                          className={`${
+                            isPos ? 'bg-emerald-950/10 hover:bg-emerald-950/20' : 'bg-slate-900 hover:bg-slate-850/50'
+                          } transition-colors`}
+                        >
+                          <td className="py-3.5 px-4 text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                            {item.dateString}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="font-semibold text-white flex items-center gap-1.5 flex-wrap">
+                              <span>{item.description}</span>
+                              {isPos && (
+                                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.2 rounded text-[10px] font-bold">
+                                  KASIR POS
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-medium inline-block mt-0.5">
+                              {item.category} • {item.paymentMethod || 'Tunai'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-mono text-slate-400 whitespace-nowrap">
+                            Rp {formatRupiah(item.cost || 0)}
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-mono font-bold text-white whitespace-nowrap">
+                            Rp {formatRupiah(item.amount)}
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-400 whitespace-nowrap">
+                            Rp {formatRupiah(item.profit || 0)}
+                          </td>
+                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                item.status === 'lunas'
+                                  ? 'bg-emerald-500/20 text-emerald-300'
+                                  : 'bg-amber-500/20 text-amber-300'
+                              }`}
+                            >
+                              {item.status.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {isPos ? (
+                                onSelectTransactionToPrint &&
+                                item.posTransaction && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onSelectTransactionToPrint(item.posTransaction!)}
+                                    className="p-1.5 bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 rounded-lg transition"
+                                    title="Lihat & Cetak Struk 58mm"
+                                  >
+                                    <Printer className="w-3.5 h-3.5" />
+                                  </button>
+                                )
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      item.cashFlowRecord && handleOpenIncomeModal(item.cashFlowRecord)
+                                    }
+                                    className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
+                                    title="Edit"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      item.cashFlowRecord && setCashFlowToDelete(item.cashFlowRecord)
+                                    }
+                                    className="p-1.5 bg-slate-800 hover:bg-rose-950/80 text-slate-400 hover:text-rose-400 rounded-lg transition"
+                                    title="Hapus Catatan Pemasukan"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="py-12 text-center text-slate-500 text-xs">
+                {incomeSourceFilter === 'pos'
+                  ? 'Tidak ada transaksi penjualan Kasir POS di periode ini.'
+                  : incomeSourceFilter === 'manual'
+                  ? 'Tidak ada transaksi pemasukan luar kasir di periode ini.'
+                  : 'Tidak ada transaksi pemasukan kasir maupun luar kasir di periode ini.'}
+              </div>
+            )}
           </div>
+
+          {/* Pagination Controls for Income */}
+          {combinedIncomeRecords.length > ITEMS_PER_PAGE && (
+            <div className="flex items-center justify-between bg-slate-900 border border-slate-800 p-3 rounded-xl text-xs">
+              <span className="text-slate-400">
+                Menampilkan {incomePage * ITEMS_PER_PAGE + 1}-{Math.min((incomePage + 1) * ITEMS_PER_PAGE, combinedIncomeRecords.length)} dari {combinedIncomeRecords.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIncomePage(p => Math.max(0, p - 1))}
+                  disabled={incomePage === 0}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-600 text-slate-300 rounded-lg transition font-medium"
+                >
+                  ← Sebelumnya
+                </button>
+                <span className="px-2 py-1.5 text-slate-400 font-mono">
+                  {incomePage + 1} / {Math.ceil(combinedIncomeRecords.length / ITEMS_PER_PAGE)}
+                </span>
+                <button
+                  onClick={() => setIncomePage(p => p + 1)}
+                  disabled={(incomePage + 1) * ITEMS_PER_PAGE >= combinedIncomeRecords.length}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-600 text-slate-300 rounded-lg transition font-medium"
+                >
+                  Selanjutnya →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -2364,68 +2431,72 @@ export const Pembukuan: React.FC<PembukuanProps> = ({
           </div>
 
           {/* Expense Records Table */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-            <div className="w-full overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 font-semibold uppercase text-[10px] tracking-wider">
-                  <tr>
-                    <th className="py-3 px-4">Tanggal</th>
-                    <th className="py-3 px-4">Kategori & Keterangan</th>
-                    <th className="py-3 px-4">Sumber Dana</th>
-                    <th className="py-3 px-4 text-right">Nominal Pengeluaran</th>
-                    <th className="py-3 px-4 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {filteredCashFlows.filter(cf => cf.type === 'expense').map(item => (
-                    <tr key={item.id} className="hover:bg-slate-850/50 transition">
-                      <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">
-                        {item.dateString}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-white">{item.description}</div>
-                        <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-medium">
-                          {item.category}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-slate-300">
-                        {item.paymentMethod || 'Kas Toko'}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-rose-400 text-sm">
-                        Rp {formatRupiah(item.amount)}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleOpenExpenseModal(item)}
-                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
-                            title="Edit"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => setCashFlowToDelete(item)}
-                            className="p-1.5 bg-slate-800 hover:bg-rose-950/80 text-slate-400 hover:text-rose-400 rounded-lg transition"
-                            title="Hapus Catatan Pengeluaran"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-
-                  {filteredCashFlows.filter(cf => cf.type === 'expense').length === 0 && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            {filteredExpenseRecords.length > 0 ? (
+              <div className="w-full overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10">
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-slate-500">
-                        Tidak ada pengeluaran operasional di periode ini.
-                      </td>
+                      <th className="py-3.5 px-4 text-left">Tanggal</th>
+                      <th className="py-3.5 px-4 text-left">Kategori & Keterangan</th>
+                      <th className="py-3.5 px-4 text-left">Sumber Dana</th>
+                      <th className="py-3.5 px-4 text-right">Nominal Pengeluaran</th>
+                      <th className="py-3.5 px-4 text-right">Aksi</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {paginatedExpenseRecords.map(item => (
+                      <tr key={String(item.id || item.firestoreId || item.timestamp)} className="bg-slate-900 hover:bg-slate-850/50 transition-colors">
+                        <td className="py-3.5 px-4 text-slate-400 font-mono text-[11px]">{item.dateString}</td>
+                        <td className="py-3.5 px-4">
+                          <div className="font-semibold text-white">{item.description}</div>
+                          <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-medium">{item.category}</span>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-300">{item.paymentMethod || 'Kas Toko'}</td>
+                        <td className="py-3.5 px-4 text-right font-mono font-bold text-rose-400 text-sm">Rp {formatRupiah(item.amount)}</td>
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button onClick={() => handleOpenExpenseModal(item)} className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition" title="Edit"><Edit3 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => setCashFlowToDelete(item)} className="p-1.5 bg-slate-800 hover:bg-rose-950/80 text-slate-400 hover:text-rose-400 rounded-lg transition" title="Hapus Catatan Pengeluaran"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="py-12 text-center text-slate-500 text-xs">Tidak ada pengeluaran operasional di periode ini.</div>
+            )}
           </div>
+
+          {/* Pagination Controls for Expense */}
+          {filteredExpenseRecords.length > ITEMS_PER_PAGE && (
+            <div className="flex items-center justify-between bg-slate-900 border border-slate-800 p-3 rounded-xl text-xs">
+              <span className="text-slate-400">
+                Menampilkan {expensePage * ITEMS_PER_PAGE + 1}-{Math.min((expensePage + 1) * ITEMS_PER_PAGE, filteredExpenseRecords.length)} dari {filteredExpenseRecords.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setExpensePage(p => Math.max(0, p - 1))}
+                  disabled={expensePage === 0}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-600 text-slate-300 rounded-lg transition font-medium"
+                >
+                  ← Sebelumnya
+                </button>
+                <span className="px-2 py-1.5 text-slate-400 font-mono">
+                  {expensePage + 1} / {Math.ceil(filteredExpenseRecords.length / ITEMS_PER_PAGE)}
+                </span>
+                <button
+                  onClick={() => setExpensePage(p => p + 1)}
+                  disabled={(expensePage + 1) * ITEMS_PER_PAGE >= filteredExpenseRecords.length}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-600 text-slate-300 rounded-lg transition font-medium"
+                >
+                  Selanjutnya →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

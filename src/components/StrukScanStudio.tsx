@@ -26,7 +26,7 @@ import {
 import html2canvas from 'html2canvas';
 import { StoreSettings, PrinterDeviceStatus, MetadataItem, CustomTemplate } from '../types';
 import { printerService } from '../services/printerService';
-import { padCenter, padRow, padRowWrapped, padSeparator, formatRupiah, ESC, GS, LF, EscPosEncoder, loadLogoRasterBytes } from '../utils/escpos';
+import { padCenter, padRow, padRowWrapped, padSeparator, formatRupiah, ESC, GS, LF, EscPosEncoder, loadLogoRasterBytes, wrapText } from '../utils/escpos';
 import { sounds } from '../utils/audio';
 import { db } from '../db/db';
 import { 
@@ -385,6 +385,13 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
   const [printStatusMsg, setPrintStatusMsg] = useState<string | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragActiveId, setDragActiveId] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<{ file: File; previewUrl: string } | null>(null);
+  const [imageScale, setImageScale] = useState(1.0);
+  const [cropMode, setCropMode] = useState(false);
+  const [cropArea, setCropArea] = useState({ startX: 0, startY: 0, endX: 0, endY: 0 });
+  const [isDraggingCrop, setIsDraggingCrop] = useState(false);
+  const previewImageRef = useRef<HTMLImageElement>(null);
+  const [imageFilter, setImageFilter] = useState<'normal' | 'grayscale' | 'invert' | 'sepia'>('normal');
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -522,7 +529,10 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
 
     const updatedTpl: CustomTemplate = {
       ...targetTpl,
-      name: editNameInput.trim()
+      name: editNameInput.trim(),
+      badgeTitle: data.badgeTitle || targetTpl.badgeTitle,
+      metadata: data.metadata.map(m => ({ ...m })),
+      footerNote: data.footerNote || targetTpl.footerNote
     };
 
     const updatedList = templates.map(t => t.id === editingTemplateId ? updatedTpl : t);
@@ -543,7 +553,38 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
     setEditingTemplateId(null);
     setEditNameInput('');
     sounds.playScanBeep();
-    showPrintStatus('✓ Nama template diperbarui di Dexie & Firestore.');
+    showPrintStatus('✓ Template & struktur data berhasil diperbarui!');
+  };
+
+  const handleUpdateTemplateData = async () => {
+    if (!selectedTemplateId) return;
+    const targetTpl = templates.find(t => t.id === selectedTemplateId);
+    if (!targetTpl) return;
+
+    const updatedTpl: CustomTemplate = {
+      ...targetTpl,
+      badgeTitle: data.badgeTitle || targetTpl.badgeTitle,
+      metadata: data.metadata.map(m => ({ ...m })),
+      footerNote: data.footerNote || targetTpl.footerNote
+    };
+
+    const updatedList = templates.map(t => t.id === selectedTemplateId ? updatedTpl : t);
+    setTemplates(updatedList);
+
+    try {
+      localStorage.setItem('kasirpro_strukscan_custom_templates', JSON.stringify(updatedList));
+    } catch {}
+
+    try {
+      await db.strukTemplates.put(updatedTpl);
+    } catch (e) {}
+
+    try {
+      await saveReceiptTemplateToFirestore(updatedTpl);
+    } catch (e) {}
+
+    sounds.playScanBeep();
+    showPrintStatus('✓ Template data berhasil diperbarui!');
   };
 
   // Save item to history explicitly
@@ -616,18 +657,82 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
     showPrintStatus('✓ Item riwayat struk berhasil dihapus.');
   };
 
-  // PURE CLIENT-SIDE OCR ENGINE (Tesseract.js Dynamic Import)
+  // PURE CLIENT-SIDE OCR ENGINE WITH PREPROCESSING (Tesseract.js)
+  const preprocessImage = (file: File): Promise<Blob> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(file);
+            return;
+          }
+          
+          // Scale up small images for better OCR resolution (min target 2000px on max side)
+          const maxDim = Math.max(img.width, img.height);
+          const scale = maxDim < 2000 ? 2000 / maxDim : 1;
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imageData.data;
+          
+          // Grayscale + adaptive contrast enhancement for thermal receipts
+          for (let i = 0; i < data.length; i += 4) {
+            const avg = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+            
+            // Apply selected filter
+            let processed = avg;
+            if (imageFilter === 'grayscale') {
+              processed = avg;
+            } else if (imageFilter === 'invert') {
+              processed = 255 - avg;
+            } else if (imageFilter === 'sepia') {
+              const r = data[i];
+              const g = data[i + 1];
+              const b = data[i + 2];
+              processed = Math.min(255, (r * 0.393) + (g * 0.769) + (b * 0.189));
+            } else {
+              // Normal: High contrast binarization with threshold 140
+              processed = avg < 140 ? 0 : 255;
+            }
+            
+            data[i] = processed;
+            data[i + 1] = processed;
+            data[i + 2] = processed;
+          }
+          
+          ctx.putImageData(imageData, 0, 0);
+          canvas.toBlob((blob) => {
+            resolve(blob || file);
+          }, 'image/png');
+        };
+        img.src = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   const processImageOCR = async (file: File) => {
     setIsProcessing(true);
-    setOcrProgressMsg('Memuat engine OCR Tesseract...');
+    setOcrProgressMsg('Memproses & menajamkan gambar struk...');
     sounds.playScanBeep();
 
     try {
+      // 1. Preprocess image
+      const processedBlob = await preprocessImage(file);
+      setOcrProgressMsg('Memuat engine OCR Tesseract...');
+
       const TesseractModule = await import('tesseract.js');
       const Tesseract = TesseractModule.default || TesseractModule;
 
       const result = await Tesseract.recognize(
-        file,
+        processedBlob,
         'eng',
         {
           logger: (m: any) => {
@@ -635,7 +740,12 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
               const pct = Math.round(m.progress * 100);
               setOcrProgressMsg(`Memindai Teks OCR... (${pct}%)`);
             }
-          }
+          },
+          // OCR Engine Configuration for receipt accuracy
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, // PSM 6: single uniform block of text
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY, // OEM 1: neural net LSTM engine
+          tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .,:-/()Rp%',
+          preserve_interword_spaces: '1'
         }
       );
 
@@ -657,7 +767,7 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
       setData(parsed);
       saveToHistory(parsed);
       sounds.playScanBeep();
-      showPrintStatus('✓ Teks struk berhasil dipindai langsung dengan OCR Tesseract!');
+      showPrintStatus('✓ Teks struk berhasil dipindai dengan presisi tinggi (OCR + Preprocessing)!');
 
     } catch (err: any) {
       console.error('OCR Error:', err);
@@ -671,7 +781,143 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      processImageOCR(e.target.files[0]);
+      const file = e.target.files[0];
+      const previewUrl = URL.createObjectURL(file);
+      setPendingFile({ file, previewUrl });
+      setImageScale(1.0);
+      setCropMode(false);
+      setCropArea({ startX: 0, startY: 0, endX: 0, endY: 0 });
+    }
+  };
+
+  const getTouchCoords = (e: React.TouchEvent | React.MouseEvent, rect: DOMRect) => {
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    return {
+      x: Math.max(0, Math.min(rect.width, clientX - rect.left)),
+      y: Math.max(0, Math.min(rect.height, clientY - rect.top))
+    };
+  };
+
+  const handleMouseDownCrop = (e: React.MouseEvent) => {
+    if (!cropMode || !previewImageRef.current) return;
+    const rect = previewImageRef.current.getBoundingClientRect();
+    const { x, y } = getTouchCoords(e, rect);
+    setCropArea({ startX: x, startY: y, endX: x, endY: y });
+    setIsDraggingCrop(true);
+  };
+
+  const handleTouchStartCrop = (e: React.TouchEvent) => {
+    if (!cropMode || !previewImageRef.current) return;
+    e.preventDefault();
+    const rect = previewImageRef.current.getBoundingClientRect();
+    const { x, y } = getTouchCoords(e, rect);
+    setCropArea({ startX: x, startY: y, endX: x, endY: y });
+    setIsDraggingCrop(true);
+  };
+
+  const handleMouseMoveCrop = (e: React.MouseEvent) => {
+    if (!isDraggingCrop || !previewImageRef.current) return;
+    const rect = previewImageRef.current.getBoundingClientRect();
+    const { x, y } = getTouchCoords(e, rect);
+    setCropArea(prev => ({ ...prev, endX: x, endY: y }));
+  };
+
+  const handleTouchMoveCrop = (e: React.TouchEvent) => {
+    if (!isDraggingCrop || !previewImageRef.current) return;
+    e.preventDefault();
+    const rect = previewImageRef.current.getBoundingClientRect();
+    const { x, y } = getTouchCoords(e, rect);
+    setCropArea(prev => ({ ...prev, endX: x, endY: y }));
+  };
+
+  const handleMouseUpCrop = () => {
+    setIsDraggingCrop(false);
+  };
+
+  const handleTouchEndCrop = () => {
+    setIsDraggingCrop(false);
+  };
+
+  const handleApplyCrop = () => {
+    if (!pendingFile || !previewImageRef.current) return;
+    
+    const img = previewImageRef.current;
+    const rect = img.getBoundingClientRect();
+    
+    const naturalWidth = img.naturalWidth;
+    const naturalHeight = img.naturalHeight;
+    
+    // rect.width is the scaled display width on screen.
+    // Unscaled display width = rect.width / imageScale
+    const unscaledDisplayWidth = rect.width / imageScale;
+    const unscaledDisplayHeight = rect.height / imageScale;
+    
+    // Scale factor from unscaled display pixels to natural image pixels
+    const scaleX = naturalWidth / unscaledDisplayWidth;
+    const scaleY = naturalHeight / unscaledDisplayHeight;
+    
+    // cropArea coords are relative to rect (scaled screen pixels)
+    // Convert cropArea from scaled screen pixels to unscaled display pixels by dividing by imageScale
+    const unscaledStartX = cropArea.startX / imageScale;
+    const unscaledStartY = cropArea.startY / imageScale;
+    const unscaledEndX = cropArea.endX / imageScale;
+    const unscaledEndY = cropArea.endY / imageScale;
+    
+    const actualStartX = Math.min(unscaledStartX, unscaledEndX) * scaleX;
+    const actualStartY = Math.min(unscaledStartY, unscaledEndY) * scaleY;
+    const actualEndX = Math.max(unscaledStartX, unscaledEndX) * scaleX;
+    const actualEndY = Math.max(unscaledStartY, unscaledEndY) * scaleY;
+    
+    const cropWidth = Math.max(20, actualEndX - actualStartX);
+    const cropHeight = Math.max(20, actualEndY - actualStartY);
+    
+    // Create canvas and crop
+    const canvas = document.createElement('canvas');
+    canvas.width = cropWidth;
+    canvas.height = cropHeight;
+    const ctx = canvas.getContext('2d');
+    
+    if (!ctx) return;
+    
+    const imgElement = new window.Image();
+    imgElement.onload = () => {
+      ctx.drawImage(
+        imgElement,
+        actualStartX, actualStartY, cropWidth, cropHeight,
+        0, 0, cropWidth, cropHeight
+      );
+      
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        
+        URL.revokeObjectURL(pendingFile.previewUrl);
+        const newPreviewUrl = URL.createObjectURL(blob);
+        const croppedFile = new File([blob], pendingFile.file.name, { type: 'image/png' });
+        
+        setPendingFile({ file: croppedFile, previewUrl: newPreviewUrl });
+        setCropMode(false);
+        setCropArea({ startX: 0, startY: 0, endX: 0, endY: 0 });
+        setImageScale(1.0);
+        sounds.playScanBeep();
+        showPrintStatus('✓ Gambar berhasil dipotong!');
+      }, 'image/png');
+    };
+    imgElement.src = pendingFile.previewUrl;
+  };
+
+  const handleConfirmOCR = () => {
+    if (pendingFile) {
+      processImageOCR(pendingFile.file);
+      URL.revokeObjectURL(pendingFile.previewUrl);
+      setPendingFile(null);
+    }
+  };
+
+  const handleCancelPreview = () => {
+    if (pendingFile) {
+      URL.revokeObjectURL(pendingFile.previewUrl);
+      setPendingFile(null);
     }
   };
 
@@ -764,9 +1010,16 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
       text += padRow('Kembalian', changeStr, width) + '\n';
     }
 
+    // 9. Footer
     if (data.footerNote) {
       text += padSeparator('-', width) + '\n';
-      text += padCenter(data.footerNote, width) + '\n';
+      const footerLines = data.footerNote.split('\n');
+      for (const fLine of footerLines) {
+        const wrapped = wrapText(fLine, width);
+        for (const wLine of wrapped) {
+          text += padCenter(wLine, width) + '\n';
+        }
+      }
     }
 
     return text;
@@ -944,8 +1197,11 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
       encoder.separator('-', width);
       encoder.align('center');
       const footerLines = data.footerNote.split('\n');
-      for (const line of footerLines) {
-        encoder.textLine(line.substring(0, width));
+      for (const fLine of footerLines) {
+        const wrapped = wrapText(fLine, width);
+        for (const wLine of wrapped) {
+          encoder.textLine(wLine);
+        }
       }
     }
 
@@ -1129,6 +1385,210 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
           <button onClick={() => setPrintStatusMsg(null)} className="text-emerald-400 hover:text-white text-xs">
             ✕
           </button>
+        </div>
+      )}
+
+      {/* IMAGE PREVIEW MODAL - Lihat & Scale Gambar Sebelum OCR */}
+      {pendingFile && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto shadow-2xl space-y-4 p-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-emerald-400" />
+                Preview Gambar Struk
+              </h3>
+              <button 
+                onClick={handleCancelPreview}
+                className="text-slate-400 hover:text-white text-xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Preview Gambar */}
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex items-center justify-center overflow-auto max-h-96 relative">
+              <img 
+                ref={previewImageRef}
+                src={pendingFile.previewUrl} 
+                alt="Preview struk"
+                style={{ 
+                  transform: `scale(${imageScale})`,
+                  maxHeight: '100%',
+                  maxWidth: '100%',
+                  filter: imageFilter === 'grayscale' ? 'grayscale(100%)' : imageFilter === 'invert' ? 'invert(100%) grayscale(100%)' : imageFilter === 'sepia' ? 'sepia(100%)' : 'none'
+                }}
+                className="transition-transform duration-200"
+                onMouseDown={handleMouseDownCrop}
+                onMouseMove={handleMouseMoveCrop}
+                onMouseUp={handleMouseUpCrop}
+                onMouseLeave={handleMouseUpCrop}
+                onTouchStart={handleTouchStartCrop}
+                onTouchMove={handleTouchMoveCrop}
+                onTouchEnd={handleTouchEndCrop}
+                style={{ 
+                  transform: `scale(${imageScale})`,
+                  maxHeight: '100%',
+                  maxWidth: '100%',
+                  cursor: cropMode ? 'crosshair' : 'default',
+                  touchAction: 'none',
+                  filter: imageFilter === 'grayscale' ? 'grayscale(100%)' : imageFilter === 'invert' ? 'invert(100%) grayscale(100%)' : imageFilter === 'sepia' ? 'sepia(100%)' : 'none'
+                }}
+              />
+
+              {/* Crop overlay area */}
+              {cropMode && cropArea.endX > 0 && cropArea.endY > 0 && previewImageRef.current && (
+                <div className="absolute inset-0 pointer-events-none" style={{ overflow: 'hidden' }}>
+                  {(() => {
+                    const rect = previewImageRef.current!.getBoundingClientRect();
+                    const containerRect = previewImageRef.current!.parentElement?.getBoundingClientRect();
+                    if (!containerRect) return null;
+                    
+                    // Offset image relative to container
+                    const offsetX = rect.left - containerRect.left;
+                    const offsetY = rect.top - containerRect.top;
+                    
+                    const startX = Math.min(cropArea.startX, cropArea.endX);
+                    const startY = Math.min(cropArea.startY, cropArea.endY);
+                    const boxWidth = Math.abs(cropArea.endX - cropArea.startX);
+                    const boxHeight = Math.abs(cropArea.endY - cropArea.startY);
+                    
+                    return (
+                      <>
+                        <div
+                          className="absolute border-2 border-emerald-500 bg-emerald-500/10"
+                          style={{
+                            left: offsetX + startX,
+                            top: offsetY + startY,
+                            width: boxWidth,
+                            height: boxHeight
+                          }}
+                        >
+                          <div className="absolute top-0 left-0 right-0 bottom-0 border border-white/50"></div>
+                        </div>
+                        <div className="absolute bg-emerald-950/90 text-emerald-300 text-xs font-mono px-2 py-1 rounded border border-emerald-700" style={{ left: offsetX + startX + 4, top: offsetY + startY + 4 }}>
+                          {boxWidth.toFixed(0)} x {boxHeight.toFixed(0)}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+
+            {/* Kontrol Zoom & Ukuran */}
+            <div className="space-y-3 bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-semibold text-slate-300">Zoom Gambar</label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCropMode(!cropMode)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                      cropMode 
+                        ? 'bg-emerald-500 text-slate-950' 
+                        : 'bg-slate-800 text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                    {cropMode ? 'Mode Potong Aktif' : 'Aktifkan Mode Potong'}
+                  </button>
+
+                  {cropMode && cropArea.endX > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleApplyCrop}
+                      className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs transition"
+                    >
+                      Potong Gambar
+                    </button>
+                  )}
+                  <span className="text-xs text-emerald-400 font-mono font-bold">{Math.round(imageScale * 100)}%</span>
+                </div>
+              </div>
+              <input 
+                type="range" 
+                min="0.5" 
+                max="3" 
+                step="0.1" 
+                value={imageScale}
+                onChange={(e) => setImageScale(parseFloat(e.target.value))}
+                className="w-full accent-emerald-500"
+              />
+
+              {/* Filter Gambar untuk OCR */}
+              <div className="pt-2 border-t border-slate-700">
+                <label className="text-sm font-semibold text-slate-300 block mb-2">Filter Gambar (OCR)</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {(['normal', 'grayscale', 'invert', 'sepia'] as const).map(filter => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setImageFilter(filter)}
+                      className={`px-2 py-2 rounded-lg text-xs font-bold transition capitalize ${
+                        imageFilter === filter
+                          ? 'bg-cyan-500 text-slate-950'
+                          : 'bg-slate-800 text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      {filter === 'normal' ? 'Normal' : filter === 'grayscale' ? 'G.Putih' : filter === 'invert' ? 'Invert' : 'Sepia'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                <span>
+                  {cropMode 
+                    ? 'Drag pada gambar untuk memilih area yang ingin dipotong' 
+                    : 'Perkecil gambar sebelum OCR untuk performa lebih baik (50-100% recommended)'}
+                </span>
+              </div>
+            </div>
+
+            {/* Info Gambar */}
+            <div className="grid grid-cols-3 gap-2 bg-slate-950/50 p-3 rounded-xl border border-slate-800 text-xs">
+              <div>
+                <p className="text-slate-400">File</p>
+                <p className="text-white font-mono font-bold truncate">{pendingFile.file.name}</p>
+              </div>
+              <div>
+                <p className="text-slate-400">Ukuran</p>
+                <p className="text-white font-mono font-bold">{(pendingFile.file.size / 1024).toFixed(1)} KB</p>
+              </div>
+              <div>
+                <p className="text-slate-400">Tipe</p>
+                <p className="text-white font-mono font-bold">{pendingFile.file.type.split('/')[1]?.toUpperCase() || 'IMG'}</p>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex items-center gap-3 pt-3 border-t border-slate-800">
+              <button
+                onClick={handleCancelPreview}
+                className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm transition"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleConfirmOCR}
+                disabled={isProcessing}
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-sm transition flex items-center justify-center gap-2"
+              >
+                {isProcessing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    {ocrProgressMsg || 'OCR Processing...'}
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4" />
+                    Proses OCR
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1712,6 +2172,14 @@ export const StrukScanStudio: React.FC<StrukScanStudioProps> = ({
                             title="Hapus Template"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleUpdateTemplateData}
+                            className="px-2 py-1 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs rounded-lg"
+                            title="Update template dengan data struk saat ini (badge, metadata, footer)"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
                           </button>
                         </>
                       )}

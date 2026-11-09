@@ -49,6 +49,10 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
   // Navigation State: null = List View, object = Detail Ledger View
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | number | null>(null);
 
+  // Pagination state
+  const [debtPage, setDebtPage] = useState<number>(0);
+  const DEBTS_PER_PAGE = 20;
+
   // Tab: 'pelanggan' (Utang Pelanggan / Piutang) vs 'saya' (Utang Saya)
   const [activeCategory, setActiveCategory] = useState<'pelanggan' | 'saya'>('pelanggan');
 
@@ -213,8 +217,13 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
     };
   }, [debts]);
 
-  // Filtered debts for the list view
-  const filteredDebts = useMemo(() => {
+  // Reset pagination when filters change
+  useEffect(() => {
+    setDebtPage(0);
+  }, [activeCategory, searchQuery, statusFilter]);
+
+  // All filtered debts (before pagination)
+  const allFilteredDebts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     const today = getLocalDateString();
 
@@ -254,6 +263,12 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
         return (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0);
       });
   }, [debts, activeCategory, searchQuery, statusFilter]);
+
+  // Paginated debts for display
+  const filteredDebts = useMemo(() => {
+    const start = debtPage * DEBTS_PER_PAGE;
+    return allFilteredDebts.slice(start, start + DEBTS_PER_PAGE);
+  }, [allFilteredDebts, debtPage]);
 
   // Synthesize or normalize mutations list for selected customer
   const customerMutations = useMemo((): DebtMutation[] => {
@@ -1087,7 +1102,7 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
           </div>
 
           {/* Rows */}
-          <div className="divide-y divide-slate-850 max-h-[500px] overflow-y-auto transform-gpu contain-paint">
+          <div className="divide-y divide-slate-850 max-h-[500px] overflow-y-auto overscroll-contain">
             {customerMutations.map((mut) => {
               const isTake = mut.type === 'take';
               const isGive = mut.type === 'give';
@@ -1900,77 +1915,53 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
       </div>
 
       {/* 3. DAFTAR PELANGGAN DALAM BENTUK LIST KARTU MODERN (BUKU WARUNG STYLE) */}
-      <div className="space-y-2.5">
-        {filteredDebts.map(customer => {
-          const isPaid = (customer.remainingAmount || 0) === 0;
-          const isDue = !isPaid && customer.dueDate && customer.dueDate <= metrics.todayStr;
-
-          return (
-            <div
-              key={customer.id || customer.firestoreId}
-              onClick={() => setSelectedCustomerId(customer.id || customer.firestoreId)}
-              className="bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-850/60 p-4 rounded-2xl transition cursor-pointer flex items-center justify-between gap-3 group"
-            >
-              {/* Left: Avatar with Initials & Info */}
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${getAvatarColor(customer.customerName)} flex items-center justify-center text-white font-extrabold text-base shrink-0`}>
-                  {getInitials(customer.customerName)}
-                </div>
-
-                <div className="min-w-0 space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-extrabold text-white text-sm truncate group-hover:text-emerald-400 transition">
-                      {customer.customerName}
-                    </h4>
-                    {isDue && (
-                      <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                        Jatuh Tempo!
-                      </span>
-                    )}
+      {filteredDebts.length > 0 ? (
+        <div className="space-y-2.5">
+          {filteredDebts.map(customer => {
+            const isPaid = (customer.remainingAmount || 0) === 0;
+            const isDue = !isPaid && customer.dueDate && customer.dueDate <= metrics.todayStr;
+            return (
+              <div key={String(customer.id || customer.firestoreId)} className="pb-1">
+                <div
+                  onClick={() => setSelectedCustomerId(customer.id || customer.firestoreId)}
+                  className="bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-850/60 p-4 rounded-2xl transition-colors cursor-pointer flex items-center justify-between gap-3 group"
+                >
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${getAvatarColor(customer.customerName)} flex items-center justify-center text-white font-extrabold text-base shrink-0`}>
+                      {getInitials(customer.customerName)}
+                    </div>
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-extrabold text-white text-sm truncate group-hover:text-emerald-400 transition-colors">{customer.customerName}</h4>
+                        {isDue && <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black bg-rose-500/20 text-rose-300 border border-rose-500/30">Jatuh Tempo!</span>}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                        {customer.customerPhone ? (
+                          <span className="flex items-center gap-1 text-[11px]"><Phone className="w-3 h-3 text-emerald-400" />{customer.customerPhone}</span>
+                        ) : (
+                          <span className="text-[11px] text-slate-500">{customer.description ? customer.description.substring(0, 24) : 'Bon Belanja'}</span>
+                        )}
+                        {customer.dueDate && <span className="text-[10px] text-slate-500">• Tempo: {customer.dueDate}</span>}
+                      </div>
+                    </div>
                   </div>
-
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                    {customer.customerPhone ? (
-                      <span className="flex items-center gap-1 text-[11px]">
-                        <Phone className="w-3 h-3 text-emerald-400" />
-                        {customer.customerPhone}
+                  <div className="text-right shrink-0 flex items-center gap-3">
+                    <div>
+                      <div className={`font-mono font-black text-sm sm:text-base ${isPaid ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {isPaid ? 'Rp 0' : `Rp ${formatRupiah(customer.remainingAmount)}`}
+                      </div>
+                      <span className={`text-[10px] font-bold ${isPaid ? 'text-emerald-400' : 'text-slate-500'}`}>
+                        {isPaid ? 'LUNAS' : 'Belum Lunas'}
                       </span>
-                    ) : (
-                      <span className="text-[11px] text-slate-500">
-                        {customer.description ? customer.description.substring(0, 24) : 'Bon Belanja'}
-                      </span>
-                    )}
-
-                    {customer.dueDate && (
-                      <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
-                        • Tempo: {customer.dueDate}
-                      </span>
-                    )}
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-slate-300" />
                   </div>
                 </div>
               </div>
-
-              {/* Right: Remaining Amount & Status */}
-              <div className="text-right shrink-0 flex items-center gap-3">
-                <div>
-                  <div className={`font-mono font-black text-sm sm:text-base ${
-                    isPaid ? 'text-emerald-400' : 'text-rose-400'
-                  }`}>
-                    {isPaid ? 'Rp 0' : `Rp ${formatRupiah(customer.remainingAmount)}`}
-                  </div>
-                  <span className={`text-[10px] font-bold ${
-                    isPaid ? 'text-emerald-400' : 'text-slate-500'
-                  }`}>
-                    {isPaid ? 'LUNAS' : 'Belum Lunas'}
-                  </span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-slate-300 group-hover:translate-x-0.5 transition" />
-              </div>
-            </div>
-          );
-        })}
-
-        {filteredDebts.length === 0 && (
+            );
+          })}
+        </div>
+      ) : (
           <div className="py-16 text-center text-slate-500 bg-slate-900/60 border border-slate-800 rounded-3xl p-3 sm:p-4 lg:p-6">
             <User className="w-10 h-10 mx-auto mb-2 opacity-30 text-slate-400" />
             <p className="text-sm font-bold text-slate-300">
@@ -1980,8 +1971,35 @@ export const BukuUtang: React.FC<BukuUtangProps> = ({
               Klik tombol "+ Catat Utang" di bawah untuk menambahkan catatan baru.
             </p>
           </div>
-        )}
-      </div>
+      )}
+
+      {/* Pagination Controls for Debts */}
+      {allFilteredDebts.length > DEBTS_PER_PAGE && (
+        <div className="flex items-center justify-between bg-slate-900 border border-slate-800 p-3 rounded-xl text-xs">
+          <span className="text-slate-400">
+            Menampilkan {debtPage * DEBTS_PER_PAGE + 1}-{Math.min((debtPage + 1) * DEBTS_PER_PAGE, allFilteredDebts.length)} dari {allFilteredDebts.length}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setDebtPage(p => Math.max(0, p - 1))}
+              disabled={debtPage === 0}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-600 text-slate-300 rounded-lg transition font-medium"
+            >
+              ← Sebelumnya
+            </button>
+            <span className="px-2 py-1.5 text-slate-400 font-mono">
+              {debtPage + 1} / {Math.ceil(allFilteredDebts.length / DEBTS_PER_PAGE)}
+            </span>
+            <button
+              onClick={() => setDebtPage(p => p + 1)}
+              disabled={(debtPage + 1) * DEBTS_PER_PAGE >= allFilteredDebts.length}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-600 text-slate-300 rounded-lg transition font-medium"
+            >
+              Selanjutnya →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 4. FLOATING ACTION BUTTON (FAB): "+ Catat Utang" */}
       <div className="fixed bottom-6 right-6 z-40">

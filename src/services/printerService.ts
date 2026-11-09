@@ -4,6 +4,7 @@ import {
   LinuxPrinterInfo,
   BluetoothDeviceOption
 } from '../types';
+import { Share } from '@capacitor/share';
 
 export interface PrintResult {
   success: boolean;
@@ -426,29 +427,60 @@ class ThermalPrinterService {
    */
   async shareReceiptViaSystem(textData: string, title = 'Struk KasirPro'): Promise<PrintResult> {
     try {
+      const env = this.getRuntimeEnv();
+      
+      // 1. Capacitor (Android APK) - Native share dialog
+      if (env === 'capacitor') {
+        try {
+          await Share.share({
+            title,
+            text: textData,
+            dialogTitle: 'Bagikan Struk'
+          });
+          return {
+            success: true,
+            message: 'Dialog bagikan struk berhasil dibuka.'
+          };
+        } catch (err: any) {
+          if (err?.message?.includes('AbortError') || err?.message?.includes('cancelled')) {
+            return {
+              success: false,
+              message: 'Berbagi struk dibatalkan.'
+            };
+          }
+          throw err;
+        }
+      }
+      
+      // 2. Browser Web API (mobile/desktop)
       if (typeof navigator !== 'undefined' && navigator.share) {
-        await navigator.share({
-          title,
-          text: textData
-        });
-        return {
-          success: true,
-          message: 'Dialog bagikan struk berhasil dibuka.'
-        };
-      } else {
-        await navigator.clipboard.writeText(textData);
-        return {
-          success: true,
-          message: 'Teks struk disalin ke clipboard.'
-        };
+        try {
+          await navigator.share({
+            title,
+            text: textData
+          });
+          return {
+            success: true,
+            message: 'Dialog bagikan struk berhasil dibuka.'
+          };
+        } catch (err: any) {
+          if (err?.name === 'AbortError') {
+            return {
+              success: false,
+              message: 'Berbagi struk dibatalkan.'
+            };
+          }
+          throw err;
+        }
       }
+      
+      // 3. Fallback: Copy to clipboard
+      await navigator.clipboard.writeText(textData);
+      return {
+        success: true,
+        message: 'Teks struk disalin ke clipboard (share tidak didukung di environment ini).'
+      };
     } catch (err: any) {
-      if (err?.name === 'AbortError') {
-        return {
-          success: false,
-          message: 'Berbagi struk dibatalkan.'
-        };
-      }
       throw new Error(err?.message || 'Gagal membagikan struk.');
     }
   }
